@@ -1,0 +1,35 @@
+[project]
+name = "heating-warehouse"
+version = "0.1.0"
+description = "Medallion architecture data warehouse for heating company data"
+readme = "README.md"
+authors = [
+    { name = "Tashif-Bashir", email = "u21744677@unimail.hud.ac.uk" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "dlt[duckdb]",
+    "duckdb",
+    "python-dotenv",
+    "pandera",
+    "pydantic",
+    "dbt-core",
+    "dbt-duckdb",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov",
+    "ruff",
+    "black",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.black]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "401045717047298",
+    "leadID": "2000142628182018",
+    "eventName": "Lead opened an email.",
+    "whatID": "400000110539778",
+    "whatType": "email",
+    "eventData": null,
+    "eventSource": "emailOpened",
+    "createTimestamp": "2026-05-12 12:51:12"
+  },
+  {
+    "id": "401045717140482",
+    "leadID": "2000145115236354",
+    "eventName": "Lead opened an email.",
+    "whatID": "400000127511554",
+    "whatType": "email",
+    "eventData": null,
+    "eventSource": "emailOpened",
+    "createTimestamp": "2026-05-12 12:51:24"
+  },
+  {
+    "id": "401045717230594",
+    "leadID": "2000144569410562",
+    "eventName": "Lead opened an email.",
+    "whatID": "400000110539778",
+    "whatType": "email",
+    "eventData": null,
+    "eventSource": "emailOpened",
+    "createTimestamp": "2026-05-12 12:51:42"
+  }
+]

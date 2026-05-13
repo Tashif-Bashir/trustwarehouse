@@ -79,13 +79,15 @@ class SharpSpringClient:
             time.sleep(_MIN_INTERVAL - elapsed)
         self._last_request_at = time.monotonic()
 
+    # --- Leads ---
+
     def get_leads(
         self,
         updated_since: datetime | None = None,
         limit: int = 500,
         offset: int = 0,
     ) -> list[dict]:
-        """Fetch leads, optionally filtered by updateTimestamp."""
+        """Fetch one page of leads, optionally filtered by updateTimestamp."""
         where: dict[str, Any] = {}
         if updated_since:
             where["updateTimestamp"] = updated_since.strftime("%Y-%m-%d %H:%M:%S")
@@ -105,17 +107,42 @@ class SharpSpringClient:
             offset += 500
         return all_leads
 
+    # --- Reference / lookup tables ---
+
     def get_campaigns(self) -> list[dict]:
         """Fetch all campaigns."""
         result = self._call("getCampaigns", {"where": {}, "limit": 500, "offset": 0})
         return result.get("campaign", []) if result else []
 
-    def get_owners(self) -> list[dict]:
-        """Fetch all user accounts (owners/assignees for leads)."""
-        result = self._call("getUsers", {"where": {}, "limit": 500, "offset": 0})
-        return result.get("user", []) if result else []
-
     def get_opportunities(self) -> list[dict]:
-        """Fetch all opportunities."""
-        result = self._call("getOpportunities", {"where": {}, "limit": 500, "offset": 0})
-        return result.get("opportunity", []) if result else []
+        """Fetch all opportunities, paginated."""
+        all_opps: list[dict] = []
+        offset = 0
+        while True:
+            result = self._call(
+                "getOpportunities", {"where": {}, "limit": 500, "offset": offset}
+            )
+            page = result.get("opportunity", []) if result else []
+            all_opps.extend(page)
+            if len(page) < 500:
+                break
+            offset += 500
+        return all_opps
+
+    def get_fields(self) -> list[dict]:
+        """Fetch all field definitions — maps custom field hash IDs to human-readable labels."""
+        all_fields: list[dict] = []
+        offset = 0
+        while True:
+            result = self._call("getFields", {"where": {}, "limit": 500, "offset": offset})
+            page = result.get("field", []) if result else []
+            all_fields.extend(page)
+            if len(page) < 500:
+                break
+            offset += 500
+        return all_fields
+
+    def get_deal_stages(self) -> list[dict]:
+        """Fetch all deal/pipeline stages (e.g. Appointment Booked, Appointment Done)."""
+        result = self._call("getDealStages", {"where": {}, "limit": 500, "offset": 0})
+        return result.get("dealStage", []) if result else []

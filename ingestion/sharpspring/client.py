@@ -24,8 +24,8 @@ class SharpSpringClient:
     """Client for the SharpSpring JSON-RPC API."""
 
     def __init__(self, account_id: str | None = None, secret_key: str | None = None):
-        self.account_id = account_id or os.getenv("SHARPSPRING_ACCOUNT_ID")
-        self.secret_key = secret_key or os.getenv("SHARPSPRING_SECRET_KEY")
+        self.account_id = (account_id or os.getenv("SHARPSPRING_ACCOUNT_ID", "")).strip()
+        self.secret_key = (secret_key or os.getenv("SHARPSPRING_SECRET_KEY", "")).strip()
 
         if not self.account_id:
             raise RuntimeError("SHARPSPRING_ACCOUNT_ID is not set.")

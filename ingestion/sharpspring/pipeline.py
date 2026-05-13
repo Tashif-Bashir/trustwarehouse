@@ -57,11 +57,15 @@ def sharpspring_source():
 
 def run_pipeline() -> None:
     """Run the SharpSpring → Motherduck bronze pipeline."""
+    token = os.environ.get("MOTHERDUCK_TOKEN")
     database = os.environ.get("MOTHERDUCK_DATABASE", "trust-pipeline")
+
+    if not token:
+        raise RuntimeError("MOTHERDUCK_TOKEN is not set.")
 
     pipeline = dlt.pipeline(
         pipeline_name="sharpspring",
-        destination=dlt.destinations.motherduck(f"md:{database}"),
+        destination=dlt.destinations.motherduck(f"md:{database}?motherduck_token={token}"),
         dataset_name="bronze",
     )
 

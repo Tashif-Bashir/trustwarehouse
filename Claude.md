@@ -189,7 +189,8 @@ trust-pipeline (database)
   - Custom field labels require a separate `getFields` call to resolve
   - Empty values come back as `""` not `null` — normalise in silver
   - `leadStatus` values: `unqualified`, `qualified`, `contact`, `customer` — map to internal `new / contacted / appointment / closed`
-  - `assignedTo` is an owner ID, not a name — join to owners table
+  - `ownerID` is the owner ID field (not `assignedTo` as some docs suggest) — join to owners table to get a name
+  - owners API method not yet confirmed — `getOwners` and `getUsers` both return "Invalid method signature"
 
 ### Wildix
 

@@ -341,7 +341,8 @@ Each source has its own characteristics, quirks, and collection method. This sec
 - Custom field labels require a separate `getFields` call (fields appear as IDs otherwise)
 - Empty values come back as `""` not `null`
 - `leadStatus` enum needs mapping to internal `new/contacted/appointment/closed`
-- `assignedTo` is an owner ID, must join to owners table to get a name
+- `ownerID` is the owner ID field on leads (confirmed from real API response — not `assignedTo`)
+- owners lookup method name not yet confirmed (`getOwners`/`getUsers` both rejected by API)
 
 ### Source 2: Wildix (Phone System)
 

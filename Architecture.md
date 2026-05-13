@@ -486,7 +486,7 @@ WITH bronze:
 **Bronze schema design:**
 
 ```
-heating_warehouse.bronze
+trust-pipeline.bronze
 ├── sharpspring_leads
 │   ├── lead_id           VARCHAR
 │   ├── first_name        VARCHAR
@@ -562,7 +562,7 @@ Google Ads spend (Airbyte):
 **Silver schema design:**
 
 ```
-heating_warehouse.silver
+trust-pipeline.silver
 ├── silver_sharpspring_leads
 │   ├── lead_id                  INTEGER
 │   ├── full_name                VARCHAR

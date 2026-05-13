@@ -112,7 +112,7 @@ Push to GitHub. CI must be green before moving on.
 1. Ask developer to confirm:
    - Motherduck account created at motherduck.com
    - Service token copied from Settings → Tokens
-   - Database `heating_warehouse` created
+   - Database `trust-pipeline` created
    - EU region selected during setup
 
 2. Create `shared/motherduck.py`:
@@ -206,8 +206,8 @@ This phase is **configuration in the Airbyte UI**, not code. Guide the developer
 1. In Airbyte Cloud go to: **Destinations → New Destination**
 2. Search for **DuckDB** or **MotherDuck** (Airbyte has a native connector)
 3. Configure with:
-   - Connection string: `md:heating_warehouse?motherduck_token=YOUR_TOKEN`
-   - Schema: `bronze`
+   - Connection string: `md:trust-pipeline?motherduck_token=YOUR_TOKEN`
+   - Schema: `Ads` ← Airbyte lands ad platform data here (not `bronze`)
 4. Test the connection. Save.
 
 ### Part B — Create connections for each ad platform

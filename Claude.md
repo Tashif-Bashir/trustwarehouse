@@ -138,7 +138,7 @@ heating-warehouse/
 ## Motherduck schema layout
 
 ```
-heating_warehouse (database)
+trust-pipeline (database)
 │
 ├── bronze/                          ← raw data, all columns VARCHAR or JSON
 │   ├── sharpspring_leads            ← from dlt
@@ -304,7 +304,7 @@ All silver models produce `canonical_name`. Gold models only ever use `canonical
 ```bash
 # Motherduck
 MOTHERDUCK_TOKEN=
-MOTHERDUCK_DATABASE=heating_warehouse
+MOTHERDUCK_DATABASE=trust-pipeline
 
 # SharpSpring
 SHARPSPRING_ACCOUNT_ID=

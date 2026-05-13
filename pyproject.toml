@@ -13,6 +13,7 @@ dependencies = [
     "python-dotenv",
     "pandera",
     "pydantic",
+    "PyJWT",
     "dbt-core",
     "dbt-duckdb",
 ]

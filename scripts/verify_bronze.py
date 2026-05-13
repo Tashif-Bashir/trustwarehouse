@@ -1,4 +1,4 @@
-"""Verify SharpSpring data landed in bronze schema."""
+"""Verify all bronze tables."""
 import sys
 from pathlib import Path
 
@@ -8,8 +8,11 @@ from shared.motherduck import get_connection
 
 con = get_connection()
 
-tables = ["sharpspring_leads", "sharpspring_campaigns", "sharpspring_opportunities",
-          "sharpspring_fields", "sharpspring_deal_stages"]
+tables = [
+    "sharpspring_leads", "sharpspring_campaigns", "sharpspring_opportunities",
+    "sharpspring_fields", "sharpspring_deal_stages",
+    "wildix_colleagues", "wildix_calls",
+]
 
 for table in tables:
     try:

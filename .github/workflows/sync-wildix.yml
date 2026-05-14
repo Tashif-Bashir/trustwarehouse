@@ -2,7 +2,8 @@ name: Sync Wildix
 
 on:
   schedule:
-    - cron: "30 * * * *"  # hourly, offset 30 min from SharpSpring
+    - cron: "15 * * * *"  # every 30 min, offset from SharpSpring
+    - cron: "45 * * * *"  # every 30 min
   workflow_dispatch:       # manual trigger
 
 jobs:

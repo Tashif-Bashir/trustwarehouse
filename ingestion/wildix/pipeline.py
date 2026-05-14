@@ -16,13 +16,38 @@ def _client() -> WildixClient:
 
 @dlt.resource(name="wildix_colleagues", write_disposition="replace")
 def colleagues_resource():
-    """All Wildix users/extensions from WMS — full replace."""
+    """All users/extensions from WMS — full replace."""
     yield from _client().get_all_colleagues()
+
+
+@dlt.resource(name="wildix_departments", write_disposition="replace")
+def departments_resource():
+    """All departments from WMS — full replace."""
+    yield from _client().get_departments()
+
+
+@dlt.resource(name="wildix_groups", write_disposition="replace")
+def groups_resource():
+    """All call groups from WMS — full replace."""
+    yield from _client().get_groups()
+
+
+
+@dlt.resource(name="wildix_contacts", write_disposition="replace")
+def contacts_resource():
+    """All phonebook contacts from WMS — full replace."""
+    yield from _client().get_contacts()
+
+
+@dlt.resource(name="wildix_call_history", write_disposition="replace")
+def call_history_resource():
+    """System-wide PBX call history from WMS — full replace."""
+    yield from _client().get_all_call_history()
 
 
 @dlt.resource(name="wildix_calls", write_disposition="replace")
 def calls_resource():
-    """All call history from WDA for every colleague — full replace."""
+    """Per-user call history from WDA for every colleague — full replace."""
     yield from _client().get_all_calls()
 
 
@@ -30,6 +55,11 @@ def calls_resource():
 def wildix_source():
     return [
         colleagues_resource(),
+        departments_resource(),
+        groups_resource(),
+
+        contacts_resource(),
+        call_history_resource(),
         calls_resource(),
     ]
 

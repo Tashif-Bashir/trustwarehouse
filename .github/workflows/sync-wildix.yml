@@ -1,0 +1,31 @@
+name: Sync Wildix
+
+on:
+  schedule:
+    - cron: "30 * * * *"  # hourly, offset 30 min from SharpSpring
+  workflow_dispatch:       # manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run Wildix pipeline
+        env:
+          MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
+          MOTHERDUCK_DATABASE: ${{ secrets.MOTHERDUCK_DATABASE }}
+          WILDIX_API_BASE_URL: ${{ secrets.WILDIX_API_BASE_URL }}
+          WILDIX_SIMPLE_TOKEN: ${{ secrets.WILDIX_SIMPLE_TOKEN }}
+          WILDIX_WSK_TOKEN: ${{ secrets.WILDIX_WSK_TOKEN }}
+        run: uv run python -m ingestion.wildix

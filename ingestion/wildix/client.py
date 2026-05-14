@@ -79,19 +79,43 @@ class WildixClient:
                 raise WildixError(f"WMS request failed: {url}") from e
         raise WildixError(f"WMS request failed after 3 attempts: {url}")
 
-    def get_all_colleagues(self) -> list[dict]:
-        """Fetch all users/extensions from WMS, paginated."""
-        all_users: list[dict] = []
+    def _wms_paginate(self, endpoint: str) -> list[dict]:
+        """Paginate through a WMS endpoint returning {result: {records: []}}."""
+        all_records: list[dict] = []
         offset = 0
         limit = 500
         while True:
-            data = self._wms_get(f"Colleagues/?limit={limit}&offset={offset}")
-            records = data.get("result", {}).get("records", [])
-            all_users.extend(records)
+            sep = "&" if "?" in endpoint else "?"
+            data = self._wms_get(f"{endpoint}{sep}limit={limit}&offset={offset}")
+            result = data.get("result", {})
+            records = result.get("records", []) if isinstance(result, dict) else []
+            all_records.extend(records)
             if len(records) < limit:
                 break
             offset += limit
-        return all_users
+        return all_records
+
+    def get_all_colleagues(self) -> list[dict]:
+        """Fetch all users/extensions from WMS, paginated."""
+        return self._wms_paginate("Colleagues/")
+
+    def get_departments(self) -> list[dict]:
+        """Fetch all departments from WMS."""
+        data = self._wms_get("Departments/")
+        return data.get("result", {}).get("records", [])
+
+    def get_groups(self) -> list[dict]:
+        """Fetch all call groups from WMS, paginated."""
+        return self._wms_paginate("Groups/")
+
+
+    def get_contacts(self) -> list[dict]:
+        """Fetch all phonebook contacts from WMS, paginated."""
+        return self._wms_paginate("Contacts/")
+
+    def get_all_call_history(self) -> list[dict]:
+        """Fetch system-wide PBX call history from WMS, paginated."""
+        return self._wms_paginate("CallHistory/")
 
     # --- WDA API ---
 

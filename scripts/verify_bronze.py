@@ -11,7 +11,8 @@ con = get_connection()
 tables = [
     "sharpspring_leads", "sharpspring_campaigns", "sharpspring_opportunities",
     "sharpspring_fields", "sharpspring_deal_stages",
-    "wildix_colleagues", "wildix_calls",
+    "wildix_colleagues", "wildix_departments", "wildix_groups",
+    "wildix_contacts", "wildix_call_history", "wildix_calls",
 ]
 
 for table in tables:

@@ -1,0 +1,7 @@
+trust_warehouse:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "md:trust-pipeline?motherduck_token={{ env_var('MOTHERDUCK_TOKEN') }}"
+      schema: main

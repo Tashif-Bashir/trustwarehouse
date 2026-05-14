@@ -1,0 +1,22 @@
+name: 'trust_warehouse'
+version: '1.0.0'
+config-version: 2
+
+profile: 'trust_warehouse'
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  trust_warehouse:
+    silver:
+      +materialized: table
+      +schema: silver
+    gold:
+      +materialized: table
+      +schema: gold

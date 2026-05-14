@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: bronze
+    database: trust-pipeline
+    schema: bronze
+    tables:
+      - name: sharpspring_leads
+      - name: sharpspring_campaigns
+      - name: wildix_calls
+      - name: wildix_colleagues

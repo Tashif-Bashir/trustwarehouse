@@ -1,6 +1,8 @@
 """dlt pipeline — loads Wildix data into Motherduck bronze schema."""
 
+import json
 import os
+from datetime import datetime, timedelta, timezone
 
 import dlt
 from dotenv import load_dotenv
@@ -45,10 +47,20 @@ def call_history_resource():
     yield from _client().get_all_call_history()
 
 
-@dlt.resource(name="wildix_calls", write_disposition="replace")
+def _flatten_call(call: dict) -> dict:
+    """Serialize any list/dict fields to JSON strings to avoid nested dlt tables."""
+    return {
+        k: json.dumps(v) if isinstance(v, (list, dict)) else v
+        for k, v in call.items()
+    }
+
+
+@dlt.resource(name="wildix_calls", write_disposition="merge", primary_key=["id", "_wms_id"])
 def calls_resource():
-    """Per-user call history from WDA for every colleague — full replace."""
-    yield from _client().get_all_calls()
+    """Per-user call history from WDA — incremental, last 2 hours, deduped by (id, wms_id)."""
+    date_from = (datetime.now(timezone.utc) - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for call in _client().get_all_calls(date_from=date_from):
+        yield _flatten_call(call)
 
 
 @dlt.source(name="wildix")

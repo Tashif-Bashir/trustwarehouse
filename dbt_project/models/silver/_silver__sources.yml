@@ -7,5 +7,7 @@ sources:
     tables:
       - name: sharpspring_leads
       - name: sharpspring_campaigns
+      - name: sharpspring_deal_stages
+      - name: sharpspring_opportunities
       - name: wildix_calls
       - name: wildix_colleagues

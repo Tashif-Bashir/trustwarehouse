@@ -27,7 +27,9 @@ with leads as (
             when appointment_booked = 'Yes'                                 then 'appointed'
             when cast(created_at at time zone 'Europe/London' as date)
                  = current_date                                              then 'fresh'
-            else                                                                 'backlog'
+            when cast(created_at at time zone 'Europe/London' as date)
+                 >= current_date - interval 30 days                         then 'backlog'
+            else                                                                 'aged_backlog'
         end as lead_type
 
     from {{ ref('silver_sharpspring_leads') }}

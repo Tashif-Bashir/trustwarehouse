@@ -20,7 +20,7 @@ with leads as (
         -- UK local date of creation
         cast(created_at at time zone 'Europe/London' as date) as created_date,
 
-        -- classify lead
+        -- classify lead (fresh/backlog = 30 days, aged_backlog = older)
         case
             when lead_status = 'customer'                                   then 'sold'
             when lead_status = 'unqualified'                                then 'lost'
@@ -75,9 +75,8 @@ call_metrics as (
         count(*)                                              as total_call_attempts,
         min(call_at)                                          as first_call_at,
         max(call_at)                                          as last_call_at,
-        -- agent on the most recent call
+        cast(max(call_at) as date)                            as last_call_date,
         arg_max(agent_name, call_at)                          as last_call_agent,
-        count(*) filter (where call_date = current_date)      as calls_today,
         count(*) filter (where talk_time_seconds >= 120)      as qualified_conversations
     from lead_calls
     group by lead_id
@@ -104,8 +103,8 @@ final as (
         coalesce(cm.total_call_attempts, 0)                   as total_call_attempts,
         cm.first_call_at,
         cm.last_call_at,
+        cm.last_call_date,
         cm.last_call_agent,
-        coalesce(cm.calls_today, 0)                           as calls_today,
         coalesce(cm.qualified_conversations, 0)               as qualified_conversations,
 
         -- time from lead created to first outbound call (minutes)
@@ -119,14 +118,7 @@ final as (
 
         -- flags
         cm.first_call_at is not null                          as has_been_called,
-        coalesce(cm.calls_today, 0) > 0                       as called_today,
-        coalesce(cm.qualified_conversations, 0) > 0           as has_qualified_conversation,
-
-        -- backlog: was this aged lead worked today?
-        case
-            when l.lead_type = 'backlog' then coalesce(cm.calls_today, 0) > 0
-            else null
-        end                                                   as backlog_worked_today
+        coalesce(cm.qualified_conversations, 0) > 0           as has_qualified_conversation
 
     from leads l
     left join call_metrics cm on l.lead_id = cm.lead_id

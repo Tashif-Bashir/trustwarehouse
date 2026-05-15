@@ -17,20 +17,8 @@ with leads as (
         appointment_type,
         appointment_status,
 
-        -- UK local date of creation
-        cast(created_at at time zone 'Europe/London' as date) as created_date,
-
-        -- classify lead (fresh/backlog = 30 days, aged_backlog = older)
-        case
-            when lead_status = 'customer'                                   then 'sold'
-            when lead_status = 'unqualified'                                then 'lost'
-            when appointment_booked = 'Yes'                                 then 'appointed'
-            when cast(created_at at time zone 'Europe/London' as date)
-                 = current_date                                              then 'fresh'
-            when cast(created_at at time zone 'Europe/London' as date)
-                 >= current_date - interval 30 days                         then 'backlog'
-            else                                                                 'aged_backlog'
-        end as lead_type
+        -- UK local date of creation — use this to classify leads at query time
+        cast(created_at at time zone 'Europe/London' as date) as created_date
 
     from {{ ref('silver_sharpspring_leads') }}
     where is_active = true
@@ -99,7 +87,6 @@ final as (
         l.appointment_made_by,
         l.appointment_type,
         l.appointment_status,
-        l.lead_type,
 
         -- call activity
         coalesce(cm.total_call_attempts, 0)                   as total_call_attempts,

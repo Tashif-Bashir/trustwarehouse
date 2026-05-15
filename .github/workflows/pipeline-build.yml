@@ -1,0 +1,31 @@
+name: Pipeline Build
+
+on:
+  workflow_run:
+    workflows: ["Sync SharpSpring", "Sync Wildix"]
+    types:
+      - completed
+  workflow_dispatch:  # manual trigger
+
+jobs:
+  dbt-build:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run dbt build
+        env:
+          MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
+          MOTHERDUCK_DATABASE: ${{ secrets.MOTHERDUCK_DATABASE }}
+        run: uv run dbt build --project-dir dbt_project --profiles-dir dbt_project

@@ -27,5 +27,6 @@ jobs:
       - name: Run dbt build
         env:
           MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
+          motherduck_token: ${{ secrets.MOTHERDUCK_TOKEN }}
           MOTHERDUCK_DATABASE: ${{ secrets.MOTHERDUCK_DATABASE }}
         run: uv run dbt build --project-dir dbt_project --profiles-dir dbt_project

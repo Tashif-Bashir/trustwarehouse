@@ -18,28 +18,32 @@ with calls as (
 ),
 
 -- normalise agent names from SharpSpring appointment_made_by field
+-- target: match colleague_name values from silver_wildix_calls exactly
 appointments as (
     select
         case
-            when lower(appointment_made_by) in ('lily', 'lily harpham')         then 'Lily Harpham'
-            when lower(appointment_made_by) in ('sue', 'susan england')          then 'Susan England'
-            when lower(appointment_made_by) in ('dec', 'declan franks')          then 'Declan Franks'
-            when lower(appointment_made_by) in ('alice', 'alice hardegon')       then 'Alice Hardegon'
-            when lower(appointment_made_by) in ('alicja', 'alicja aleksiuk')     then 'Alicja Aleksiuk'
-            when lower(appointment_made_by) in ('reilly', 'reilly andrew')       then 'Reilly Andrew'
-            when lower(appointment_made_by) in ('alisha', 'alisha moore')        then 'Alisha Moore'
+            when lower(appointment_made_by) in ('lily', 'lily harpham')          then 'Lily'
+            when lower(appointment_made_by) in ('sue', 'susan england')           then 'Sue'
+            when lower(appointment_made_by) in ('dec', 'declan franks')           then 'Dec'
+            when lower(appointment_made_by) in ('alice', 'alice hardegon')        then 'Alice Hardegon'
+            when lower(appointment_made_by) in ('alicja', 'alicja aleksiuk')      then 'Alicja Aleksiuk'
+            when lower(appointment_made_by) in ('reilly', 'reilly andrew')        then 'Reilly Andrew'
+            when lower(appointment_made_by) in ('alisha', 'alisha moore')         then 'Alisha'
             when lower(appointment_made_by) in ('ashleigh', 'ashleigh nankervis') then 'Ashleigh Nankervis'
-            when lower(appointment_made_by) in ('kim', 'kim ellis')              then 'Kim Ellis'
-            when lower(appointment_made_by) in ('amelia', 'amelia konczewska')   then 'Amelia Konczewska'
-            when lower(appointment_made_by) in ('josh', 'josh baron')            then 'Josh Baron'
-            when lower(appointment_made_by) = 'other'                            then null
+            when lower(appointment_made_by) in ('kim', 'kim ellis')               then 'Kim Ellis'
+            when lower(appointment_made_by) in ('amelia', 'amelia konczewska')    then 'Amelia Konczewska'
+            when lower(appointment_made_by) in ('josh', 'josh baron')             then 'Josh Baron'
+            when lower(appointment_made_by) in ('victoria', 'victoria ramsden')   then 'Victoria'
+            when lower(appointment_made_by) in ('gemma', 'gemma taylor')          then 'Gemma Taylor'
+            when lower(appointment_made_by) = 'other'                             then null
             else appointment_made_by
         end as agent_name,
-        date_trunc('day', updated_at) as appointment_date,
+        date_trunc('day', try_cast(appointment_booked_at as timestamp)) as appointment_date,
         count(*) as appointments_booked
     from {{ ref('silver_sharpspring_leads') }}
     where appointment_booked = 'Yes'
     and appointment_made_by is not null
+    and appointment_booked_at is not null
     group by agent_name, appointment_date
 ),
 

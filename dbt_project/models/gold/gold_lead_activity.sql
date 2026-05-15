@@ -51,6 +51,7 @@ outbound_calls as (
 ),
 
 -- match calls to leads via any normalised phone field
+-- only count calls that happened after the lead was created
 lead_calls as (
     select
         l.lead_id,
@@ -60,9 +61,10 @@ lead_calls as (
         c.agent_name
     from leads l
     inner join outbound_calls c
-        on c.remote_phone = l.phone
-        or c.remote_phone = l.mobile
-        or c.remote_phone = l.phone_alt
+        on (c.remote_phone = l.phone
+            or c.remote_phone = l.mobile
+            or c.remote_phone = l.phone_alt)
+        and c.call_at >= l.created_at
     where l.phone is not null
         or l.mobile is not null
         or l.phone_alt is not null

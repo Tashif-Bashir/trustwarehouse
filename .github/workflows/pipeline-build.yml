@@ -24,6 +24,20 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Test raw MotherDuck connection
+        env:
+          MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
+        run: |
+          uv run python -c "
+          import duckdb, os
+          token = os.environ['MOTHERDUCK_TOKEN']
+          print(f'Token length: {len(token)}, starts with: {token[:10]}')
+          conn = duckdb.connect(f'md:trust-pipeline?motherduck_token={token}')
+          result = conn.execute('SELECT COUNT(*) FROM bronze.sharpspring_leads').fetchone()
+          print(f'Raw Python connection SUCCESS. Bronze leads: {result[0]}')
+          conn.close()
+          "
+
       - name: Run dbt build
         env:
           MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}

@@ -99,7 +99,8 @@ cleaned as (
         nullif(trim(call_marker_notes_66d87ecd74673), '')                  as call_notes,
         nullif(trim(type_of_heating___6317101eeda5b), '')                  as heating_type,
         nullif(trim("lead_warmth___1___69ea236712886"), '')                as enquiry_type,
-        nullif(trim(page_submitted_5af30a9090796), '')                     as form_page
+        nullif(trim(page_submitted_5af30a9090796), '')                     as form_page,
+        nullif(trim(appointment_made_by_65e1a90253305), '')               as appointment_made_by
 
     from source
 )

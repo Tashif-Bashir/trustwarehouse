@@ -1,7 +1,7 @@
 with calls as (
     select
-        -- convert unix ms to date
-        date_trunc('day', to_timestamp(start_time / 1000)) as call_date,
+        -- cast unix ms to UK local date (avoids UTC midnight mismatch)
+        cast(to_timestamp(start_time / 1000) at time zone 'Europe/London' as date) as call_date,
         wms_id,
         colleague_name,
         colleague_department,
@@ -69,7 +69,7 @@ call_metrics as (
 -- missed calls per agent per day
 missed as (
     select
-        date_trunc('day', to_timestamp(start_time / 1000))         as call_date,
+        cast(to_timestamp(start_time / 1000) at time zone 'Europe/London' as date) as call_date,
         colleague_name                                              as agent_name,
         count(*)                                                    as missed_calls
     from {{ ref('silver_wildix_calls') }}

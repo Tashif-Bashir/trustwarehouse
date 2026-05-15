@@ -93,15 +93,15 @@ final as (
         cm.qualified_outbound_conversations,
         coalesce(a.appointments_booked, 0)                                             as appointments_booked,
 
-        -- conversion rate: appointments / (qualified + qualified outbound)
+        -- qualified conversations per appointment (lower = better)
         case
-            when (cm.qualified_conversations + cm.qualified_outbound_conversations) = 0 then null
+            when coalesce(a.appointments_booked, 0) = 0 then null
             else round(
-                coalesce(a.appointments_booked, 0) * 100.0
-                / (cm.qualified_conversations + cm.qualified_outbound_conversations),
+                (cm.qualified_conversations + cm.qualified_outbound_conversations) * 1.0
+                / coalesce(a.appointments_booked, 0),
                 1
             )
-        end                                                                             as conversion_rate_pct,
+        end                                                                             as qual_convos_per_appointment,
 
         -- calls per appointment (your 1-in-3 target)
         case

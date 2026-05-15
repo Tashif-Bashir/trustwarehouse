@@ -30,12 +30,28 @@ jobs:
         run: |
           uv run python -c "
           import duckdb, os
-          token = os.environ['MOTHERDUCK_TOKEN']
+          from urllib.parse import urlencode
+          token = os.environ['MOTHERDUCK_TOKEN'].strip()
           print(f'Token length: {len(token)}, starts with: {token[:10]}')
-          conn = duckdb.connect(f'md:trust-pipeline?motherduck_token={token}')
-          result = conn.execute('SELECT COUNT(*) FROM bronze.sharpspring_leads').fetchone()
-          print(f'Raw Python connection SUCCESS. Bronze leads: {result[0]}')
-          conn.close()
+
+          # Test 1: raw token in URL (same as original dbt approach)
+          try:
+              conn = duckdb.connect(f'md:trust-pipeline?motherduck_token={token}')
+              result = conn.execute('SELECT COUNT(*) FROM bronze.sharpspring_leads').fetchone()
+              print(f'Test 1 (raw URL) SUCCESS. Bronze leads: {result[0]}')
+              conn.close()
+          except Exception as e:
+              print(f'Test 1 (raw URL) FAILED: {e}')
+
+          # Test 2: URL-encoded token + custom_user_agent (same as dlt approach)
+          try:
+              qs = urlencode({'motherduck_token': token})
+              conn2 = duckdb.connect(f'md:trust-pipeline?{qs}', config={'custom_user_agent': 'test/1.0'})
+              result2 = conn2.execute('SELECT COUNT(*) FROM bronze.sharpspring_leads').fetchone()
+              print(f'Test 2 (url-encoded + user-agent) SUCCESS. Bronze leads: {result2[0]}')
+              conn2.close()
+          except Exception as e:
+              print(f'Test 2 (url-encoded + user-agent) FAILED: {e}')
           "
 
       - name: Run dbt build

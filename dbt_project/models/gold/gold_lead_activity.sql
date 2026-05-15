@@ -97,8 +97,11 @@ final as (
         coalesce(cm.qualified_conversations, 0)               as qualified_conversations,
 
         -- time from lead created to first outbound call (minutes)
+        -- null when the first call was on a different calendar day: overnight gaps
+        -- would skew the same-day response metric (e.g. evening lead called next morning)
         case
             when cm.first_call_at is null then null
+            when cast(cm.first_call_at as date) != l.created_date then null
             else round(
                 date_diff('minute', l.created_at, cm.first_call_at),
                 0

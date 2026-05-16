@@ -11,3 +11,4 @@ sources:
       - name: sharpspring_opportunities
       - name: wildix_calls
       - name: wildix_colleagues
+      - name: google_adscampaign

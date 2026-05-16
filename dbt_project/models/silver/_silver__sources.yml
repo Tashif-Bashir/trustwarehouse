@@ -13,3 +13,4 @@ sources:
       - name: wildix_colleagues
       - name: google_adscampaign
       - name: facebook_adsads_insights
+      - name: bing_adscampaign_performance_report_daily

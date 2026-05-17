@@ -30,7 +30,7 @@ jobs:
           TRIGGER="${{ github.event.workflow_run.name }}"
           if [ "$TRIGGER" = "Sync SharpSpring" ]; then
             # SharpSpring silver + all gold models that depend on it
-            echo "selector=silver_sharpspring_leads silver_sharpspring_campaigns silver_sharpspring_opportunities silver_sharpspring_deal_stages gold_lead_activity gold_campaign_attribution gold_agent_performance_daily" >> $GITHUB_OUTPUT
+            echo "selector=silver_sharpspring_leads silver_sharpspring_campaigns silver_sharpspring_opportunities silver_sharpspring_deal_stages gold_lead_activity gold_campaign_attribution gold_agent_performance_daily gold_pipeline_opportunities" >> $GITHUB_OUTPUT
           elif [ "$TRIGGER" = "Sync Wildix" ]; then
             # Wildix silver + gold models that join call data
             echo "selector=silver_wildix_calls silver_wildix_colleagues gold_lead_activity gold_agent_performance_daily" >> $GITHUB_OUTPUT

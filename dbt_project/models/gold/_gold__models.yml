@@ -81,6 +81,30 @@ models:
         tests:
           - not_null
 
+  - name: gold_pipeline_opportunities
+    description: >
+      One row per SharpSpring opportunity. Joins deal stages and lead attributes.
+      Provides a proper pipeline view with amounts and probability independent
+      of the inconsistently-filled custom lead fields.
+    columns:
+      - name: opportunity_id
+        description: SharpSpring opportunity ID — primary key
+        tests:
+          - unique
+          - not_null
+      - name: created_date
+        description: Date the opportunity was created (UK local)
+        tests:
+          - not_null
+      - name: is_won
+        description: True when the opportunity is marked as won in SharpSpring
+        tests:
+          - not_null
+      - name: is_closed
+        description: True when the opportunity is closed (won or lost)
+        tests:
+          - not_null
+
   - name: gold_campaign_attribution
     description: >
       One row per platform per day. Joins paid ad spend (Google/Meta/Bing)

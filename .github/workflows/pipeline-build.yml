@@ -39,12 +39,13 @@ jobs:
             echo "selector=" >> $GITHUB_OUTPUT
           fi
 
-      - name: Run dbt build
+      - name: Run dbt seed + build
         env:
           MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
           MOTHERDUCK_DATABASE: ${{ secrets.MOTHERDUCK_DATABASE }}
         run: |
           export MOTHERDUCK_TOKEN=$(echo "$MOTHERDUCK_TOKEN" | tr -d '\r\n')
+          uv run dbt seed --project-dir dbt_project --profiles-dir dbt_project
           SELECTOR="${{ steps.selector.outputs.selector }}"
           if [ -z "$SELECTOR" ]; then
             uv run dbt build --project-dir dbt_project --profiles-dir dbt_project

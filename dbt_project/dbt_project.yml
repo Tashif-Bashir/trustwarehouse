@@ -12,6 +12,13 @@ test-paths: ["tests"]
 target-path: "target"
 clean-targets: ["target", "dbt_packages"]
 
+seeds:
+  trust_warehouse:
+    +schema: silver
+    campaign_platform_mapping:
+      +column_types:
+        campaign_id: varchar
+
 models:
   trust_warehouse:
     silver:

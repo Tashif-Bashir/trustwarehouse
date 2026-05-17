@@ -43,23 +43,20 @@ platform_spend as (
     select * from bing_spend
 ),
 
--- Map SharpSpring campaign_id to the three paid platforms
+-- Map SharpSpring campaign_id to the three paid platforms via seed file
 lead_platform as (
     select
-        lead_id,
-        cast(created_at at time zone 'Europe/London' as date)   as created_date,
-        case
-            when campaign_id = '651768834'       then 'Google'
-            when campaign_id = '672567298'       then 'Meta'
-            when campaign_id = '200000012314626' then 'Bing'
-        end                                                      as platform,
-        appointment_booked,
-        try_cast(appointment_booked_at as timestamp)             as appointment_booked_at,
-        is_sold,
-        try_cast(order_confirmed_at as timestamp)                as order_confirmed_at
-    from {{ ref('silver_sharpspring_leads') }}
-    where campaign_id in ('651768834', '672567298', '200000012314626')
-      and is_active = true
+        l.lead_id,
+        cast(l.created_at at time zone 'Europe/London' as date) as created_date,
+        m.platform,
+        l.appointment_booked,
+        try_cast(l.appointment_booked_at as timestamp)          as appointment_booked_at,
+        l.is_sold,
+        try_cast(l.order_confirmed_at as timestamp)             as order_confirmed_at
+    from {{ ref('silver_sharpspring_leads') }} l
+    inner join {{ ref('campaign_platform_mapping') }} m
+        on l.campaign_id = m.campaign_id
+    where l.is_active = true
 ),
 
 -- Leads created per day per platform

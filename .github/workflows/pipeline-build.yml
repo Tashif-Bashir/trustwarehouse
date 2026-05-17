@@ -5,7 +5,7 @@ on:
     workflows: ["Sync SharpSpring", "Sync Wildix"]
     types:
       - completed
-  workflow_dispatch:  # manual trigger
+  workflow_dispatch:  # manual trigger — builds everything
 
 jobs:
   dbt-build:
@@ -24,10 +24,30 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Set dbt selector
+        id: selector
+        run: |
+          TRIGGER="${{ github.event.workflow_run.name }}"
+          if [ "$TRIGGER" = "Sync SharpSpring" ]; then
+            # SharpSpring silver + all gold models that depend on it
+            echo "selector=silver_sharpspring_leads silver_sharpspring_campaigns silver_sharpspring_opportunities silver_sharpspring_deal_stages gold_lead_activity gold_campaign_attribution gold_agent_performance_daily" >> $GITHUB_OUTPUT
+          elif [ "$TRIGGER" = "Sync Wildix" ]; then
+            # Wildix silver + gold models that join call data
+            echo "selector=silver_wildix_calls silver_wildix_colleagues gold_lead_activity gold_agent_performance_daily" >> $GITHUB_OUTPUT
+          else
+            # Manual dispatch — build everything
+            echo "selector=" >> $GITHUB_OUTPUT
+          fi
+
       - name: Run dbt build
         env:
           MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
           MOTHERDUCK_DATABASE: ${{ secrets.MOTHERDUCK_DATABASE }}
         run: |
           export MOTHERDUCK_TOKEN=$(echo "$MOTHERDUCK_TOKEN" | tr -d '\r\n')
-          uv run dbt build --project-dir dbt_project --profiles-dir dbt_project
+          SELECTOR="${{ steps.selector.outputs.selector }}"
+          if [ -z "$SELECTOR" ]; then
+            uv run dbt build --project-dir dbt_project --profiles-dir dbt_project
+          else
+            uv run dbt build --project-dir dbt_project --profiles-dir dbt_project --select $SELECTOR
+          fi

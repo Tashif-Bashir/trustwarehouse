@@ -23,7 +23,6 @@ with leads as (
         deal_amount,
         order_confirmed,
         order_confirmed_at,
-        appointment_booked_at,
 
         -- derived columns from silver enriched CTE
         appointment_date,

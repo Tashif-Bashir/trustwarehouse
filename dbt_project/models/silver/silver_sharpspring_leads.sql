@@ -41,7 +41,7 @@ cleaned as (
         nullif(trim(street), '')                        as street,
         nullif(trim(city), '')                          as city,
         nullif(trim(state), '')                         as region,
-        {{ normalise_phone('nullif(trim(zipcode), \'\')') }}               as postcode,
+        nullif(trim(zipcode), '')                                           as postcode,
         nullif(trim(post_code_5af30a907e7c3), '')       as postcode_raw,
         nullif(trim(country), '')                       as country,
 

@@ -125,9 +125,10 @@ enriched as (
         end                                                                     as customer_type,
 
         -- sale flag: all appointment_status values that mean a win
-        appointment_status in (
+        -- coalesce handles NULL appointment_status → false, never NULL
+        coalesce(appointment_status in (
             'sold', 'sold on site', 'sold in office', 'chc sold'
-        )                                                                       as is_sold
+        ), false)                                                               as is_sold
 
     from cleaned
 )

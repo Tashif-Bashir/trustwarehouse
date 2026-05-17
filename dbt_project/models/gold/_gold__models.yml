@@ -1,0 +1,114 @@
+version: 2
+
+models:
+
+  - name: gold_lead_activity
+    description: >
+      One row per lead. Joins SharpSpring lead data with Wildix call metrics.
+      Primary consumer for sales pipeline and telesales dashboards.
+    columns:
+      - name: lead_id
+        description: SharpSpring lead ID — primary key
+        tests:
+          - unique
+          - not_null
+      - name: created_at
+        description: Timestamp when the lead was created in SharpSpring (UK local)
+        tests:
+          - not_null
+      - name: created_date
+        description: UK local date of lead creation — use this for date filtering
+        tests:
+          - not_null
+      - name: lead_status
+        description: SharpSpring lead status (unqualified, qualified, contact, customer)
+        tests:
+          - not_null
+      - name: customer_type
+        description: domestic or commercial, derived from self_described_type. Null if unknown.
+      - name: is_sold
+        description: True when appointment_status is one of the four sold values
+        tests:
+          - not_null
+      - name: has_been_called
+        description: True if at least one outbound call was matched to this lead
+        tests:
+          - not_null
+      - name: total_call_attempts
+        description: Count of matched outbound completed calls
+        tests:
+          - not_null
+      - name: qualified_conversations
+        description: Calls >= 120 seconds matched to this lead
+        tests:
+          - not_null
+
+  - name: gold_agent_performance_daily
+    description: >
+      One row per agent per calendar day. Aggregates Wildix call metrics and
+      SharpSpring appointment bookings. Primary source for telesales dashboard.
+    columns:
+      - name: date
+        description: Calendar date (UK local)
+        tests:
+          - not_null
+      - name: agent_name
+        description: Canonical agent name from Wildix colleague_name
+        tests:
+          - not_null
+      - name: outbound_calls
+        description: Completed outbound calls made by the agent on this date
+        tests:
+          - not_null
+      - name: inbound_calls
+        description: Completed inbound calls handled by the agent on this date
+        tests:
+          - not_null
+      - name: missed_calls
+        description: Missed calls attributed to this agent on this date
+        tests:
+          - not_null
+      - name: qualified_conversations
+        description: Calls >= 120 seconds (outbound + inbound) on this date
+        tests:
+          - not_null
+      - name: appointments_booked
+        description: Appointments where appointment_made_by maps to this agent on this date
+        tests:
+          - not_null
+      - name: on_target
+        description: True if the agent hit 1 appointment per 3 outbound calls
+        tests:
+          - not_null
+
+  - name: gold_campaign_attribution
+    description: >
+      One row per platform per day. Joins paid ad spend (Google/Meta/Bing)
+      with SharpSpring lead, appointment, and sale counts.
+    columns:
+      - name: date
+        description: Calendar date
+        tests:
+          - not_null
+      - name: platform
+        description: Google, Meta, or Bing
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Google', 'Meta', 'Bing']
+      - name: spend_gbp
+        description: Total ad spend in GBP for this platform on this date
+        tests:
+          - not_null
+      - name: leads
+        description: SharpSpring leads created on this date attributed to this platform
+        tests:
+          - not_null
+      - name: appointments_booked
+        description: Appointments booked on this date attributed to this platform
+        tests:
+          - not_null
+      - name: sales
+        description: Sales confirmed on this date attributed to this platform
+        tests:
+          - not_null

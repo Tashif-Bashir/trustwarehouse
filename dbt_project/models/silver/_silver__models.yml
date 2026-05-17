@@ -1,0 +1,100 @@
+version: 2
+
+models:
+
+  - name: silver_sharpspring_leads
+    description: >
+      One row per lead from SharpSpring bronze. Typed, cleaned, and enriched with
+      derived columns (customer_type, appointment_date, is_sold).
+    columns:
+      - name: lead_id
+        description: SharpSpring lead ID — primary key
+        tests:
+          - unique
+          - not_null
+      - name: created_at
+        description: Lead creation timestamp (SharpSpring create_timestamp)
+        tests:
+          - not_null
+      - name: is_active
+        description: False for deleted/archived leads
+        tests:
+          - not_null
+      - name: is_sold
+        description: True when appointment_status is one of the four sold values
+        tests:
+          - not_null
+      - name: customer_type
+        description: domestic or commercial, derived from self_described_type. Null if unknown.
+
+  - name: silver_sharpspring_campaigns
+    description: SharpSpring campaign definitions — one row per campaign.
+    columns:
+      - name: campaign_id
+        description: SharpSpring campaign ID — primary key
+        tests:
+          - unique
+          - not_null
+
+  - name: silver_sharpspring_opportunities
+    description: SharpSpring opportunities — one row per opportunity.
+    columns:
+      - name: opportunity_id
+        description: SharpSpring opportunity ID — primary key
+        tests:
+          - unique
+          - not_null
+
+  - name: silver_wildix_calls
+    description: >
+      One row per call leg from Wildix bronze. Typed and cleaned.
+      Note: a single customer call may produce multiple rows (one per leg).
+    columns:
+      - name: call_id
+        description: Wildix call ID (id field). Not unique alone — use (call_id, wms_id).
+      - name: wms_id
+        description: WMS instance ID. Combined with call_id forms the unique key.
+      - name: call_status
+        description: COMPLETED, MISSED, BUSY, etc.
+        tests:
+          - not_null
+      - name: direction
+        description: INBOUND or OUTBOUND
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['INBOUND', 'OUTBOUND', 'INTERNAL']
+
+  - name: silver_google_ads_spend
+    description: Google Ads daily spend aggregated from campaign-level data.
+    columns:
+      - name: date
+        description: Reporting date
+        tests:
+          - not_null
+      - name: campaign_id
+        tests:
+          - not_null
+      - name: spend_gbp
+        tests:
+          - not_null
+
+  - name: silver_meta_spend
+    description: Meta (Facebook/Instagram) daily spend.
+    columns:
+      - name: date
+        tests:
+          - not_null
+      - name: spend_gbp
+        tests:
+          - not_null
+
+  - name: silver_bing_spend
+    description: Microsoft Bing Ads daily spend.
+    columns:
+      - name: date
+        tests:
+          - not_null
+      - name: spend_gbp
+        tests:
+          - not_null

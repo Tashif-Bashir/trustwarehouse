@@ -21,23 +21,7 @@ with calls as (
 -- target: match colleague_name values from silver_wildix_calls exactly
 appointments as (
     select
-        case
-            when lower(appointment_made_by) in ('lily', 'lily harpham')          then 'Lily'
-            when lower(appointment_made_by) in ('sue', 'susan england')           then 'Sue'
-            when lower(appointment_made_by) in ('dec', 'declan franks')           then 'Dec'
-            when lower(appointment_made_by) in ('alice', 'alice hardegon')        then 'Alice Hardegon'
-            when lower(appointment_made_by) in ('alicja', 'alicja aleksiuk')      then 'Alicja Aleksiuk'
-            when lower(appointment_made_by) in ('reilly', 'reilly andrew')        then 'Reilly Andrew'
-            when lower(appointment_made_by) in ('alisha', 'alisha moore')         then 'Alisha'
-            when lower(appointment_made_by) in ('ashleigh', 'ashleigh nankervis') then 'Ashleigh Nankervis'
-            when lower(appointment_made_by) in ('kim', 'kim ellis')               then 'Kim Ellis'
-            when lower(appointment_made_by) in ('amelia', 'amelia konczewska')    then 'Amelia Konczewska'
-            when lower(appointment_made_by) in ('josh', 'josh baron')             then 'Josh Baron'
-            when lower(appointment_made_by) in ('victoria', 'victoria ramsden')   then 'Victoria'
-            when lower(appointment_made_by) in ('gemma', 'gemma taylor')          then 'Gemma Taylor'
-            when lower(appointment_made_by) = 'other'                             then null
-            else appointment_made_by
-        end as agent_name,
+        {{ normalise_agent_name('appointment_made_by') }} as agent_name,
         date_trunc('day', try_cast(appointment_booked_at as timestamp)) as appt_booked_date,
         count(*) as appointments_booked
     from {{ ref('silver_sharpspring_leads') }}
@@ -50,22 +34,7 @@ appointments as (
 -- sales credited to each agent per day (via converted_by field)
 sales as (
     select
-        case
-            when lower(converted_by) in ('lily', 'lily harpham')          then 'Lily'
-            when lower(converted_by) in ('sue', 'susan england')           then 'Sue'
-            when lower(converted_by) in ('dec', 'declan franks')           then 'Dec'
-            when lower(converted_by) in ('alice', 'alice hardegon')        then 'Alice Hardegon'
-            when lower(converted_by) in ('alicja', 'alicja aleksiuk')      then 'Alicja Aleksiuk'
-            when lower(converted_by) in ('reilly', 'reilly andrew')        then 'Reilly Andrew'
-            when lower(converted_by) in ('alisha', 'alisha moore')         then 'Alisha'
-            when lower(converted_by) in ('ashleigh', 'ashleigh nankervis') then 'Ashleigh Nankervis'
-            when lower(converted_by) in ('kim', 'kim ellis')               then 'Kim Ellis'
-            when lower(converted_by) in ('amelia', 'amelia konczewska')    then 'Amelia Konczewska'
-            when lower(converted_by) in ('josh', 'josh baron')             then 'Josh Baron'
-            when lower(converted_by) in ('victoria', 'victoria ramsden')   then 'Victoria'
-            when lower(converted_by) in ('gemma', 'gemma taylor')          then 'Gemma Taylor'
-            else converted_by
-        end                                                                   as agent_name,
+        {{ normalise_agent_name('converted_by') }}                            as agent_name,
         cast(try_cast(order_confirmed_at as timestamp) as date)               as sale_date,
         count(*)                                                               as sales_confirmed,
         round(sum(try_cast(regexp_replace(deal_amount, ',', '', 'g') as decimal(10,2))), 2) as total_deal_value

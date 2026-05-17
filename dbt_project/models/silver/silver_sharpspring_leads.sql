@@ -103,6 +103,33 @@ cleaned as (
         nullif(trim(appointment_made_by_65e1a90253305), '')               as appointment_made_by
 
     from source
+),
+
+-- derived classifications that depend on columns computed in cleaned
+enriched as (
+    select
+        *,
+
+        -- clean date of the scheduled appointment (text field has empty strings — TRY_CAST handles them)
+        try_cast(appointment_datetime_text as date)                             as appointment_date,
+
+        -- domestic vs commercial: map free-text self_described_type to a clean enum
+        case
+            when self_described_type ilike '%residential%'
+              or self_described_type ilike '%home owner%'
+              or self_described_type ilike '%sheltered%'
+              or self_described_type ilike '%housing tenant%'
+            then 'domestic'
+            when self_described_type is not null
+            then 'commercial'
+        end                                                                     as customer_type,
+
+        -- sale flag: all appointment_status values that mean a win
+        appointment_status in (
+            'sold', 'sold on site', 'sold in office', 'chc sold'
+        )                                                                       as is_sold
+
+    from cleaned
 )
 
-select * from cleaned
+select * from enriched

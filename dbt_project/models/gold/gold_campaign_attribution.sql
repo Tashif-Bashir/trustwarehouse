@@ -54,7 +54,9 @@ lead_platform as (
             when campaign_id = '200000012314626' then 'Bing'
         end                                                      as platform,
         appointment_booked,
-        try_cast(appointment_booked_at as timestamp)             as appointment_booked_at
+        try_cast(appointment_booked_at as timestamp)             as appointment_booked_at,
+        is_sold,
+        try_cast(order_confirmed_at as timestamp)                as order_confirmed_at
     from {{ ref('silver_sharpspring_leads') }}
     where campaign_id in ('651768834', '672567298', '200000012314626')
       and is_active = true
@@ -83,6 +85,17 @@ daily_appointments as (
     group by cast(appointment_booked_at as date), platform
 ),
 
+-- Sales confirmed per day per platform (date = order_confirmed_at, falling back to created_date)
+daily_sales as (
+    select
+        coalesce(cast(order_confirmed_at as date), created_date) as date,
+        platform,
+        count(*)                                                  as sales
+    from lead_platform
+    where is_sold = true
+    group by coalesce(cast(order_confirmed_at as date), created_date), platform
+),
+
 final as (
     select
         s.date,
@@ -92,30 +105,51 @@ final as (
         s.impressions,
         coalesce(l.leads, 0)                                    as leads,
         coalesce(a.appointments_booked, 0)                      as appointments_booked,
+        coalesce(sv.sales, 0)                                   as sales,
 
-        -- Cost per lead (spend on day X / leads acquired on day X)
+        -- Cost per lead
         case
             when coalesce(l.leads, 0) = 0 then null
             else round(s.spend_gbp / l.leads, 2)
         end                                                     as cost_per_lead,
 
-        -- Cost per appointment (spend on day X / appointments booked on day X)
+        -- Cost per appointment
         case
             when coalesce(a.appointments_booked, 0) = 0 then null
             else round(s.spend_gbp / a.appointments_booked, 2)
         end                                                     as cost_per_appointment,
 
+        -- Cost per sale
+        case
+            when coalesce(sv.sales, 0) = 0 then null
+            else round(s.spend_gbp / sv.sales, 2)
+        end                                                     as cost_per_sale,
+
         -- Click to lead conversion rate
         case
             when s.clicks = 0 then null
             else round(coalesce(l.leads, 0) * 1.0 / s.clicks, 4)
-        end                                                     as click_to_lead_rate
+        end                                                     as click_to_lead_rate,
+
+        -- Lead to appointment rate
+        case
+            when coalesce(l.leads, 0) = 0 then null
+            else round(coalesce(a.appointments_booked, 0) * 1.0 / l.leads, 4)
+        end                                                     as lead_to_appointment_rate,
+
+        -- Appointment to sale rate
+        case
+            when coalesce(a.appointments_booked, 0) = 0 then null
+            else round(coalesce(sv.sales, 0) * 1.0 / a.appointments_booked, 4)
+        end                                                     as appointment_to_sale_rate
 
     from platform_spend s
     left join daily_leads l
         on s.date = l.date and s.platform = l.platform
     left join daily_appointments a
         on s.date = a.date and s.platform = a.platform
+    left join daily_sales sv
+        on s.date = sv.date and s.platform = sv.platform
 )
 
 select * from final

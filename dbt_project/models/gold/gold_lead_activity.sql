@@ -16,6 +16,19 @@ with leads as (
         appointment_made_by,
         appointment_type,
         appointment_status,
+        pipeline_category,
+
+        -- raw strings cleaned in final
+        appt_amount,
+        deal_amount,
+        order_confirmed,
+        order_confirmed_at,
+        appointment_booked_at,
+
+        -- derived columns from silver enriched CTE
+        appointment_date,
+        customer_type,
+        is_sold,
 
         -- UK local date of creation — use this to classify leads at query time
         cast(created_at at time zone 'Europe/London' as date) as created_date
@@ -84,9 +97,13 @@ final as (
         l.lead_status,
         l.domestic_lead_status,
         l.appointment_booked,
+        l.appointment_booked_at,
+        l.appointment_date,
         l.appointment_made_by,
         l.appointment_type,
         l.appointment_status,
+        l.customer_type,
+        l.pipeline_category,
 
         -- call activity
         coalesce(cm.total_call_attempts, 0)                   as total_call_attempts,
@@ -110,7 +127,29 @@ final as (
 
         -- flags
         cm.first_call_at is not null                          as has_been_called,
-        coalesce(cm.qualified_conversations, 0) > 0           as has_qualified_conversation
+        coalesce(cm.qualified_conversations, 0) > 0           as has_qualified_conversation,
+
+        -- quote amount: strip junk placeholder values (≤1) and non-castable strings
+        case
+            when try_cast(l.appt_amount as decimal(10,2)) > 1
+            then round(try_cast(l.appt_amount as decimal(10,2)), 2)
+        end                                                   as quote_amount,
+
+        -- deal amount: agents sometimes enter commas (e.g. "2,990.50") — strip before cast
+        case
+            when try_cast(regexp_replace(l.deal_amount, ',', '', 'g') as decimal(10,2)) > 1
+            then round(try_cast(regexp_replace(l.deal_amount, ',', '', 'g') as decimal(10,2)), 2)
+        end                                                   as deal_amount,
+
+        -- order confirmed as boolean (null = unknown, not the same as No)
+        case
+            when l.order_confirmed = 'Yes' then true
+            when l.order_confirmed = 'No'  then false
+        end                                                   as order_confirmed,
+
+        try_cast(l.order_confirmed_at as timestamp)           as order_confirmed_at,
+
+        l.is_sold
 
     from leads l
     left join call_metrics cm on l.lead_id = cm.lead_id

@@ -38,13 +38,42 @@ appointments as (
             when lower(appointment_made_by) = 'other'                             then null
             else appointment_made_by
         end as agent_name,
-        date_trunc('day', try_cast(appointment_booked_at as timestamp)) as appointment_date,
+        date_trunc('day', try_cast(appointment_booked_at as timestamp)) as appt_booked_date,
         count(*) as appointments_booked
     from {{ ref('silver_sharpspring_leads') }}
     where appointment_booked = 'Yes'
     and appointment_made_by is not null
     and appointment_booked_at is not null
-    group by agent_name, appointment_date
+    group by agent_name, date_trunc('day', try_cast(appointment_booked_at as timestamp))
+),
+
+-- sales credited to each agent per day (via converted_by field)
+sales as (
+    select
+        case
+            when lower(converted_by) in ('lily', 'lily harpham')          then 'Lily'
+            when lower(converted_by) in ('sue', 'susan england')           then 'Sue'
+            when lower(converted_by) in ('dec', 'declan franks')           then 'Dec'
+            when lower(converted_by) in ('alice', 'alice hardegon')        then 'Alice Hardegon'
+            when lower(converted_by) in ('alicja', 'alicja aleksiuk')      then 'Alicja Aleksiuk'
+            when lower(converted_by) in ('reilly', 'reilly andrew')        then 'Reilly Andrew'
+            when lower(converted_by) in ('alisha', 'alisha moore')         then 'Alisha'
+            when lower(converted_by) in ('ashleigh', 'ashleigh nankervis') then 'Ashleigh Nankervis'
+            when lower(converted_by) in ('kim', 'kim ellis')               then 'Kim Ellis'
+            when lower(converted_by) in ('amelia', 'amelia konczewska')    then 'Amelia Konczewska'
+            when lower(converted_by) in ('josh', 'josh baron')             then 'Josh Baron'
+            when lower(converted_by) in ('victoria', 'victoria ramsden')   then 'Victoria'
+            when lower(converted_by) in ('gemma', 'gemma taylor')          then 'Gemma Taylor'
+            else converted_by
+        end                                                                   as agent_name,
+        cast(try_cast(order_confirmed_at as timestamp) as date)               as sale_date,
+        count(*)                                                               as sales_confirmed,
+        round(sum(try_cast(regexp_replace(deal_amount, ',', '', 'g') as decimal(10,2))), 2) as total_deal_value
+    from {{ ref('silver_sharpspring_leads') }}
+    where is_sold = true
+      and converted_by is not null
+      and converted_by != 'Other'
+    group by agent_name, sale_date
 ),
 
 -- per agent per day call metrics
@@ -92,6 +121,8 @@ final as (
         cm.qualified_conversations,
         cm.qualified_outbound_conversations,
         coalesce(a.appointments_booked, 0)                                             as appointments_booked,
+        coalesce(s.sales_confirmed, 0)                                                 as sales_confirmed,
+        s.total_deal_value,
 
         -- qualified conversations per appointment (lower = better)
         case
@@ -109,6 +140,12 @@ final as (
             else round(cm.outbound_calls * 1.0 / a.appointments_booked, 1)
         end                                                                             as calls_per_appointment,
 
+        -- appointment to sale conversion rate per agent per day
+        case
+            when coalesce(a.appointments_booked, 0) = 0 then null
+            else round(coalesce(s.sales_confirmed, 0) * 1.0 / a.appointments_booked, 2)
+        end                                                                             as appointment_to_sale_rate,
+
         -- on target flag (1 appointment per 3 calls)
         case
             when coalesce(a.appointments_booked, 0) = 0 then false
@@ -121,8 +158,11 @@ final as (
         on cm.call_date = m.call_date
         and cm.agent_name = m.agent_name
     left join appointments a
-        on cm.call_date = a.appointment_date
+        on cm.call_date = a.appt_booked_date
         and cm.agent_name = a.agent_name
+    left join sales s
+        on cm.call_date = s.sale_date
+        and cm.agent_name = s.agent_name
 )
 
 select * from final

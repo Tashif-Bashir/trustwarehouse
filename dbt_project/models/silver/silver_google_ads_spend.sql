@@ -2,25 +2,22 @@ with source as (
     select * from {{ source('bronze', 'google_adscampaign') }}
 ),
 
--- Google Ads syncs intraday (partial spend) and end-of-day (final spend).
--- Summing across all syncs double-counts. Only use the latest sync batch
--- per date — defined as within 1 hour of the most recent extraction for that date.
-latest_batch as (
-    select s.*
-    from source s
-    inner join (
-        select segments_date, max(_airbyte_extracted_at) as latest
-        from source
-        group by segments_date
-    ) lb on s.segments_date = lb.segments_date
-        and s._airbyte_extracted_at >= lb.latest - interval '1 hour'
+-- Google Ads re-syncs historical rows on every Airbyte run (attribution window
+-- updates). Keep only the most recently extracted row per unique hourly segment
+-- so we never double-count when Airbyte syncs multiple times in one day.
+deduped as (
+    select *
+    from source
+    qualify row_number() over (
+        partition by campaign_id, segments_date, segments_hour, segments_ad_network_type
+        order by _airbyte_extracted_at desc
+    ) = 1
 ),
 
 daily as (
     select
         segments_date                                               as date,
         campaign_id,
-        -- use any_value for stable campaign attributes (same per campaign per day)
         any_value(campaign_name)                                    as campaign_name,
         any_value(campaign_status)                                  as campaign_status,
         any_value(campaign_advertising_channel_type)                as channel_type,
@@ -28,13 +25,12 @@ daily as (
             max(campaign_budget_amount_micros) / 1000000.0, 2
         )                                                           as daily_budget_gbp,
 
-        -- aggregate hourly rows to daily totals
         sum(metrics_impressions)                                    as impressions,
         sum(metrics_clicks)                                         as clicks,
         round(sum(metrics_cost_micros) / 1000000.0, 4)             as spend_gbp,
         round(sum(metrics_conversions), 2)                          as conversions
 
-    from latest_batch
+    from deduped
     group by segments_date, campaign_id
 ),
 

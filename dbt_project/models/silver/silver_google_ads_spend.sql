@@ -2,6 +2,20 @@ with source as (
     select * from {{ source('bronze', 'google_adscampaign') }}
 ),
 
+-- Google Ads syncs intraday (partial spend) and end-of-day (final spend).
+-- Summing across all syncs double-counts. Only use the latest sync batch
+-- per date — defined as within 1 hour of the most recent extraction for that date.
+latest_batch as (
+    select s.*
+    from source s
+    inner join (
+        select segments_date, max(_airbyte_extracted_at) as latest
+        from source
+        group by segments_date
+    ) lb on s.segments_date = lb.segments_date
+        and s._airbyte_extracted_at >= lb.latest - interval '1 hour'
+),
+
 daily as (
     select
         segments_date                                               as date,
@@ -20,7 +34,7 @@ daily as (
         round(sum(metrics_cost_micros) / 1000000.0, 4)             as spend_gbp,
         round(sum(metrics_conversions), 2)                          as conversions
 
-    from source
+    from latest_batch
     group by segments_date, campaign_id
 ),
 

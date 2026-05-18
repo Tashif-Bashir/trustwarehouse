@@ -3,7 +3,8 @@ with source as (
 ),
 
 -- Airbyte re-pulls historical rows on each sync (Facebook attribution window updates).
--- Keep only the most recently extracted row per date+ad to avoid double-counting spend.
+-- Keep only the most recently extracted row per date+ad — Facebook updates spend
+-- retroactively as attribution windows close, so latest extraction = correct value.
 deduped as (
     select *
     from source

@@ -39,7 +39,7 @@ models:
   - name: silver_sharpspring_deal_stages
     description: SharpSpring deal/pipeline stage definitions.
     columns:
-      - name: id
+      - name: deal_stage_id
         description: Stage ID — primary key
         tests:
           - unique

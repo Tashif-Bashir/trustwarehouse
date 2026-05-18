@@ -6,13 +6,13 @@ on:
     types:
       - completed
   schedule:
-    - cron: "0 6 * * *"  # 06:00 UTC (07:00 BST) daily — full rebuild before start of day
+    - cron: "*/20 * * * *"  # every 20 minutes — keeps ad platform data fresh
   workflow_dispatch:  # manual trigger — builds everything
 
 jobs:
   dbt-build:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v4
 

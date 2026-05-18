@@ -137,7 +137,7 @@ def load_trend(d0, d1):
 
 # ── PERIOD SELECTOR ───────────────────────────────────────────────────────────
 
-PRESETS = ["Yesterday", "Today", "This Week", "Last 7 Working Days",
+PRESETS = ["Yesterday", "Today", "Last 7 Days", "This Week", "Last 7 Working Days",
            "This Month", "Last 30 Days", "Custom"]
 
 def _working_range(n):
@@ -148,13 +148,15 @@ def _working_range(n):
     return days[-1], days[0]
 
 today = date.today()
+yesterday = today - timedelta(1)
 PRESET_DATES = {
     "Today":               (today, today),
-    "Yesterday":           (today - timedelta(1), today - timedelta(1)),
-    "This Week":           (today - timedelta(today.weekday()), today),
+    "Yesterday":           (yesterday, yesterday),
+    "Last 7 Days":         (yesterday - timedelta(6), yesterday),
+    "This Week":           (today - timedelta(today.weekday()), yesterday),
     "Last 7 Working Days": _working_range(7),
-    "This Month":          (today.replace(day=1), today),
-    "Last 30 Days":        (today - timedelta(29), today),
+    "This Month":          (today.replace(day=1), yesterday),
+    "Last 30 Days":        (today - timedelta(30), yesterday),
 }
 
 # ── HEADER ────────────────────────────────────────────────────────────────────

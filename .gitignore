@@ -10,3 +10,13 @@ dbt_project/dbt_packages/
 dbt_project/logs/
 .DS_Store
 node_modules/
+
+# Local run scripts (contain tokens)
+_run_*.bat
+
+# Editor / tool config
+.vscode/
+.claude/
+
+# dbt user config
+dbt_project/.user.yml

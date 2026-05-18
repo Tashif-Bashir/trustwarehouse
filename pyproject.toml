@@ -16,6 +16,9 @@ dependencies = [
     "PyJWT",
     "dbt-core",
     "dbt-duckdb",
+    "streamlit>=1.35",
+    "plotly>=5.20",
+    "pandas>=2.0",
 ]
 
 [dependency-groups]

@@ -2,17 +2,46 @@ with source as (
     select * from {{ source('bronze', 'bing_adscampaign_performance_report_daily') }}
 ),
 
--- Bing reports segment each campaign row by network, device, matchtype, and placement.
--- Deduplicate the 3 known Airbyte micro-duplicates, then sum across all segments
--- to get one row per campaign per day.
+-- Bing syncs intraday (partial spend) and end-of-day (full spend).
+-- Only use rows from the latest sync batch per date — defined as within
+-- 1 hour of the most recent extraction for that timeperiod.
+latest_batch as (
+    select s.*
+    from source s
+    inner join (
+        select timeperiod, max(_airbyte_extracted_at) as latest
+        from source
+        group by timeperiod
+    ) lb on s.timeperiod = lb.timeperiod
+        and s._airbyte_extracted_at >= lb.latest - interval '1 hour'
+),
+
+-- Bing Performance Max campaigns emit multiple rows per segment combination
+-- within a single sync (milliseconds apart), with only one row carrying the
+-- actual spend — the others are zero. Taking max(spend) per segment handles this
+-- without needing to identify which specific row is correct.
 deduped as (
-    select *
-    from source
-    qualify row_number() over (
-        partition by timeperiod, campaignid, network, devicetype,
-                     bidmatchtype, deliveredmatchtype, addistribution, topvsother
-        order by _airbyte_extracted_at desc
-    ) = 1
+    select
+        timeperiod,
+        campaignid,
+        network,
+        devicetype,
+        bidmatchtype,
+        deliveredmatchtype,
+        addistribution,
+        topvsother,
+        any_value(campaignname)     as campaignname,
+        any_value(campaigntype)     as campaigntype,
+        any_value(campaignstatus)   as campaignstatus,
+        any_value(currencycode)     as currencycode,
+        max(impressions)            as impressions,
+        max(clicks)                 as clicks,
+        max(spend)                  as spend,
+        max(conversions)            as conversions
+    from latest_batch
+    group by
+        timeperiod, campaignid, network, devicetype,
+        bidmatchtype, deliveredmatchtype, addistribution, topvsother
 ),
 
 campaign_daily as (

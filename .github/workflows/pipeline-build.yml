@@ -5,6 +5,8 @@ on:
     workflows: ["Sync SharpSpring", "Sync Wildix"]
     types:
       - completed
+  schedule:
+    - cron: "0 7 * * *"  # 07:00 UTC daily — full rebuild before start of day
   workflow_dispatch:  # manual trigger — builds everything
 
 jobs:

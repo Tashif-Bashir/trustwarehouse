@@ -14,29 +14,10 @@ def _client() -> SharpSpringClient:
     return SharpSpringClient()
 
 
-@dlt.resource(
-    name="sharpspring_leads",
-    write_disposition="merge",
-    primary_key="id",
-)
-def leads_resource(
-    updated_since: dlt.sources.incremental[str] = dlt.sources.incremental(
-        "update_timestamp",
-        initial_value="2020-01-01 00:00:00",
-    ),
-):
-    """Leads updated since the last successful run (incremental merge by id).
-
-    On first run: fetches all leads from 2020-01-01 onwards.
-    On subsequent runs: only fetches leads whose update_timestamp changed since
-    the previous cursor high-watermark, then upserts them by lead id.
-    SharpSpring returns leads in ascending updateTimestamp order, so the cursor
-    advances correctly as pages are consumed.
-    """
-    from datetime import datetime
-
-    since_dt = datetime.strptime(updated_since.last_value, "%Y-%m-%d %H:%M:%S")
-    yield from _client().get_all_leads(updated_since=since_dt)
+@dlt.resource(name="sharpspring_leads", write_disposition="replace")
+def leads_resource():
+    """All leads — full replace on every run."""
+    yield from _client().get_all_leads()
 
 
 @dlt.resource(name="sharpspring_campaigns", write_disposition="replace")

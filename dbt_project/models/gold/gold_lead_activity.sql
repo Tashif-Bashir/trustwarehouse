@@ -29,6 +29,9 @@ with leads as (
         customer_type,
         is_sold,
 
+        -- attribution
+        campaign_id,
+
         -- UK local date of creation — use this to classify leads at query time
         cast(created_at at time zone 'Europe/London' as date) as created_date
 
@@ -103,6 +106,7 @@ final as (
         l.appointment_status,
         l.customer_type,
         l.pipeline_category,
+        l.campaign_id,
 
         -- call activity
         coalesce(cm.total_call_attempts, 0)                   as total_call_attempts,

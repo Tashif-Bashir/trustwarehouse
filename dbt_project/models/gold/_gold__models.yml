@@ -26,6 +26,8 @@ models:
           - not_null
       - name: customer_type
         description: domestic or commercial, derived from self_described_type. Null if unknown.
+      - name: campaign_id
+        description: SharpSpring campaign ID the lead was attributed to. Null for organic/untracked leads.
       - name: is_sold
         description: True when appointment_status is one of the four sold values
         tests:

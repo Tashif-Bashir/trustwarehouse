@@ -1,106 +1,36 @@
-import os
+import os, json, math
 from datetime import date, timedelta
 
 import duckdb
 import pandas as pd
-import plotly.graph_objects as go
-import plotly.express as px
-from plotly.subplots import make_subplots
 import streamlit as st
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# ── PALETTE ───────────────────────────────────────────────────────────────────
-BG     = "#070c18"
-BG2    = "#0d1426"
-GOLD   = "#d4a843"
-GOLD_L = "#f0c870"
-WHITE  = "#c8d4f0"
-DIM    = "#4a6080"
-BORDER = "#1a2540"
+st.set_page_config(page_title="Marketing Intelligence", page_icon="💰",
+                   layout="wide", initial_sidebar_state="collapsed")
 
-GOOGLE = "#4285f4"
-META   = "#a855f7"
-BING   = "#f59e0b"
-PC     = {"Google": GOOGLE, "Meta": META, "Bing": BING}
-FILL   = {
-    "Google": "rgba(66,133,244,0.07)",
-    "Meta":   "rgba(168,85,247,0.07)",
-    "Bing":   "rgba(245,158,11,0.07)",
-}
-
-CHART = dict(
-    paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(0,0,0,0)",
-    font=dict(family="'Nunito Sans',sans-serif", color=WHITE, size=12),
-    margin=dict(t=60, b=20, l=10, r=10),
-    xaxis=dict(gridcolor="rgba(212,168,67,0.07)", linecolor=BORDER, zeroline=False),
-    yaxis=dict(gridcolor="rgba(212,168,67,0.07)", linecolor=BORDER, zeroline=False),
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="rgba(0,0,0,0)", font=dict(color=DIM)),
-    title_font=dict(family="'Playfair Display',serif", size=20, color=GOLD),
-    hoverlabel=dict(bgcolor=BG2, bordercolor=GOLD,
-        font=dict(family="'Nunito Sans',sans-serif", color=WHITE)),
-)
-
-# ── PAGE ──────────────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Marketing Intelligence", page_icon="💰", layout="wide",
-                   initial_sidebar_state="collapsed")
-
-st.markdown(f"""
+st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Nunito+Sans:wght@300;400;600;700&family=DM+Mono:wght@400;500&display=swap');
-
-html,body,.stApp,[data-testid="stAppViewContainer"]{{background-color:{BG}!important;color:{WHITE}!important;font-family:'Nunito Sans',sans-serif!important}}
-[data-testid="stAppViewContainer"]{{background-image:
-  radial-gradient(ellipse 60% 50% at 80% 10%,rgba(212,168,67,0.07) 0%,transparent 70%),
-  radial-gradient(ellipse 40% 30% at 10% 90%,rgba(66,133,244,0.04) 0%,transparent 60%)}}
-.block-container{{padding:1rem 2.5rem 2rem!important;max-width:100%!important}}
-#MainMenu,footer,header{{visibility:hidden}}
-
-.mhdr{{padding:2rem 0 1.5rem;border-bottom:1px solid {BORDER};margin-bottom:1.5rem}}
-.mhdr-eye{{font-family:'DM Mono',monospace;font-size:.62rem;letter-spacing:5px;color:{GOLD};opacity:.65;text-transform:uppercase;margin-bottom:6px}}
-.mhdr-title{{font-family:'Playfair Display',serif;font-size:3.2rem;font-weight:700;font-style:italic;color:{WHITE};line-height:1.1;margin:0 0 4px}}
-.mhdr-title span{{color:{GOLD};font-style:normal}}
-.mhdr-rule{{height:1px;background:linear-gradient(90deg,{GOLD} 0%,{META} 33%,{GOOGLE} 66%,transparent 100%);margin-top:1.5rem;opacity:.35}}
-
-.skpi{{background:{BG2};border:1px solid {BORDER};border-left:3px solid var(--a,{GOLD});border-radius:4px;padding:20px 18px;height:100%}}
-.skpi-lbl{{font-family:'DM Mono',monospace;font-size:.58rem;letter-spacing:4px;color:{DIM};text-transform:uppercase;margin-bottom:10px}}
-.skpi-val{{font-family:'Playfair Display',serif;font-size:2.4rem;font-weight:700;color:var(--a,{WHITE});line-height:1}}
-.skpi-sub{{font-family:'DM Mono',monospace;font-size:.62rem;color:{DIM};margin-top:8px;letter-spacing:1px}}
-
-.pb{{display:inline-block;padding:2px 10px;border-radius:3px;font-family:'DM Mono',monospace;font-size:.68rem;letter-spacing:2px;font-weight:500;text-transform:uppercase}}
-.pb-g{{background:rgba(66,133,244,.12);color:{GOOGLE};border:1px solid rgba(66,133,244,.25)}}
-.pb-m{{background:rgba(168,85,247,.12);color:{META};border:1px solid rgba(168,85,247,.25)}}
-.pb-b{{background:rgba(245,158,11,.12);color:{BING};border:1px solid rgba(245,158,11,.25)}}
-
-.msec{{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:600;font-style:italic;color:{GOLD};margin:1.2rem 0 .7rem;opacity:.85}}
-
-button[role="tab"]{{font-family:'Nunito Sans',sans-serif!important;font-size:.88rem!important;font-weight:700!important;letter-spacing:2px!important;color:{DIM}!important;text-transform:uppercase!important;border:none!important;background:transparent!important}}
-button[role="tab"][aria-selected="true"]{{color:{GOLD}!important;border-bottom:2px solid {GOLD}!important}}
-button[role="tab"]:hover{{color:{WHITE}!important}}
-
-hr{{border:none!important;border-top:1px solid {BORDER}!important;margin:1.4rem 0!important}}
-
-[data-testid="stButton"]>button{{background:transparent!important;border:1px solid {BORDER}!important;color:{DIM}!important;font-family:'Nunito Sans',sans-serif!important;font-size:.85rem!important;font-weight:700!important;letter-spacing:2px!important;border-radius:3px!important;transition:all .2s!important}}
-[data-testid="stButton"]>button:hover{{border-color:{GOLD}!important;color:{GOLD}!important;background:rgba(212,168,67,.05)!important}}
-[data-testid="stSelectbox"] > div > div{{background:{BG2}!important;border:1px solid {BORDER}!important;color:{WHITE}!important;border-radius:3px!important}}
-[data-testid="stDateInput"] input{{background:{BG2}!important;border:1px solid {BORDER}!important;color:{WHITE}!important;border-radius:3px!important}}
-[data-testid="stDataFrame"]{{border:1px solid {BORDER}!important;border-radius:4px!important}}
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800;900&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+html,body,.stApp,[data-testid="stAppViewContainer"]{background:#07090F!important;}
+#MainMenu,footer,header{visibility:hidden;}
+.block-container{padding:0.6rem 1.5rem 1rem!important;max-width:100%!important;}
+[data-testid="stSelectbox"]>div>div{background:#0D1120!important;border:1px solid rgba(255,255,255,0.09)!important;color:#CBD5E1!important;border-radius:6px!important;font-family:'DM Sans',sans-serif!important;}
+[data-testid="stButton"]>button{background:rgba(245,158,11,0.1)!important;border:1px solid rgba(245,158,11,0.35)!important;color:#F59E0B!important;font-weight:600!important;border-radius:6px!important;font-family:'DM Sans',sans-serif!important;letter-spacing:1px!important;}
+[data-testid="stButton"]>button:hover{background:rgba(245,158,11,0.22)!important;border-color:rgba(245,158,11,0.6)!important;}
+[data-testid="stDateInput"] input{background:#0D1120!important;border:1px solid rgba(255,255,255,0.09)!important;color:#CBD5E1!important;border-radius:6px!important;}
+.stTabs [role="tab"]{color:#4B5563!important;font-family:'JetBrains Mono',monospace!important;font-size:11px!important;letter-spacing:2px!important;text-transform:uppercase!important;}
+.stTabs [role="tab"][aria-selected="true"]{color:#F59E0B!important;border-bottom-color:#F59E0B!important;}
 </style>
 """, unsafe_allow_html=True)
 
-# ── HELPERS ───────────────────────────────────────────────────────────────────
-
+# ── HELPERS ────────────────────────────────────────────────────────────────────
 def _connect():
     return duckdb.connect(f"md:trust-pipeline?motherduck_token={os.getenv('MOTHERDUCK_TOKEN','')}")
 
-def skpi(label, value, sub=None, accent=None):
-    a = accent or GOLD
-    sh = f'<div class="skpi-sub">{sub}</div>' if sub else ""
-    return f'<div class="skpi" style="--a:{a}"><div class="skpi-lbl">{label}</div><div class="skpi-val">{value}</div>{sh}</div>'
-
-@st.cache_data(ttl=1800, show_spinner="Loading attribution data…")
+@st.cache_data(ttl=1800, show_spinner="Querying MotherDuck…")
 def load_attr(d0, d1):
     con = _connect()
     df = con.execute(f"""
@@ -115,35 +45,29 @@ def load_attr(d0, d1):
 def load_customer_types(d0, d1):
     con = _connect()
     df = con.execute(f"""
-        SELECT
-            coalesce(m.platform, 'Other Paid') as platform,
-            coalesce(g.customer_type, 'Unknown') as customer_type,
-            count(*) as leads
+        SELECT coalesce(m.platform,'Other Paid') as platform,
+               coalesce(g.customer_type,'Unknown') as customer_type,
+               count(*) as leads
         FROM gold.gold_lead_activity g
         INNER JOIN silver.campaign_platform_mapping m ON g.campaign_id = m.campaign_id
         WHERE g.created_date BETWEEN '{d0}' AND '{d1}'
-        GROUP BY 1, 2
-        ORDER BY 1, 3 DESC
+        GROUP BY 1,2 ORDER BY 1,3 DESC
     """).df()
     con.close()
     return df
 
-# ── PERIOD SELECTOR ───────────────────────────────────────────────────────────
-
-PRESETS = ["Last 7 Days", "Last 30 Days", "This Month", "Last 7 Working Days",
-           "This Week", "Yesterday", "Today", "Custom"]
-
 def _working_range(n):
     days, d = [], date.today() - timedelta(1)
     while len(days) < n:
-        if d.weekday() < 5:
-            days.append(d)
+        if d.weekday() < 5: days.append(d)
         d -= timedelta(1)
     return days[-1], days[0]
 
-today = date.today()
+# ── PERIOD SELECTOR ────────────────────────────────────────────────────────────
+PRESETS = ["Last 7 Days","Last 30 Days","This Month","Last 7 Working Days",
+           "This Week","Yesterday","Today","Custom"]
+today     = date.today()
 yesterday = today - timedelta(1)
-
 PRESET_DATES = {
     "Today":               (today, today),
     "Yesterday":           (yesterday, yesterday),
@@ -154,51 +78,23 @@ PRESET_DATES = {
     "Last 30 Days":        (today - timedelta(30), yesterday),
 }
 
-# ── HEADER ────────────────────────────────────────────────────────────────────
-st.markdown("""
-<div class="mhdr">
-  <div class="mhdr-eye">Trust Electric Heating &nbsp;/&nbsp; Paid Media Intelligence</div>
-  <h1 class="mhdr-title">Ad Performance <span>&amp; Attribution</span></h1>
-  <div class="mhdr-rule"></div>
-</div>
-""", unsafe_allow_html=True)
-
-hl, hm, hn, hr_ = st.columns([2, 2, 2, 2])
-with hl:
+c1, c2, c3, c4 = st.columns([3, 2, 2, 1])
+with c1:
     preset = st.selectbox("Period", PRESETS, index=0, label_visibility="collapsed")
-
 if preset == "Custom":
-    with hm:
-        d0 = st.date_input("From", value=today - timedelta(30), max_value=today,
-            label_visibility="collapsed", key="m_from")
-    with hn:
-        d1 = st.date_input("To", value=today - timedelta(1), max_value=today,
-            label_visibility="collapsed", key="m_to")
+    with c2:
+        d0 = st.date_input("From", value=yesterday - timedelta(30), max_value=yesterday,
+                           label_visibility="collapsed", key="m_from")
+    with c3:
+        d1 = st.date_input("To", value=yesterday, max_value=yesterday,
+                           label_visibility="collapsed", key="m_to")
 else:
     d0, d1 = PRESET_DATES[preset]
+with c4:
+    if st.button("↺  REFRESH"):
+        st.cache_data.clear(); st.rerun()
 
-with hr_:
-    mc1, mc2 = st.columns([1, 2])
-    with mc1:
-        if st.button("↺ REFRESH", use_container_width=True):
-            st.cache_data.clear()
-            st.rerun()
-    with mc2:
-        st.markdown(
-            f'<div style="font-family:\'DM Mono\',monospace;font-size:.65rem;color:{DIM};'
-            f'padding-top:12px;letter-spacing:2px">GOLD LAYER · MOTHERDUCK</div>',
-            unsafe_allow_html=True)
-
-period = f"{d0.strftime('%d %b')} – {d1.strftime('%d %b %Y')}"
-st.markdown(
-    f'<div style="font-family:\'DM Mono\',monospace;font-size:.7rem;color:{DIM};'
-    f'letter-spacing:2px;margin:.8rem 0 1.4rem">'
-    f'PERIOD: {period.upper()} &nbsp;&nbsp;'
-    f'<span class="pb pb-g">Google</span> &nbsp;'
-    f'<span class="pb pb-m">Meta</span> &nbsp;'
-    f'<span class="pb pb-b">Bing</span></div>',
-    unsafe_allow_html=True)
-
+# ── DATA ───────────────────────────────────────────────────────────────────────
 df    = load_attr(d0.strftime("%Y-%m-%d"), d1.strftime("%Y-%m-%d"))
 df_ct = load_customer_types(d0.strftime("%Y-%m-%d"), d1.strftime("%Y-%m-%d"))
 
@@ -206,325 +102,714 @@ if df.empty:
     st.warning("No attribution data for selected period.")
     st.stop()
 
-# ── SHARED AGGREGATION ────────────────────────────────────────────────────────
 pa = df.groupby("platform").agg(
-    spend=("spend_gbp", "sum"),
-    clicks=("clicks", "sum"),
-    impr=("impressions", "sum"),
-    leads=("leads", "sum"),
-    appts=("appointments_booked", "sum"),
-    sales=("sales", "sum"),
+    spend=("spend_gbp","sum"), clicks=("clicks","sum"), impr=("impressions","sum"),
+    leads=("leads","sum"), appts=("appointments_booked","sum"), sales=("sales","sum"),
 ).reset_index()
-pa["cpl"]  = (pa["spend"] / pa["leads"].replace(0, float("nan"))).round(2)
-pa["cpa"]  = (pa["spend"] / pa["appts"].replace(0, float("nan"))).round(2)
-pa["cps"]  = (pa["spend"] / pa["sales"].replace(0, float("nan"))).round(2)
-pa["ctr"]  = (pa["clicks"] / pa["impr"].replace(0, float("nan")) * 100).round(3)
-pa["l2a"]  = (pa["appts"] / pa["leads"].replace(0, float("nan")) * 100).round(1)
-pa["a2s"]  = (pa["sales"] / pa["appts"].replace(0, float("nan")) * 100).round(1)
+for col, num, den in [("cpl","spend","leads"),("cpa","spend","appts"),("cps","spend","sales")]:
+    pa[col] = (pa[num] / pa[den].replace(0, float("nan"))).round(2)
+pa["ctr"] = (pa["clicks"] / pa["impr"].replace(0, float("nan")) * 100).round(3)
+pa["l2a"] = (pa["appts"] / pa["leads"].replace(0, float("nan")) * 100).round(1)
+pa["a2s"] = (pa["sales"] / pa["appts"].replace(0, float("nan")) * 100).round(1)
 
-tot_sp  = pa["spend"].sum()
-tot_ld  = int(pa["leads"].sum())
-tot_ap  = int(pa["appts"].sum())
-tot_sa  = int(pa["sales"].sum())
-tot_cl  = int(pa["clicks"].sum())
-b_cpl   = tot_sp / tot_ld if tot_ld else 0
-b_cpa   = tot_sp / tot_ap if tot_ap else 0
-b_cps   = tot_sp / tot_sa if tot_sa else 0
+tot_sp = float(pa["spend"].sum())
+tot_ld = int(pa["leads"].sum())
+tot_ap = int(pa["appts"].sum())
+tot_sa = int(pa["sales"].sum())
+tot_cl = int(pa["clicks"].sum())
+b_cpl  = round(tot_sp / tot_ld, 2) if tot_ld else 0
+b_cpa  = round(tot_sp / tot_ap, 2) if tot_ap else 0
+b_cps  = round(tot_sp / tot_sa, 2) if tot_sa else 0
 
-# ── TABS ──────────────────────────────────────────────────────────────────────
-t1, t2, t3 = st.tabs(["OVERVIEW", "PERFORMANCE", "PLATFORMS"])
+# ── SERIALISE DATA ─────────────────────────────────────────────────────────────
+def safe(v):
+    if v is None: return None
+    if isinstance(v, float) and math.isnan(v): return None
+    if hasattr(v, 'item'): return v.item()
+    return v
 
-# ═══════════════════════════════════ TAB 1 — OVERVIEW ═════════════════════════
-with t1:
-    k1, k2, k3, k4, k5, k6 = st.columns(6)
-    with k1: st.markdown(skpi("TOTAL SPEND",   f"£{tot_sp:,.0f}",  period, GOLD), unsafe_allow_html=True)
-    with k2: st.markdown(skpi("PAID LEADS",    f"{tot_ld:,}",      f"from {tot_cl:,} clicks", WHITE), unsafe_allow_html=True)
-    with k3: st.markdown(skpi("APPOINTMENTS",  f"{tot_ap:,}",      f"{tot_ap/tot_ld*100:.0f}% of leads" if tot_ld else "—", WHITE), unsafe_allow_html=True)
-    with k4: st.markdown(skpi("SALES",         f"{tot_sa:,}",      f"{tot_sa/tot_ap*100:.0f}% of appts" if tot_ap else "—", GOLD_L), unsafe_allow_html=True)
-    with k5: st.markdown(skpi("BLENDED CPL",   f"£{b_cpl:.0f}",   "cost per lead", GOLD), unsafe_allow_html=True)
-    with k6: st.markdown(skpi("BLENDED CPS",   f"£{b_cps:.0f}" if tot_sa else "—", "cost per sale", GOLD), unsafe_allow_html=True)
+platform_records = []
+for _, row in pa.iterrows():
+    platform_records.append({
+        'platform': str(row['platform']),
+        'spend': float(row['spend']),
+        'leads': int(row['leads']),
+        'appts': int(row['appts']),
+        'sales': int(row['sales']),
+        'clicks': int(row['clicks']),
+        'cpl': safe(row['cpl']),
+        'cpa': safe(row['cpa']),
+        'cps': safe(row['cps']),
+        'ctr': safe(row['ctr']),
+        'l2a': safe(row['l2a']),
+        'a2s': safe(row['a2s']),
+    })
 
-    st.markdown("<hr>", unsafe_allow_html=True)
+daily_records = []
+for _, row in df.iterrows():
+    daily_records.append({
+        'date': str(row['date']),
+        'platform': str(row['platform']),
+        'spend': safe(float(row['spend_gbp'])),
+        'leads': int(row['leads']) if pd.notna(row['leads']) else 0,
+        'appts': int(row['appointments_booked']) if pd.notna(row['appointments_booked']) else 0,
+        'sales': int(row['sales']) if pd.notna(row['sales']) else 0,
+        'clicks': int(row['clicks']) if pd.notna(row['clicks']) else 0,
+        'cpl': safe(float(row['cost_per_lead'])) if pd.notna(row.get('cost_per_lead')) else None,
+        'cpa': safe(float(row['cost_per_appointment'])) if pd.notna(row.get('cost_per_appointment')) else None,
+    })
 
-    # Per-platform spend KPIs
-    pk = st.columns(len(pa))
-    for i, (_, row) in enumerate(pa.iterrows()):
-        p = row["platform"]
-        c = PC.get(p, GOLD)
-        pct = row["spend"] / tot_sp * 100 if tot_sp else 0
-        with pk[i]:
-            cps_str = f"£{int(row['cps'])} CPS" if pd.notna(row["cps"]) else "CPS —"
-            st.markdown(skpi(f"{p.upper()} SPEND", f"£{row['spend']:,.0f}",
-                f"{pct:.0f}% of budget · {int(row['leads'])} leads · {cps_str}", c),
-                unsafe_allow_html=True)
+ct_records = []
+for _, row in df_ct.iterrows():
+    ct_records.append({'platform': str(row['platform']),
+                       'customer_type': str(row['customer_type']),
+                       'leads': int(row['leads'])})
 
-    st.markdown("<hr>", unsafe_allow_html=True)
+DATA_JSON = json.dumps({
+    'period': f"{d0.strftime('%d %b')} – {d1.strftime('%d %b %Y')}",
+    'totals': {
+        'spend': tot_sp, 'leads': tot_ld, 'appts': tot_ap,
+        'sales': tot_sa, 'clicks': tot_cl,
+        'cpl': b_cpl, 'cpa': b_cpa, 'cps': b_cps,
+    },
+    'platforms': platform_records,
+    'daily': daily_records,
+    'customerTypes': ct_records,
+})
 
-    dc, tc = st.columns([4, 6])
-    with dc:
-        fig_d = go.Figure(go.Pie(
-            labels=pa["platform"], values=pa["spend"].round(0), hole=0.65,
-            marker=dict(colors=[PC.get(p, DIM) for p in pa["platform"]], line=dict(color=BG, width=4)),
-            textinfo="label+percent", textfont=dict(size=13, family="Nunito Sans"),
-            hovertemplate="<b>%{label}</b><br>£%{value:,.0f}<br>%{percent}<extra></extra>",
-        ))
-        fig_d.update_layout(title="Spend Distribution", height=380,
-            paper_bgcolor="rgba(0,0,0,0)",
-            font=dict(family="'Nunito Sans',sans-serif", color=WHITE),
-            title_font=dict(family="'Playfair Display',serif", size=20, color=GOLD),
-            showlegend=False, margin=dict(t=60, b=20, l=10, r=10),
-            annotations=[dict(text=f"<b>£{tot_sp:,.0f}</b>", x=0.5, y=0.5,
-                font=dict(size=18, color=GOLD, family="Playfair Display"), showarrow=False)])
-        st.plotly_chart(fig_d, use_container_width=True)
+# ── REACT DASHBOARD ────────────────────────────────────────────────────────────
+REACT_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#07090F;
+  --s1:#0D1120;
+  --s2:#141929;
+  --border:rgba(255,255,255,0.07);
+  --bh:rgba(255,255,255,0.14);
+  --text:#CBD5E1;
+  --dim:#4B5563;
+  --gold:#F59E0B;
+  --gold2:#FCD34D;
+  --google:#4285F4;
+  --meta:#8B5CF6;
+  --bing:#10B981;
+}
+html,body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans-serif;font-size:14px;line-height:1.5;}
+body{padding:24px 28px 40px;}
 
-    with tc:
-        dts = df.copy()
-        dts["date"] = pd.to_datetime(dts["date"])
-        piv = dts.pivot_table(index="date", columns="platform",
-            values="spend_gbp", aggfunc="sum", fill_value=0).reset_index()
-        fig_sp = go.Figure()
-        for p in ["Google", "Meta", "Bing"]:
-            if p in piv.columns:
-                fig_sp.add_trace(go.Scatter(x=piv["date"], y=piv[p], name=p, mode="lines",
-                    line=dict(color=PC[p], width=2.5), fill="tozeroy", fillcolor=FILL[p],
-                    hovertemplate=f"<b>%{{x|%d %b}}</b><br>£%{{y:,.2f}}<extra>{p}</extra>"))
-        fig_sp.update_layout(title="Daily Spend by Platform", height=380, **CHART)
-        st.plotly_chart(fig_sp, use_container_width=True)
+/* ── HEADER ── */
+.hdr{margin-bottom:28px;padding-bottom:22px;border-bottom:1px solid var(--border);}
+.hdr-eye{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:4px;color:var(--gold);opacity:.7;text-transform:uppercase;margin-bottom:6px;}
+.hdr-title{font-family:'Barlow Condensed',sans-serif;font-size:2.9rem;font-weight:800;color:var(--text);letter-spacing:.5px;line-height:1.05;}
+.hdr-title em{color:var(--gold);font-style:normal;}
+.hdr-meta{display:flex;align-items:center;gap:10px;margin-top:10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:2px;}
+.badge{padding:2px 9px;border-radius:4px;font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;}
 
-    st.markdown("<hr>", unsafe_allow_html=True)
+/* ── GRID ── */
+.g6{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+.g2{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+.g21{display:grid;grid-template-columns:2fr 3fr;gap:14px;}
+.section{margin-bottom:22px;}
+.sec-label{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:4px;color:var(--dim);text-transform:uppercase;margin-bottom:12px;}
+.divider{height:1px;background:var(--border);margin:22px 0;}
 
-    # Full-funnel per platform
-    st.markdown('<div class="msec">Lead → Appointment → Sale Funnel by Platform</div>', unsafe_allow_html=True)
-    fn_cols = st.columns(len(pa))
-    for i, (_, row) in enumerate(pa.iterrows()):
-        p = row["platform"]
-        c = PC.get(p, GOLD)
-        with fn_cols[i]:
-            fig_fn = go.Figure(go.Funnel(
-                y=["Leads", "Appointments", "Sales"],
-                x=[int(row["leads"]), int(row["appts"]), int(row["sales"])],
-                textinfo="value+percent initial",
-                textfont=dict(size=13, family="Nunito Sans", color=WHITE),
-                marker=dict(color=[c, GOLD, GOLD_L], line=dict(width=2, color=BG)),
-                connector=dict(line=dict(color=BORDER, width=1)),
-            ))
-            fig_fn.update_layout(
-                title=f"{p} Funnel", height=300,
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(family="Nunito Sans", color=WHITE),
-                title_font=dict(family="'Playfair Display',serif", size=16, color=c),
-                margin=dict(t=50, b=10, l=10, r=10),
-            )
-            st.plotly_chart(fig_fn, use_container_width=True)
+/* ── CARDS ── */
+.card{
+  background:var(--s1);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:20px;
+  transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease,background .2s ease;
+}
+.card:hover{
+  transform:translateY(-3px);
+  border-color:var(--bh);
+  box-shadow:0 12px 40px rgba(0,0,0,.5);
+  background:var(--s2);
+}
 
-    st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown('<div class="msec">Domestic vs Commercial — Paid Leads by Platform</div>', unsafe_allow_html=True)
+/* ── KPI CARDS ── */
+.kpi-lbl{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:3.5px;color:var(--dim);text-transform:uppercase;margin-bottom:10px;}
+.kpi-val{font-family:'Barlow Condensed',sans-serif;font-size:2.55rem;font-weight:700;line-height:1;margin-bottom:6px;}
+.kpi-sub{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--dim);}
 
-    if not df_ct.empty:
-        ct_cols = st.columns(len(pa))
-        for i, (_, row) in enumerate(pa.iterrows()):
-            p = row["platform"]
-            c = PC.get(p, GOLD)
-            ct_p = df_ct[df_ct["platform"] == p]
-            with ct_cols[i]:
-                if ct_p.empty:
-                    st.markdown(f'<div style="color:{DIM};font-family:DM Mono;font-size:.7rem;padding:20px">No lead data for {p}</div>', unsafe_allow_html=True)
-                else:
-                    fig_ct = go.Figure(go.Pie(
-                        labels=ct_p["customer_type"].str.capitalize(),
-                        values=ct_p["leads"],
-                        hole=0.6,
-                        marker=dict(
-                            colors=[c if t.lower() == "domestic" else GOLD if t.lower() == "commercial" else DIM
-                                    for t in ct_p["customer_type"]],
-                            line=dict(color=BG, width=3)
-                        ),
-                        textinfo="label+value",
-                        textfont=dict(size=12, family="Nunito Sans"),
-                        hovertemplate="<b>%{label}</b><br>%{value} leads<extra></extra>",
-                    ))
-                    dom = ct_p[ct_p["customer_type"] == "domestic"]["leads"].sum()
-                    com = ct_p[ct_p["customer_type"] == "commercial"]["leads"].sum()
-                    tot = ct_p["leads"].sum()
-                    pct_dom = f"{dom/tot*100:.0f}% dom" if tot else "—"
-                    fig_ct.update_layout(
-                        title=f"{p}",
-                        height=280,
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        font=dict(family="'Nunito Sans',sans-serif", color=WHITE),
-                        title_font=dict(family="'Playfair Display',serif", size=16, color=c),
-                        showlegend=False,
-                        margin=dict(t=50, b=10, l=10, r=10),
-                        annotations=[dict(text=pct_dom, x=0.5, y=0.5,
-                            font=dict(size=13, color=c, family="Playfair Display"), showarrow=False)]
-                    )
-                    st.plotly_chart(fig_ct, use_container_width=True)
+/* ── PLATFORM CARDS ── */
+.plat-name{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:3px;text-transform:uppercase;margin-bottom:10px;}
+.plat-spend{font-family:'Barlow Condensed',sans-serif;font-size:2.3rem;font-weight:700;line-height:1;margin-bottom:6px;}
+.plat-bar-track{height:5px;background:rgba(255,255,255,0.06);border-radius:3px;margin:8px 0 14px;}
+.plat-bar-fill{height:5px;border-radius:3px;transition:width 1.2s cubic-bezier(.22,1,.36,1);}
+.plat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);}
+.plat-stat-val{font-size:13px;font-weight:600;color:var(--text);margin-top:1px;}
 
-    st.markdown(
-        f'<div style="font-family:\'DM Mono\',monospace;font-size:.62rem;color:{DIM};'
-        f'padding:10px 0;letter-spacing:1px">'
-        f'⚠ Lead counts reflect SharpSpring campaign_id attribution only. '
-        f'Some Google campaigns (e.g. Google Search) are not yet mapped — '
-        f'paid lead totals may be understated. Update campaign_platform_mapping seed to include all active campaigns.'
-        f'</div>',
-        unsafe_allow_html=True)
+/* ── CHART CARDS ── */
+.chart-card{
+  background:var(--s1);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:20px 20px 12px;
+  transition:border-color .2s ease;
+}
+.chart-card:hover{border-color:var(--bh);}
+.chart-title{font-family:'Barlow Condensed',sans-serif;font-size:1.05rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text);margin-bottom:16px;}
 
-# ═══════════════════════════════════ TAB 2 — PERFORMANCE ══════════════════════
-with t2:
-    cc, ac = st.columns(2)
+/* ── FUNNEL ── */
+.funnel-row{margin-bottom:10px;}
+.funnel-bar-track{background:rgba(255,255,255,0.05);border-radius:4px;height:32px;overflow:hidden;position:relative;}
+.funnel-bar-fill{height:100%;border-radius:4px;display:flex;align-items:center;padding:0 10px;transition:width 1.4s cubic-bezier(.22,1,.36,1);}
+.funnel-lbl-row{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);margin-bottom:4px;}
+.funnel-footer{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:14px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);}
+.funnel-footer span{color:var(--text);margin-left:4px;}
 
-    with cc:
-        dc2 = df[df["cost_per_lead"].notna()].copy()
-        dc2["date"] = pd.to_datetime(dc2["date"])
-        pv2 = dc2.pivot_table(index="date", columns="platform",
-            values="cost_per_lead", aggfunc="mean").reset_index()
-        fig_cpl = go.Figure()
-        for p in ["Google", "Meta", "Bing"]:
-            if p in pv2.columns:
-                fig_cpl.add_trace(go.Scatter(x=pv2["date"], y=pv2[p], name=p, mode="lines+markers",
-                    line=dict(color=PC[p], width=2.5), marker=dict(size=5, color=PC[p]),
-                    hovertemplate=f"<b>%{{x|%d %b}}</b><br>£%{{y:.2f}} CPL<extra>{p}</extra>"))
-        fig_cpl.update_layout(title="Cost Per Lead", height=340,
-            yaxis=dict(tickprefix="£", gridcolor="rgba(212,168,67,0.07)", linecolor=BORDER, zeroline=False),
-            **{k: v for k, v in CHART.items() if k != "yaxis"})
-        st.plotly_chart(fig_cpl, use_container_width=True)
+/* ── TOOLTIP ── */
+.tt{background:#0D1120;border:1px solid rgba(255,255,255,0.13);border-radius:6px;padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:11px;}
+.tt-label{color:#94A3B8;margin-bottom:7px;font-size:10px;}
+.tt-row{margin-bottom:3px;}
 
-    with ac:
-        da2 = df[df["cost_per_appointment"].notna()].copy()
-        da2["date"] = pd.to_datetime(da2["date"])
-        pv3 = da2.pivot_table(index="date", columns="platform",
-            values="cost_per_appointment", aggfunc="mean").reset_index()
-        fig_cpa = go.Figure()
-        for p in ["Google", "Meta", "Bing"]:
-            if p in pv3.columns:
-                fig_cpa.add_trace(go.Scatter(x=pv3["date"], y=pv3[p], name=p, mode="lines+markers",
-                    line=dict(color=PC[p], width=2.5), marker=dict(size=5),
-                    hovertemplate=f"<b>%{{x|%d %b}}</b><br>£%{{y:.2f}} CPA<extra>{p}</extra>"))
-        fig_cpa.update_layout(title="Cost Per Appointment", height=340,
-            yaxis=dict(tickprefix="£", gridcolor="rgba(212,168,67,0.07)", linecolor=BORDER, zeroline=False),
-            **{k: v for k, v in CHART.items() if k != "yaxis"})
-        st.plotly_chart(fig_cpa, use_container_width=True)
+/* ── TABLE ── */
+.data-table{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:11px;}
+.data-table th{color:var(--dim);font-weight:500;letter-spacing:2px;font-size:9px;text-transform:uppercase;padding:8px 12px;border-bottom:1px solid var(--border);text-align:left;}
+.data-table td{padding:9px 12px;border-bottom:1px solid rgba(255,255,255,0.04);color:var(--text);transition:background .15s;}
+.data-table tr:hover td{background:rgba(255,255,255,0.03);}
 
-    # CPS trend (only show if we have sales data)
-    cps_df = df[df["cost_per_sale"].notna()].copy()
-    if not cps_df.empty:
-        cps_df["date"] = pd.to_datetime(cps_df["date"])
-        pv_cps = cps_df.pivot_table(index="date", columns="platform",
-            values="cost_per_sale", aggfunc="mean").reset_index()
-        fig_cps = go.Figure()
-        for p in ["Google", "Meta", "Bing"]:
-            if p in pv_cps.columns:
-                fig_cps.add_trace(go.Scatter(x=pv_cps["date"], y=pv_cps[p], name=p, mode="lines+markers",
-                    line=dict(color=PC[p], width=2.5), marker=dict(size=5),
-                    hovertemplate=f"<b>%{{x|%d %b}}</b><br>£%{{y:.2f}} CPS<extra>{p}</extra>"))
-        fig_cps.update_layout(title="Cost Per Sale", height=300,
-            yaxis=dict(tickprefix="£", gridcolor="rgba(212,168,67,0.07)", linecolor=BORDER, zeroline=False),
-            **{k: v for k, v in CHART.items() if k != "yaxis"})
-        st.plotly_chart(fig_cps, use_container_width=True)
+/* ── FOOTER ── */
+.footer{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--dim);margin-top:28px;padding-top:18px;border-top:1px solid var(--border);line-height:1.8;}
 
-    st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown('<div class="msec">Leads &amp; Appointments Over Time</div>', unsafe_allow_html=True)
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+.fade-in{animation:fadeUp .45s ease both;}
+.fade-in-2{animation:fadeUp .45s .1s ease both;}
+.fade-in-3{animation:fadeUp .45s .2s ease both;}
+.fade-in-4{animation:fadeUp .45s .3s ease both;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>window.__DATA__ = DATA_PLACEHOLDER;</script>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useMemo } = React;
+const {
+  ResponsiveContainer, AreaChart, Area, BarChart, Bar,
+  LineChart, Line, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ComposedChart,
+} = Recharts;
 
-    dla = df.copy()
-    dla["date"] = pd.to_datetime(dla["date"])
-    dlg = dla.groupby("date").agg(
-        leads=("leads", "sum"), appts=("appointments_booked", "sum"),
-        sales=("sales", "sum")).reset_index()
+const D = window.__DATA__;
+const PC = { Google: '#4285F4', Meta: '#8B5CF6', Bing: '#10B981' };
+const GOLD = '#F59E0B';
+const DIM  = '#4B5563';
 
-    fig_la = make_subplots(specs=[[{"secondary_y": True}]])
-    fig_la.add_trace(go.Bar(x=dlg["date"], y=dlg["leads"], name="Leads",
-        marker_color="rgba(212,168,67,0.25)", marker_line_width=0), secondary_y=False)
-    fig_la.add_trace(go.Scatter(x=dlg["date"], y=dlg["appts"], name="Appointments",
-        line=dict(color=GOLD_L, width=3), mode="lines+markers",
-        marker=dict(size=6, color=GOLD_L)), secondary_y=True)
-    fig_la.add_trace(go.Scatter(x=dlg["date"], y=dlg["sales"], name="Sales",
-        line=dict(color=GOOGLE, width=2, dash="dot"), mode="lines+markers",
-        marker=dict(size=5, color=GOOGLE)), secondary_y=True)
-    fig_la.update_layout(title="Leads vs Appointments vs Sales (Daily)", height=300, **CHART)
-    fig_la.update_yaxes(gridcolor="rgba(212,168,67,0.07)", linecolor=BORDER, secondary_y=False)
-    fig_la.update_yaxes(gridcolor="rgba(0,0,0,0)", secondary_y=True)
-    st.plotly_chart(fig_la, use_container_width=True)
+// Count-up number animation
+function useCountUp(target, ms = 1100) {
+  const [v, setV] = useState(0);
+  useEffect(() => {
+    let t = 0;
+    const step = target / (ms / 16);
+    const id = setInterval(() => {
+      t = Math.min(t + step, target);
+      setV(t);
+      if (t >= target) clearInterval(id);
+    }, 16);
+    return () => clearInterval(id);
+  }, [target]);
+  return v;
+}
 
-    st.markdown('<div class="msec">Click-to-Lead Rate by Platform</div>', unsafe_allow_html=True)
-    dcl = df[df["click_to_lead_rate"].notna()].copy()
-    dcl["date"] = pd.to_datetime(dcl["date"])
-    pvc = dcl.pivot_table(index="date", columns="platform",
-        values="click_to_lead_rate", aggfunc="mean").reset_index()
-    fig_cl = go.Figure()
-    for p in ["Google", "Meta", "Bing"]:
-        if p in pvc.columns:
-            fig_cl.add_trace(go.Scatter(x=pvc["date"], y=(pvc[p] * 100).round(3), name=p, mode="lines",
-                line=dict(color=PC[p], width=2),
-                hovertemplate=f"<b>%{{x|%d %b}}</b><br>%{{y:.2f}}% CTL<extra>{p}</extra>"))
-    fig_cl.update_layout(title="Click-to-Lead Rate (%)", height=260,
-        yaxis=dict(ticksuffix="%", gridcolor="rgba(212,168,67,0.07)", linecolor=BORDER, zeroline=False),
-        **{k: v for k, v in CHART.items() if k != "yaxis"})
-    st.plotly_chart(fig_cl, use_container_width=True)
+// Shared tooltip
+function TT({ active, payload, label, fmt }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="tt">
+      <div className="tt-label">{label}</div>
+      {payload.map((p, i) => (
+        <div key={i} className="tt-row" style={{ color: p.color }}>
+          {p.name}: <strong>{fmt ? fmt(p.value, p.name) : p.value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
 
-# ═══════════════════════════════════ TAB 3 — PLATFORMS ════════════════════════
-with t3:
-    gc, ac2 = st.columns(2)
+// KPI card with count-up
+function KpiCard({ label, value, sub, accent, prefix = '', suffix = '', delay = '0s' }) {
+  const num = typeof value === 'number' ? value : 0;
+  const counted = useCountUp(num);
+  const formatted = num > 0
+    ? prefix + Math.round(counted).toLocaleString('en-GB') + suffix
+    : (value === 0 && prefix === '£' ? '£0' : (value || '—'));
 
-    with gc:
-        fig_g = go.Figure()
-        fig_g.add_bar(x=pa["platform"], y=pa["leads"], name="Leads",
-            marker_color=[PC.get(p, DIM) for p in pa["platform"]],
-            text=pa["leads"].astype(int), textposition="outside",
-            textfont=dict(color=WHITE, size=13))
-        fig_g.add_bar(x=pa["platform"], y=pa["appts"], name="Appointments",
-            marker_color=GOLD, opacity=0.75,
-            text=pa["appts"].astype(int), textposition="outside",
-            textfont=dict(color=WHITE, size=13))
-        fig_g.add_bar(x=pa["platform"], y=pa["sales"], name="Sales",
-            marker_color=GOLD_L, opacity=0.9,
-            text=pa["sales"].astype(int), textposition="outside",
-            textfont=dict(color=WHITE, size=13))
-        fig_g.update_layout(title="Leads, Appointments & Sales by Platform",
-            barmode="group", height=400, **CHART)
-        st.plotly_chart(fig_g, use_container_width=True)
+  return (
+    <div className="card fade-in" style={{ borderLeft: `3px solid ${accent || 'var(--border)'}`, animationDelay: delay }}>
+      <div className="kpi-lbl">{label}</div>
+      <div className="kpi-val" style={{ color: accent || 'var(--text)' }}>{formatted}</div>
+      {sub && <div className="kpi-sub">{sub}</div>}
+    </div>
+  );
+}
 
-    with ac2:
-        fig_c = go.Figure()
-        fig_c.add_bar(x=pa["platform"], y=pa["cpl"], name="CPL",
-            marker_color=[PC.get(p, DIM) for p in pa["platform"]], opacity=0.85,
-            text=["£" + str(int(v)) if pd.notna(v) else "—" for v in pa["cpl"]],
-            textposition="outside", textfont=dict(color=WHITE, size=13))
-        fig_c.add_bar(x=pa["platform"], y=pa["cpa"], name="CPA",
-            marker_color=GOLD, opacity=0.7,
-            text=["£" + str(int(v)) if pd.notna(v) else "—" for v in pa["cpa"]],
-            textposition="outside", textfont=dict(color=WHITE, size=13))
-        fig_c.add_bar(x=pa["platform"], y=pa["cps"], name="CPS",
-            marker_color=GOLD_L, opacity=0.9,
-            text=["£" + str(int(v)) if pd.notna(v) else "—" for v in pa["cps"]],
-            textposition="outside", textfont=dict(color=WHITE, size=13))
-        fig_c.update_layout(title="CPL, CPA & CPS by Platform", barmode="group", height=400,
-            yaxis=dict(tickprefix="£", gridcolor="rgba(212,168,67,0.07)", linecolor=BORDER, zeroline=False),
-            **{k: v for k, v in CHART.items() if k != "yaxis"})
-        st.plotly_chart(fig_c, use_container_width=True)
+// Platform summary card
+function PlatformCard({ p, totalSpend }) {
+  const color = PC[p.platform] || GOLD;
+  const pct = totalSpend > 0 ? (p.spend / totalSpend * 100) : 0;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setTimeout(() => setMounted(true), 100); }, []);
 
-    st.markdown('<div class="msec">Platform Summary</div>', unsafe_allow_html=True)
-    sm = pa.copy()
-    sm["spend"] = sm["spend"].apply(lambda x: f"£{x:,.2f}")
-    sm["cpl"]   = sm["cpl"].apply(lambda x: f"£{x:,.2f}" if pd.notna(x) else "—")
-    sm["cpa"]   = sm["cpa"].apply(lambda x: f"£{x:,.2f}" if pd.notna(x) else "—")
-    sm["cps"]   = sm["cps"].apply(lambda x: f"£{x:,.2f}" if pd.notna(x) else "—")
-    sm["ctr"]   = sm["ctr"].apply(lambda x: f"{x:.3f}%" if pd.notna(x) else "—")
-    sm["l2a"]   = sm["l2a"].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else "—")
-    sm["a2s"]   = sm["a2s"].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else "—")
-    sm.columns  = ["Platform", "Spend", "Clicks", "Impressions", "Leads",
-                   "Appts", "Sales", "CPL", "CPA", "CPS", "CTR", "Lead→Appt", "Appt→Sale"]
-    st.dataframe(sm, use_container_width=True, hide_index=True)
+  return (
+    <div className="card fade-in-2" style={{ borderTop: `3px solid ${color}` }}>
+      <div className="plat-name" style={{ color }}>{p.platform}</div>
+      <div className="plat-spend" style={{ color }}>
+        £{p.spend.toLocaleString('en-GB', { maximumFractionDigits: 0 })}
+      </div>
+      <div className="plat-bar-track">
+        <div className="plat-bar-fill"
+          style={{ width: mounted ? `${Math.min(pct, 100)}%` : '0%', background: color, opacity: .65 }} />
+      </div>
+      <div className="plat-grid">
+        {[
+          ['Leads',  p.leads.toLocaleString()],
+          ['Appts',  p.appts.toLocaleString()],
+          ['CPL',    p.cpl ? `£${Math.round(p.cpl)}` : '—'],
+          ['L→A',    p.l2a ? `${p.l2a.toFixed(0)}%` : '—'],
+          ['Sales',  p.sales.toLocaleString()],
+          ['CTR',    p.ctr ? `${p.ctr.toFixed(2)}%` : '—'],
+        ].map(([lbl, val]) => (
+          <div key={lbl}>
+            <div>{lbl}</div>
+            <div className="plat-stat-val">{val}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-    st.markdown('<div class="msec">Daily Attribution Detail</div>', unsafe_allow_html=True)
-    dd = df.copy()
-    dd["spend_gbp"]             = dd["spend_gbp"].apply(lambda x: f"£{x:,.2f}")
-    dd["cost_per_lead"]         = dd["cost_per_lead"].apply(lambda x: f"£{x:,.2f}" if pd.notna(x) else "—")
-    dd["cost_per_appointment"]  = dd["cost_per_appointment"].apply(lambda x: f"£{x:,.2f}" if pd.notna(x) else "—")
-    dd["cost_per_sale"]         = dd["cost_per_sale"].apply(lambda x: f"£{x:,.2f}" if pd.notna(x) else "—")
-    dd["click_to_lead_rate"]    = dd["click_to_lead_rate"].apply(lambda x: f"{x*100:.2f}%" if pd.notna(x) else "—")
-    dd = dd[["date", "platform", "spend_gbp", "clicks", "impressions",
-             "leads", "appointments_booked", "sales",
-             "cost_per_lead", "cost_per_appointment", "cost_per_sale", "click_to_lead_rate"]]
-    dd.columns = ["Date", "Platform", "Spend", "Clicks", "Impressions",
-                  "Leads", "Appts", "Sales", "CPL", "CPA", "CPS", "Click→Lead"]
-    st.dataframe(dd, use_container_width=True, hide_index=True, height=400)
+// Spend donut
+function SpendDonut({ platforms, total }) {
+  const [activeIdx, setActiveIdx] = useState(null);
+  const data = platforms.map(p => ({ name: p.platform, value: +p.spend.toFixed(2) }));
+  const RADIAN = Math.PI / 180;
+
+  const renderLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }) => {
+    const r = innerRadius + (outerRadius - innerRadius) * .5;
+    const x = cx + r * Math.cos(-midAngle * RADIAN);
+    const y = cy + r * Math.sin(-midAngle * RADIAN);
+    return percent > .07 ? (
+      <text x={x} y={y} fill="rgba(255,255,255,0.9)" textAnchor="middle" dominantBaseline="central"
+        style={{ fontFamily: "'JetBrains Mono'", fontSize: 12, fontWeight: 600 }}>
+        {(percent * 100).toFixed(0)}%
+      </text>
+    ) : null;
+  };
+
+  return (
+    <div className="chart-card fade-in-3">
+      <div className="chart-title">Spend Distribution</div>
+      <div style={{ textAlign: 'center', position: 'relative' }}>
+        <ResponsiveContainer width="100%" height={260}>
+          <PieChart>
+            <Pie data={data} cx="50%" cy="50%" innerRadius={72} outerRadius={118}
+              paddingAngle={3} dataKey="value" labelLine={false} label={renderLabel}
+              onMouseEnter={(_, i) => setActiveIdx(i)} onMouseLeave={() => setActiveIdx(null)}>
+              {data.map((entry, i) => (
+                <Cell key={i} fill={PC[entry.name] || GOLD} stroke="transparent"
+                  opacity={activeIdx === null || activeIdx === i ? 1 : .35} />
+              ))}
+            </Pie>
+            <Tooltip content={<TT fmt={(v) => '£' + v.toLocaleString('en-GB', { maximumFractionDigits: 0 })} />} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', pointerEvents: 'none', textAlign: 'center' }}>
+          <div style={{ fontFamily: "'Barlow Condensed'", fontSize: '1.5rem', fontWeight: 700, color: GOLD }}>
+            £{Math.round(total).toLocaleString('en-GB')}
+          </div>
+          <div style={{ fontFamily: "'JetBrains Mono'", fontSize: 9, color: DIM, letterSpacing: 2, marginTop: 2 }}>TOTAL</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginTop: 8 }}>
+        {platforms.map(p => (
+          <span key={p.platform} style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+            fontFamily: "'JetBrains Mono'", fontSize: 10, color: DIM }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: PC[p.platform], display: 'inline-block' }} />
+            {p.platform}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Daily spend area chart
+function DailySpendChart({ daily }) {
+  const dateMap = {};
+  daily.forEach(r => {
+    if (!dateMap[r.date]) dateMap[r.date] = { date: r.date };
+    dateMap[r.date][r.platform] = (dateMap[r.date][r.platform] || 0) + (r.spend || 0);
+  });
+  const data = Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
+  const fmt = d => { const p = d.split('-'); return p[2] + '/' + p[1]; };
+  const platforms = Object.keys(PC).filter(p => data.some(d => d[p]));
+
+  return (
+    <div className="chart-card fade-in-3">
+      <div className="chart-title">Daily Spend by Platform</div>
+      <ResponsiveContainer width="100%" height={280}>
+        <AreaChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+          <defs>
+            {platforms.map(p => (
+              <linearGradient key={p} id={`g_${p}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={PC[p]} stopOpacity={0.28} />
+                <stop offset="95%" stopColor={PC[p]} stopOpacity={0} />
+              </linearGradient>
+            ))}
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+          <XAxis dataKey="date" tickFormatter={fmt}
+            tick={{ fontFamily: "'JetBrains Mono'", fontSize: 10, fill: DIM }}
+            tickLine={false} axisLine={false} />
+          <YAxis tickFormatter={v => '£' + (v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v)}
+            tick={{ fontFamily: "'JetBrains Mono'", fontSize: 10, fill: DIM }}
+            tickLine={false} axisLine={false} />
+          <Tooltip content={<TT fmt={v => '£' + (v || 0).toFixed(2)} />} labelFormatter={fmt} />
+          {platforms.map(p => (
+            <Area key={p} type="monotone" dataKey={p} name={p}
+              stroke={PC[p]} strokeWidth={2.5} fill={`url(#g_${p})`} dot={false} />
+          ))}
+          <Legend wrapperStyle={{ fontFamily: "'JetBrains Mono'", fontSize: 10, paddingTop: 8 }} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// Funnel chart per platform
+function FunnelChart({ p }) {
+  const color = PC[p.platform] || GOLD;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setTimeout(() => setMounted(true), 150); }, []);
+
+  const steps = [
+    { label: 'Leads',        value: p.leads, pct: 100 },
+    { label: 'Appointments', value: p.appts, pct: p.leads > 0 ? p.appts / p.leads * 100 : 0 },
+    { label: 'Sales',        value: p.sales, pct: p.leads > 0 ? p.sales / p.leads * 100 : 0 },
+  ];
+  const opacities = [1, .65, .4];
+
+  return (
+    <div className="chart-card fade-in-4">
+      <div className="chart-title" style={{ color }}>{p.platform}</div>
+      {steps.map((s, i) => (
+        <div key={i} className="funnel-row">
+          <div className="funnel-lbl-row">
+            <span>{s.label}</span>
+            <span style={{ color: 'var(--text)', fontWeight: 600 }}>{s.value.toLocaleString()}</span>
+          </div>
+          <div className="funnel-bar-track">
+            <div className="funnel-bar-fill"
+              style={{
+                width: mounted ? `${Math.max(s.pct, s.value > 0 ? 3 : 0)}%` : '0%',
+                background: color,
+                opacity: opacities[i],
+              }}>
+              {s.pct > 20 && i > 0 && (
+                <span style={{ fontFamily: "'JetBrains Mono'", fontSize: 10, color: 'rgba(255,255,255,.85)' }}>
+                  {s.pct.toFixed(0)}%
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+      <div className="funnel-footer">
+        <div>Lead→Appt <span>{p.l2a ? `${p.l2a.toFixed(0)}%` : '—'}</span></div>
+        <div>Appt→Sale <span>{p.a2s ? `${p.a2s.toFixed(0)}%` : '—'}</span></div>
+        <div>CPL <span>{p.cpl ? `£${Math.round(p.cpl)}` : '—'}</span></div>
+        <div>CPA <span>{p.cpa ? `£${Math.round(p.cpa)}` : '—'}</span></div>
+      </div>
+    </div>
+  );
+}
+
+// CPL trend
+function CplChart({ daily }) {
+  const dateMap = {};
+  daily.filter(r => r.cpl).forEach(r => {
+    if (!dateMap[r.date]) dateMap[r.date] = { date: r.date };
+    dateMap[r.date][r.platform] = r.cpl;
+  });
+  const data = Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
+  if (!data.length) return null;
+  const fmt = d => { const p = d.split('-'); return p[2] + '/' + p[1]; };
+  const platforms = Object.keys(PC).filter(p => data.some(d => d[p]));
+
+  return (
+    <div className="chart-card">
+      <div className="chart-title">Cost Per Lead</div>
+      <ResponsiveContainer width="100%" height={240}>
+        <LineChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+          <XAxis dataKey="date" tickFormatter={fmt}
+            tick={{ fontFamily: "'JetBrains Mono'", fontSize: 10, fill: DIM }} tickLine={false} axisLine={false} />
+          <YAxis tickFormatter={v => '£' + v}
+            tick={{ fontFamily: "'JetBrains Mono'", fontSize: 10, fill: DIM }} tickLine={false} axisLine={false} />
+          <Tooltip content={<TT fmt={v => '£' + (v || 0).toFixed(2)} />} labelFormatter={fmt} />
+          {platforms.map(p => (
+            <Line key={p} type="monotone" dataKey={p} name={p}
+              stroke={PC[p]} strokeWidth={2.5} dot={{ r: 4, fill: PC[p], strokeWidth: 0 }}
+              activeDot={{ r: 6 }} connectNulls={false} />
+          ))}
+          <Legend wrapperStyle={{ fontFamily: "'JetBrains Mono'", fontSize: 10, paddingTop: 8 }} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// Leads vs Appts combo chart
+function LeadsApptChart({ daily }) {
+  const dateMap = {};
+  daily.forEach(r => {
+    if (!dateMap[r.date]) dateMap[r.date] = { date: r.date, leads: 0, appts: 0, sales: 0 };
+    dateMap[r.date].leads += r.leads || 0;
+    dateMap[r.date].appts += r.appts || 0;
+    dateMap[r.date].sales += r.sales || 0;
+  });
+  const data = Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
+  const fmt = d => { const p = d.split('-'); return p[2] + '/' + p[1]; };
+
+  return (
+    <div className="chart-card">
+      <div className="chart-title">Leads · Appointments · Sales</div>
+      <ResponsiveContainer width="100%" height={240}>
+        <ComposedChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+          <XAxis dataKey="date" tickFormatter={fmt}
+            tick={{ fontFamily: "'JetBrains Mono'", fontSize: 10, fill: DIM }} tickLine={false} axisLine={false} />
+          <YAxis tick={{ fontFamily: "'JetBrains Mono'", fontSize: 10, fill: DIM }} tickLine={false} axisLine={false} />
+          <Tooltip content={<TT />} labelFormatter={fmt} />
+          <Bar dataKey="leads" name="Leads" fill="rgba(245,158,11,0.25)" radius={[3, 3, 0, 0]} />
+          <Line dataKey="appts" name="Appts" type="monotone"
+            stroke={GOLD} strokeWidth={2.5} dot={{ r: 4, fill: GOLD, strokeWidth: 0 }} activeDot={{ r: 6 }} />
+          <Line dataKey="sales" name="Sales" type="monotone"
+            stroke="#4285F4" strokeWidth={2} strokeDasharray="5 3"
+            dot={{ r: 3, fill: '#4285F4', strokeWidth: 0 }} activeDot={{ r: 5 }} />
+          <Legend wrapperStyle={{ fontFamily: "'JetBrains Mono'", fontSize: 10, paddingTop: 8 }} />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// Platform comparison bar chart
+function PlatformCompareChart({ platforms }) {
+  const data = platforms.map(p => ({
+    name: p.platform,
+    Leads: p.leads,
+    Appointments: p.appts,
+    Sales: p.sales,
+  }));
+
+  return (
+    <div className="chart-card">
+      <div className="chart-title">Leads · Appointments · Sales by Platform</div>
+      <ResponsiveContainer width="100%" height={240}>
+        <BarChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }} barCategoryGap="30%">
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+          <XAxis dataKey="name" tick={{ fontFamily: "'JetBrains Mono'", fontSize: 11, fill: DIM }} tickLine={false} axisLine={false} />
+          <YAxis tick={{ fontFamily: "'JetBrains Mono'", fontSize: 10, fill: DIM }} tickLine={false} axisLine={false} />
+          <Tooltip content={<TT />} />
+          {platforms.map((p, i) => null)}
+          <Bar dataKey="Leads" fill="rgba(245,158,11,0.55)" radius={[3, 3, 0, 0]} />
+          <Bar dataKey="Appointments" fill="rgba(245,158,11,0.3)" radius={[3, 3, 0, 0]} />
+          <Bar dataKey="Sales" fill="rgba(66,133,244,0.5)" radius={[3, 3, 0, 0]} />
+          <Legend wrapperStyle={{ fontFamily: "'JetBrains Mono'", fontSize: 10, paddingTop: 8 }} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// CPM / cost comparison
+function CostCompareChart({ platforms }) {
+  const data = platforms.map(p => ({
+    name: p.platform,
+    CPL: p.cpl ? +p.cpl.toFixed(2) : 0,
+    CPA: p.cpa ? +p.cpa.toFixed(2) : 0,
+    CPS: p.cps ? +p.cps.toFixed(2) : 0,
+  }));
+
+  return (
+    <div className="chart-card">
+      <div className="chart-title">CPL · CPA · CPS by Platform</div>
+      <ResponsiveContainer width="100%" height={240}>
+        <BarChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }} barCategoryGap="30%">
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+          <XAxis dataKey="name" tick={{ fontFamily: "'JetBrains Mono'", fontSize: 11, fill: DIM }} tickLine={false} axisLine={false} />
+          <YAxis tickFormatter={v => '£' + v} tick={{ fontFamily: "'JetBrains Mono'", fontSize: 10, fill: DIM }} tickLine={false} axisLine={false} />
+          <Tooltip content={<TT fmt={(v, name) => '£' + (v || 0).toFixed(2)} />} />
+          <Bar dataKey="CPL"  fill={PC.Google}           radius={[3,3,0,0]} opacity={.85} />
+          <Bar dataKey="CPA"  fill={PC.Meta}             radius={[3,3,0,0]} opacity={.75} />
+          <Bar dataKey="CPS"  fill="rgba(245,158,11,.7)" radius={[3,3,0,0]} />
+          <Legend wrapperStyle={{ fontFamily: "'JetBrains Mono'", fontSize: 10, paddingTop: 8 }} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// Data table
+function SummaryTable({ platforms }) {
+  const cols = ['Platform','Spend','Leads','Appts','Sales','CPL','CPA','CPS','L→A','A→S','CTR'];
+  const rows = platforms.map(p => [
+    p.platform,
+    '£' + p.spend.toLocaleString('en-GB', { maximumFractionDigits: 0 }),
+    p.leads.toLocaleString(),
+    p.appts.toLocaleString(),
+    p.sales.toLocaleString(),
+    p.cpl ? '£' + Math.round(p.cpl) : '—',
+    p.cpa ? '£' + Math.round(p.cpa) : '—',
+    p.cps ? '£' + Math.round(p.cps) : '—',
+    p.l2a ? p.l2a.toFixed(0) + '%' : '—',
+    p.a2s ? p.a2s.toFixed(0) + '%' : '—',
+    p.ctr ? p.ctr.toFixed(2) + '%' : '—',
+  ]);
+
+  return (
+    <div className="chart-card">
+      <div className="chart-title">Platform Summary</div>
+      <table className="data-table">
+        <thead>
+          <tr>{cols.map(c => <th key={c}>{c}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i}>
+              {row.map((cell, j) => (
+                <td key={j} style={{ color: j === 0 ? PC[cell] || 'var(--text)' : 'var(--text)' }}>
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Root app
+function App() {
+  const { totals: T, platforms, daily, period } = D;
+  const days = [...new Set(daily.map(r => r.date))].length;
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="hdr">
+        <div className="hdr-eye">Trust Electric Heating &nbsp;·&nbsp; Paid Media Intelligence</div>
+        <div className="hdr-title">Ad Performance <em>&amp; Attribution</em></div>
+        <div className="hdr-meta">
+          <span>PERIOD: {period.toUpperCase()}</span>
+          <span style={{ color: 'var(--border)' }}>|</span>
+          <span>{days} days</span>
+          {Object.entries(PC).map(([name, color]) => (
+            <span key={name} className="badge" style={{
+              background: `${color}1A`, border: `1px solid ${color}44`, color,
+            }}>{name}</span>
+          ))}
+        </div>
+      </div>
+
+      {/* KPI Row */}
+      <div className="section">
+        <div className="sec-label">Summary</div>
+        <div className="g6">
+          <KpiCard label="Total Spend"    value={T.spend}  prefix="£" accent={GOLD}   delay="0s"   />
+          <KpiCard label="Paid Leads"     value={T.leads}  sub={`from ${T.clicks.toLocaleString()} clicks`} delay=".05s" />
+          <KpiCard label="Appointments"   value={T.appts}  sub={T.leads > 0 ? `${(T.appts/T.leads*100).toFixed(0)}% of leads` : '—'} delay=".1s" />
+          <KpiCard label="Sales"          value={T.sales}  sub={T.appts > 0 ? `${(T.sales/T.appts*100).toFixed(0)}% of appts` : '—'} accent={GOLD} delay=".15s" />
+          <KpiCard label="Blended CPL"    value={Math.round(T.cpl)} prefix="£" accent={GOLD} delay=".2s" />
+          <KpiCard label="Blended CPS"    value={T.cps > 0 ? Math.round(T.cps) : '—'} prefix={T.cps > 0 ? '£' : ''} delay=".25s" />
+        </div>
+      </div>
+
+      <div className="divider" />
+
+      {/* Platform Cards */}
+      <div className="section">
+        <div className="sec-label">Platform Breakdown</div>
+        <div className="g3">
+          {platforms.map(p => <PlatformCard key={p.platform} p={p} totalSpend={T.spend} />)}
+        </div>
+      </div>
+
+      <div className="divider" />
+
+      {/* Spend charts row */}
+      <div className="section g21">
+        <SpendDonut platforms={platforms} total={T.spend} />
+        <DailySpendChart daily={daily} />
+      </div>
+
+      <div className="divider" />
+
+      {/* Funnel row */}
+      <div className="section">
+        <div className="sec-label">Lead Funnel by Platform</div>
+        <div className="g3">
+          {platforms.map(p => <FunnelChart key={p.platform} p={p} />)}
+        </div>
+      </div>
+
+      <div className="divider" />
+
+      {/* Performance charts */}
+      <div className="section">
+        <div className="sec-label">Performance Trends</div>
+        <div className="g2">
+          <CplChart daily={daily} />
+          <LeadsApptChart daily={daily} />
+        </div>
+      </div>
+
+      <div className="divider" />
+
+      {/* Platform compare */}
+      <div className="section g2">
+        <PlatformCompareChart platforms={platforms} />
+        <CostCompareChart platforms={platforms} />
+      </div>
+
+      <div className="divider" />
+
+      {/* Summary table */}
+      <div className="section">
+        <SummaryTable platforms={platforms} />
+      </div>
+
+      {/* Footer */}
+      <div className="footer">
+        ⚠ Lead counts reflect SharpSpring campaign_id attribution only.
+        Some Google campaigns (e.g. Google Search) are not mapped — paid lead totals may be understated.
+        Update campaign_platform_mapping seed to include all active campaigns.
+        &nbsp;·&nbsp; Powered by MotherDuck · dbt · Airbyte · Recharts
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
+""".replace('DATA_PLACEHOLDER', DATA_JSON)
+
+st.components.v1.html(REACT_HTML, height=2800, scrolling=True)

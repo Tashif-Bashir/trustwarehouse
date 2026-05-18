@@ -1,78 +1,34 @@
 with source as (
-    select * from {{ source('bronze', 'bing_adscampaign_performance_report_daily') }}
+    select * from {{ source('bronze', 'bing_adsaccount_performance_report_daily') }}
 ),
 
--- Bing syncs intraday (partial spend) and end-of-day (full spend).
--- Only use rows from the latest sync batch per date — defined as within
--- 1 hour of the most recent extraction for that timeperiod.
-latest_batch as (
-    select s.*
-    from source s
-    inner join (
-        select timeperiod, max(_airbyte_extracted_at) as latest
-        from source
-        group by timeperiod
-    ) lb on s.timeperiod = lb.timeperiod
-        and s._airbyte_extracted_at >= lb.latest - interval '1 hour'
-),
-
--- Bing Performance Max campaigns emit multiple rows per segment combination
--- within a single sync (milliseconds apart), with only one row carrying the
--- actual spend — the others are zero. Taking max(spend) per segment handles this
--- without needing to identify which specific row is correct.
-deduped as (
+-- Account-level daily report. Each row is one network/device segment for the day.
+-- A single Airbyte sync writes all rows with millisecond-apart extracted_at timestamps
+-- (not truly separate syncs). Sum all segments per date — this matches the Bing Ads UI
+-- account-level total.
+daily as (
     select
-        timeperiod,
-        campaignid,
-        network,
-        devicetype,
-        bidmatchtype,
-        deliveredmatchtype,
-        addistribution,
-        topvsother,
-        any_value(campaignname)     as campaignname,
-        any_value(campaigntype)     as campaigntype,
-        any_value(campaignstatus)   as campaignstatus,
-        any_value(currencycode)     as currencycode,
-        max(impressions)            as impressions,
-        max(clicks)                 as clicks,
-        max(spend)                  as spend,
-        max(conversions)            as conversions
-    from latest_batch
-    group by
-        timeperiod, campaignid, network, devicetype,
-        bidmatchtype, deliveredmatchtype, addistribution, topvsother
-),
-
-campaign_daily as (
-    select
-        timeperiod                          as date,
-        campaignid                          as campaign_id,
-        any_value(campaignname)             as campaign_name,
-        any_value(campaigntype)             as campaign_type,
-        any_value(campaignstatus)           as campaign_status,
+        cast(timeperiod as date)            as date,
+        any_value(accountname)              as account_name,
         any_value(currencycode)             as currency,
 
-        sum(impressions)                    as impressions,
-        sum(clicks)                         as clicks,
-        round(sum(spend), 4)                as spend_gbp,
-        round(sum(conversions), 2)          as conversions
+        round(sum(try_cast(spend as double)), 4)        as spend_gbp,
+        sum(try_cast(clicks as bigint))                 as clicks,
+        sum(try_cast(impressions as bigint))            as impressions,
+        round(sum(try_cast(conversions as double)), 2)  as conversions
 
-    from deduped
-    group by timeperiod, campaignid
+    from source
+    group by cast(timeperiod as date)
 ),
 
 final as (
     select
         date,
-        campaign_id,
-        campaign_name,
-        campaign_type,
-        campaign_status,
+        account_name,
         currency,
-        impressions,
-        clicks,
         spend_gbp,
+        clicks,
+        impressions,
         conversions,
 
         case
@@ -85,8 +41,9 @@ final as (
             else round(spend_gbp / clicks, 4)
         end                                 as avg_cpc_gbp
 
-    from campaign_daily
+    from daily
+    where spend_gbp > 0
 )
 
 select * from final
-order by date desc, spend_gbp desc
+order by date desc

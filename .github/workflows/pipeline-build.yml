@@ -6,7 +6,7 @@ on:
     types:
       - completed
   schedule:
-    - cron: "0 7 * * *"  # 07:00 UTC daily — full rebuild before start of day
+    - cron: "0 6 * * *"  # 06:00 UTC (07:00 BST) daily — full rebuild before start of day
   workflow_dispatch:  # manual trigger — builds everything
 
 jobs:

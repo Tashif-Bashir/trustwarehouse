@@ -12,10 +12,10 @@ daily as (
         any_value(accountname)              as account_name,
         any_value(currencycode)             as currency,
 
-        round(sum(try_cast(spend as double)), 4)        as spend_gbp,
-        sum(try_cast(clicks as bigint))                 as clicks,
-        sum(try_cast(impressions as bigint))            as impressions,
-        round(sum(try_cast(conversions as double)), 2)  as conversions
+        round(sum(SAFE_CAST(spend AS FLOAT64)), 4)       as spend_gbp,
+        sum(SAFE_CAST(clicks AS INT64))                  as clicks,
+        sum(SAFE_CAST(impressions AS INT64))             as impressions,
+        round(sum(SAFE_CAST(conversions AS FLOAT64)), 2) as conversions
 
     from source
     group by cast(timeperiod as date)

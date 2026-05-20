@@ -1,7 +1,7 @@
 import os, json, math
 from datetime import date, timedelta
 
-import duckdb
+from google.cloud import bigquery
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
@@ -15,42 +15,144 @@ st.markdown("""
 <style>
 html,body,.stApp,[data-testid="stAppViewContainer"]{background:#F5F1EB!important;}
 #MainMenu,footer,header{visibility:hidden;}
-.block-container{padding:0.5rem 1.4rem 0.5rem!important;max-width:100%!important;}
-[data-testid="stSelectbox"]>div>div{background:#fff!important;border:1px solid rgba(0,0,0,0.12)!important;color:#1C1917!important;border-radius:8px!important;}
-[data-testid="stButton"]>button{background:#fff!important;border:1px solid rgba(0,0,0,0.15)!important;color:#1C1917!important;font-weight:600!important;border-radius:8px!important;transition:all .2s!important;}
-[data-testid="stButton"]>button:hover{border-color:#D97706!important;color:#D97706!important;background:#FFFBF0!important;}
-[data-testid="stDateInput"] input{background:#fff!important;border:1px solid rgba(0,0,0,0.12)!important;color:#1C1917!important;border-radius:8px!important;}
+.block-container{padding:0.75rem 1.4rem 0.5rem!important;max-width:100%!important;}
+
+/* ── Period selector toolbar ── */
+[data-testid="stSelectbox"]>label{display:none!important;}
+[data-testid="stSelectbox"]>div>div{
+  background:#fff!important;
+  border:1.5px solid rgba(0,0,0,0.10)!important;
+  border-radius:12px!important;
+  color:#1C1917!important;
+  font-family:'DM Sans',system-ui,sans-serif!important;
+  font-size:14px!important;
+  font-weight:500!important;
+  padding:10px 16px!important;
+  box-shadow:0 2px 8px rgba(0,0,0,0.06)!important;
+  transition:border-color .2s,box-shadow .2s!important;
+  min-height:44px!important;
+}
+[data-testid="stSelectbox"]>div>div:hover{
+  border-color:#E5003B55!important;
+  box-shadow:0 4px 16px rgba(229,0,59,0.08)!important;
+}
+[data-testid="stSelectbox"] svg{color:#E5003B!important;}
+[data-testid="stSelectbox"] [data-baseweb="select"]>div{
+  background:#fff!important;border-radius:12px!important;
+}
+
+/* Dropdown list */
+[data-baseweb="popover"] ul{
+  background:#fff!important;
+  border-radius:12px!important;
+  border:1.5px solid rgba(0,0,0,0.08)!important;
+  box-shadow:0 8px 32px rgba(0,0,0,0.12)!important;
+  padding:6px!important;
+  font-family:'DM Sans',system-ui,sans-serif!important;
+}
+[data-baseweb="popover"] li{
+  border-radius:8px!important;
+  font-size:14px!important;
+  font-weight:500!important;
+  color:#1C1917!important;
+  padding:8px 14px!important;
+  transition:background .15s!important;
+}
+[data-baseweb="popover"] li:hover{background:#FFF0F3!important;color:#E5003B!important;}
+[data-baseweb="popover"] li[aria-selected="true"]{
+  background:#FFF0F3!important;color:#E5003B!important;font-weight:600!important;
+}
+
+/* ── Refresh button ── */
+[data-testid="stButton"]>button{
+  background:#fff!important;
+  border:1.5px solid rgba(0,0,0,0.10)!important;
+  color:#1C1917!important;
+  font-family:'DM Sans',system-ui,sans-serif!important;
+  font-weight:600!important;
+  font-size:13px!important;
+  border-radius:12px!important;
+  padding:10px 20px!important;
+  min-height:44px!important;
+  box-shadow:0 2px 8px rgba(0,0,0,0.06)!important;
+  transition:all .2s!important;
+  letter-spacing:.3px!important;
+}
+[data-testid="stButton"]>button:hover{
+  border-color:#E5003B!important;
+  color:#E5003B!important;
+  background:#FFF0F3!important;
+  box-shadow:0 4px 16px rgba(229,0,59,0.10)!important;
+}
+
+/* ── Date inputs ── */
+[data-testid="stDateInput"]>label{display:none!important;}
+[data-testid="stDateInput"] input{
+  background:#fff!important;
+  border:1.5px solid rgba(0,0,0,0.10)!important;
+  border-radius:12px!important;
+  color:#1C1917!important;
+  font-family:'DM Sans',system-ui,sans-serif!important;
+  font-size:14px!important;
+  font-weight:500!important;
+  padding:10px 14px!important;
+  box-shadow:0 2px 8px rgba(0,0,0,0.06)!important;
+  min-height:44px!important;
+}
+[data-testid="stDateInput"] input:focus{
+  border-color:#E5003B!important;
+  box-shadow:0 0 0 3px rgba(229,0,59,0.10)!important;
+}
+
+/* Thin separator below toolbar */
+[data-testid="stHorizontalBlock"]{align-items:center!important;}
 </style>
 """, unsafe_allow_html=True)
 
 # ── HELPERS ────────────────────────────────────────────────────────────────────
-def _connect():
-    return duckdb.connect(f"md:trust-pipeline?motherduck_token={os.getenv('MOTHERDUCK_TOKEN','')}")
+PROJECT = os.getenv('GCP_PROJECT_ID', 'trustwarehouse')
 
-@st.cache_data(ttl=1800, show_spinner="Querying MotherDuck…")
+@st.cache_resource
+def _client():
+    return bigquery.Client(project=PROJECT)
+
+@st.cache_data(ttl=1800, show_spinner="Loading attribution data…")
 def load_attr(d0, d1):
-    con = _connect()
-    df = con.execute(f"""
-        SELECT * FROM gold.gold_campaign_attribution
+    df = _client().query(f"""
+        SELECT * FROM `{PROJECT}.gold.gold_campaign_attribution`
         WHERE date BETWEEN '{d0}' AND '{d1}'
         ORDER BY date DESC, spend_gbp DESC
-    """).df()
-    con.close()
+    """).to_dataframe()
     return df
 
 @st.cache_data(ttl=1800, show_spinner="Loading lead breakdown…")
 def load_customer_types(d0, d1):
-    con = _connect()
-    df = con.execute(f"""
-        SELECT coalesce(m.platform,'Other Paid') as platform,
-               coalesce(g.customer_type,'Unknown') as customer_type,
+    df = _client().query(f"""
+        SELECT COALESCE(m.platform,'Other Paid') as platform,
+               COALESCE(g.customer_type,'Unknown') as customer_type,
                count(*) as leads
-        FROM gold.gold_lead_activity g
-        INNER JOIN silver.campaign_platform_mapping m ON g.campaign_id = m.campaign_id
+        FROM `{PROJECT}.gold.gold_lead_activity` g
+        INNER JOIN `{PROJECT}.silver.campaign_platform_mapping` m ON g.campaign_id = m.campaign_id
         WHERE g.created_date BETWEEN '{d0}' AND '{d1}'
         GROUP BY 1,2 ORDER BY 1,3 DESC
-    """).df()
-    con.close()
+    """).to_dataframe()
+    return df
+
+@st.cache_data(ttl=1800, show_spinner="Loading lead sources…")
+def load_lead_sources(d0, d1):
+    df = _client().query(f"""
+        SELECT
+            COALESCE(m.platform, 'Organic') as source,
+            count(*)                                                    as leads,
+            COUNTIF(g.appointment_booked = 'Yes')                      as appts,
+            COUNTIF(g.is_sold = true)                                  as sales
+        FROM `{PROJECT}.gold.gold_lead_activity` g
+        LEFT JOIN `{PROJECT}.silver.campaign_platform_mapping` m
+            ON g.campaign_id = m.campaign_id
+        WHERE g.created_date BETWEEN '{d0}' AND '{d1}'
+        GROUP BY 1
+        ORDER BY 2 DESC
+    """).to_dataframe()
     return df
 
 def _working_range(n):
@@ -75,25 +177,26 @@ PRESET_DATES = {
     "Last 30 Days":        (today - timedelta(30), yesterday),
 }
 
-c1, c2, c3, c4 = st.columns([3, 2, 2, 1])
-with c1:
+_cols = st.columns([2, 1.4, 1.4, 0.5])
+with _cols[0]:
     preset = st.selectbox("Period", PRESETS, index=0, label_visibility="collapsed")
 if preset == "Custom":
-    with c2:
+    with _cols[1]:
         d0 = st.date_input("From", value=yesterday - timedelta(30), max_value=yesterday,
                            label_visibility="collapsed", key="m_from")
-    with c3:
+    with _cols[2]:
         d1 = st.date_input("To", value=yesterday, max_value=yesterday,
                            label_visibility="collapsed", key="m_to")
 else:
     d0, d1 = PRESET_DATES[preset]
-with c4:
-    if st.button("↺  REFRESH"):
+with _cols[3]:
+    if st.button("↺ Refresh"):
         st.cache_data.clear(); st.rerun()
 
 # ── DATA ───────────────────────────────────────────────────────────────────────
-df    = load_attr(d0.strftime("%Y-%m-%d"), d1.strftime("%Y-%m-%d"))
-df_ct = load_customer_types(d0.strftime("%Y-%m-%d"), d1.strftime("%Y-%m-%d"))
+df     = load_attr(d0.strftime("%Y-%m-%d"), d1.strftime("%Y-%m-%d"))
+df_ct  = load_customer_types(d0.strftime("%Y-%m-%d"), d1.strftime("%Y-%m-%d"))
+df_src = load_lead_sources(d0.strftime("%Y-%m-%d"), d1.strftime("%Y-%m-%d"))
 
 if df.empty:
     st.warning("No attribution data for selected period.")
@@ -155,15 +258,28 @@ for _, row in df.iterrows():
         'cpa': safe(float(row['cost_per_appointment'])) if pd.notna(row.get('cost_per_appointment')) else None,
     })
 
+source_records = []
+for _, row in df_src.iterrows():
+    source_records.append({
+        'source': str(row['source']),
+        'leads':  int(row['leads']),
+        'appts':  int(row['appts']),
+        'sales':  int(row['sales']),
+    })
+
+tot_all_leads = int(df_src['leads'].sum()) if not df_src.empty else 0
+
 DATA_JSON = json.dumps({
     'period': f"{d0.strftime('%d %b')} – {d1.strftime('%d %b %Y')}",
     'totals': {
         'spend': tot_sp, 'leads': tot_ld, 'appts': tot_ap,
         'sales': tot_sa, 'clicks': tot_cl,
         'cpl': b_cpl, 'cpa': b_cpa, 'cps': b_cps,
+        'total_leads': tot_all_leads,
     },
     'platforms': platform_records,
     'daily': daily_records,
+    'lead_sources': source_records,
 }).replace('</', r'<\/')
 
 # ── REACT COMPONENT ────────────────────────────────────────────────────────────
@@ -186,9 +302,9 @@ REACT_HTML = """<!DOCTYPE html>
   --text:#1C1917;
   --dim:#78716C;
   --dim2:#A8A29E;
-  --amber:#D97706;
-  --amber-l:#F59E0B;
-  --amber-bg:#FFFBEB;
+  --amber:#E5003B;
+  --amber-l:#FF3A5E;
+  --amber-bg:#FFF0F3;
   --google:#1A73E8;
   --google-bg:#EEF4FF;
   --meta:#7C3AED;
@@ -235,11 +351,12 @@ body{padding:20px 24px 48px;}
 .hdr-eye{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:4px;color:var(--amber);text-transform:uppercase;margin-bottom:8px;}
 .hdr-title{font-family:'Barlow Condensed',sans-serif;font-size:3rem;font-weight:800;color:var(--text);letter-spacing:.3px;line-height:1;}
 .hdr-title em{color:var(--amber);font-style:normal;}
-.hdr-rule{height:3px;background:linear-gradient(90deg,var(--google) 0%,var(--meta) 40%,var(--bing) 70%,transparent 100%);margin-top:14px;border-radius:2px;opacity:.5;}
+.hdr-rule{height:3px;background:linear-gradient(90deg,var(--amber) 0%,var(--google) 35%,var(--meta) 65%,var(--bing) 85%,transparent 100%);margin-top:14px;border-radius:2px;opacity:.6;}
 .hdr-meta{display:flex;align-items:center;gap:10px;margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:1.5px;flex-wrap:wrap;}
 .badge{padding:3px 10px;border-radius:20px;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;}
 
 .g6{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;}
+.g7{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;}
 .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
 .g21{display:grid;grid-template-columns:2fr 3fr;gap:14px;}
@@ -255,7 +372,7 @@ body{padding:20px 24px 48px;}
   padding:20px;
   cursor:default;
   position:relative;
-  overflow:hidden;
+  overflow:visible;
   transition:transform .3s cubic-bezier(.22,1,.36,1),
              box-shadow .3s cubic-bezier(.22,1,.36,1),
              border-color .3s ease;
@@ -332,6 +449,42 @@ body{padding:20px 24px 48px;}
 
 .footer-note{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--dim2);margin-top:28px;padding-top:16px;border-top:1px solid rgba(0,0,0,0.06);line-height:2;}
 
+/* ── Info Tooltip ── */
+.itip-wrap{position:relative;display:inline-flex;flex-shrink:0;}
+.itip-btn{
+  width:16px;height:16px;border-radius:50%;
+  background:rgba(0,0,0,0.06);color:#B0A9A2;
+  font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;user-select:none;
+  transition:background .15s,color .15s;
+}
+.itip-btn:hover{background:rgba(0,0,0,0.13);color:#1C1917;}
+.itip-box{
+  position:absolute;bottom:calc(100% + 8px);right:0;
+  background:#1C1917;color:#F5F1EB;
+  padding:10px 13px;border-radius:10px;
+  font-family:'DM Sans',sans-serif;font-size:12px;line-height:1.55;
+  width:230px;z-index:9999;
+  box-shadow:0 8px 28px rgba(0,0,0,0.22);
+  pointer-events:none;white-space:normal;text-align:left;
+}
+.itip-box::after{
+  content:'';position:absolute;top:100%;right:5px;
+  border:5px solid transparent;border-top-color:#1C1917;
+}
+
+/* ── Platform Filter Pills ── */
+.pf-bar{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center;}
+.pf-pill{
+  padding:5px 14px;border-radius:20px;
+  font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+  cursor:pointer;border:1.5px solid transparent;
+  transition:all .2s cubic-bezier(.22,1,.36,1);
+  outline:none;background:none;
+}
+.pf-lbl{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--dim2);letter-spacing:2px;text-transform:uppercase;}
+
 /* Stagger delays */
 .d0{animation-delay:0s;} .d1{animation-delay:.06s;} .d2{animation-delay:.12s;}
 .d3{animation-delay:.18s;} .d4{animation-delay:.24s;} .d5{animation-delay:.3s;}
@@ -347,7 +500,7 @@ const { useState, useEffect } = React;
 
 const PC    = { Google:'#1A73E8', Meta:'#7C3AED', Bing:'#0D9488' };
 const PCbg  = { Google:'#EEF4FF', Meta:'#F5F3FF', Bing:'#F0FDF9' };
-const AMBER = '#D97706', AMBERL = '#F59E0B', AMBERBG = '#FFFBEB';
+const AMBER = '#E5003B', AMBERL = '#FF3A5E', AMBERBG = '#FFF0F3';
 const TEXT  = '#1C1917', DIM2 = '#A8A29E';
 
 function gbp(v,d=0){ return v!=null?'£'+Number(v).toLocaleString('en-GB',{maximumFractionDigits:d}):'—'; }
@@ -373,17 +526,31 @@ function useMounted(delay=60){
   return m;
 }
 
+// ── Info Tooltip ──────────────────────────────────────────────────
+function InfoTip({text}){
+  const [show,setShow]=useState(false);
+  return e('div',{className:'itip-wrap'},
+    e('div',{className:'itip-btn',onMouseEnter:()=>setShow(true),onMouseLeave:()=>setShow(false)},'i'),
+    show&&e('div',{className:'itip-box'},text)
+  );
+}
+
 // ── KPI Card ──────────────────────────────────────────────────────
-function KpiCard({label,value,sub,accent,prefix='',icon,delay=0,bgAccent}){
+function KpiCard({label,value,sub,accent,prefix='',icon,delay=0,bgAccent,info,showZero=false}){
   const num = typeof value==='number'?value:0;
   const counted = useCountUp(num, delay);
-  const display = num>0 ? prefix+Math.round(counted).toLocaleString('en-GB') : (value||'—');
+  const display = num>0
+    ? prefix+Math.round(counted).toLocaleString('en-GB')
+    : (showZero && typeof value==='number' ? prefix+'0' : (value||'—'));
   return e('div',{className:`card d${Math.floor(delay/60)}`,style:{animationDelay:delay+'ms'}},
     e('div',{className:'kpi-accent',style:{background:accent||AMBER}}),
     e('div',{className:'kpi-icon',style:{background:bgAccent||AMBERBG}},icon||''),
-    e('div',{className:'kpi-lbl'},label),
-    e('div',{className:'kpi-val',style:{color:accent||AMBER,animationDelay:(delay+100)+'ms'}},display),
-    sub && e('div',{className:'kpi-sub'},sub)
+    e('div',{style:{display:'flex',alignItems:'center',gap:6,marginBottom:10,marginTop:4}},
+      e('div',{className:'kpi-lbl',style:{marginBottom:0,marginTop:0}},label),
+      info&&e(InfoTip,{text:info})
+    ),
+    e('div',{className:'kpi-val',style:{color:'#1C1917',animationDelay:(delay+100)+'ms'}},display),
+    sub&&e('div',{className:'kpi-sub'},sub)
   );
 }
 
@@ -404,8 +571,9 @@ function PlatformCard({p,totalSpend,delay=0}){
     e('div',{className:'plat-top',style:{background:`linear-gradient(90deg,${color},${color}88)`}}),
     e('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}},
       e('div',{className:'plat-name',style:{color,marginBottom:0}},p.platform),
-      e('div',{className:'plat-chip',style:{background:bg,color}},
-        pct.toFixed(0)+'% of budget'
+      e('div',{style:{display:'flex',alignItems:'center',gap:8}},
+        e('div',{className:'plat-chip',style:{background:bg,color}},pct.toFixed(0)+'% of budget'),
+        e(InfoTip,{text:'Spend, leads, conversions and efficiency metrics for '+p.platform+' campaigns only.'})
       )
     ),
     e('div',{className:'plat-spend',style:{color}},gbp(p.spend)),
@@ -444,7 +612,10 @@ function AreaChart({daily}){
   const xStep=Math.max(1,Math.ceil(data.length/5));
 
   return e('div',{className:'chart-card',style:{animationDelay:'.2s'}},
-    e('div',{className:'chart-title'},'Daily Spend by Platform'),
+    e('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}},
+      e('div',{className:'chart-title',style:{marginBottom:0}},'Daily Spend by Platform'),
+      e(InfoTip,{text:'Daily ad spend per platform. Spot over-spend days, budget gaps, or weekend drop-offs.'})
+    ),
     e('svg',{viewBox:`0 0 ${W} ${H}`,width:'100%',style:{overflow:'visible'}},
       e('defs',null,
         ...platforms.map((p,pi)=>e('linearGradient',{key:'g'+pi,id:'ag'+pi,x1:'0',y1:'0',x2:'0',y2:'1'},
@@ -503,7 +674,10 @@ function Donut({platforms,total}){
   });
 
   return e('div',{className:'chart-card',style:{animationDelay:'.1s'}},
-    e('div',{className:'chart-title'},'Spend Distribution'),
+    e('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}},
+      e('div',{className:'chart-title',style:{marginBottom:0}},'Spend Distribution'),
+      e(InfoTip,{text:'How total budget is split across platforms. Hover each slice to highlight it and see the exact amount.'})
+    ),
     e('div',{style:{display:'flex',alignItems:'center',gap:20}},
       e('svg',{viewBox:'0 0 220 220',width:200,style:{flexShrink:0}},
         slices.map(s=>e('path',{
@@ -551,7 +725,10 @@ function FunnelCard({p,delay=0}){
   return e('div',{className:'chart-card',style:{animationDelay:delay+'ms',borderTop:`3px solid ${color}`}},
     e('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:14}},
       e('div',{className:'chart-title',style:{color,marginBottom:0}},p.platform),
-      e('div',{style:{marginLeft:'auto',fontFamily:"'JetBrains Mono'",fontSize:9,color:DIM2,letterSpacing:1}},fmtN(p.leads)+' leads')
+      e('div',{style:{marginLeft:'auto',display:'flex',alignItems:'center',gap:8}},
+        e('div',{style:{fontFamily:"'JetBrains Mono'",fontSize:9,color:DIM2,letterSpacing:1}},fmtN(p.leads)+' leads'),
+        e(InfoTip,{text:'Lead → appointment → sale funnel for '+p.platform+'. Bar width = conversion rate from total leads into that stage.'})
+      )
     ),
     ...steps.map((s,i)=>e('div',{key:s.lbl,className:'fn-row'},
       e('div',{className:'fn-labels'},
@@ -595,7 +772,10 @@ function CplChart({daily}){
   const yTicks=[0,.25,.5,.75,1].map(t=>maxV*t);
 
   return e('div',{className:'chart-card',style:{animationDelay:'.15s'}},
-    e('div',{className:'chart-title'},'Cost Per Lead'),
+    e('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}},
+      e('div',{className:'chart-title',style:{marginBottom:0}},'Cost Per Lead'),
+      e(InfoTip,{text:'Daily CPL per platform (spend ÷ leads). Lower is better — spikes usually mean a poor-quality traffic day.'})
+    ),
     e('svg',{viewBox:`0 0 ${W} ${H}`,width:'100%',style:{overflow:'visible'}},
       e('defs',null,
         ...platforms.map((p,pi)=>e('linearGradient',{key:'cpllg'+pi,id:'cplg'+pi,x1:'0',y1:'0',x2:'0',y2:'1'},
@@ -653,7 +833,10 @@ function LeadsChart({daily}){
   const saleLine=salePts.map((pt,i)=>(i===0?'M':'L')+' '+pt.x.toFixed(1)+' '+pt.y.toFixed(1)).join(' ');
 
   return e('div',{className:'chart-card',style:{animationDelay:'.25s'}},
-    e('div',{className:'chart-title'},'Leads · Appointments · Sales'),
+    e('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}},
+      e('div',{className:'chart-title',style:{marginBottom:0}},'Leads · Appointments · Sales'),
+      e(InfoTip,{text:'Daily volume: bars = new paid leads, red line = appointments booked, blue dashed = confirmed sales.'})
+    ),
     e('svg',{viewBox:`0 0 ${W} ${H}`,width:'100%',style:{overflow:'visible'}},
       [0,.5,1].map(t=>e('line',{key:'g'+t,x1:PL,y1:yL(maxL*t).toFixed(1),x2:W-PR,y2:yL(maxL*t).toFixed(1),stroke:'rgba(0,0,0,0.05)',strokeWidth:1,strokeDasharray:'4 3'})),
       ...data.filter((_,i)=>i%xStep===0||i===data.length-1).map(d=>e('text',{key:'x'+d.date,x:(bx(data.indexOf(d))+bW/2).toFixed(1),y:H-4,textAnchor:'middle',fill:DIM2,style:{fontFamily:"'JetBrains Mono'",fontSize:10}},fmtD(d.date))),
@@ -693,7 +876,10 @@ function PlatformBars({platforms}){
   const maxV=Math.max(...platforms.flatMap(p=>[p.leads,p.appts,p.sales]),1);
   const m=useMounted(150);
   return e('div',{className:'chart-card',style:{animationDelay:'.2s'}},
-    e('div',{className:'chart-title'},'Platform Volumes'),
+    e('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}},
+      e('div',{className:'chart-title',style:{marginBottom:0}},'Platform Volumes'),
+      e(InfoTip,{text:'Absolute lead, appointment and sale counts per platform. Bar length is relative to the highest value across all platforms.'})
+    ),
     e('div',{style:{display:'flex',flexDirection:'column',gap:18}},
       platforms.map(p=>{
         const color=PC[p.platform]||AMBER;
@@ -726,7 +912,10 @@ function CostBars({platforms}){
   const maxV=Math.max(...platforms.flatMap(p=>[p.cpl||0,p.cpa||0,p.cps||0]),1);
   const m=useMounted(180);
   return e('div',{className:'chart-card',style:{animationDelay:'.25s'}},
-    e('div',{className:'chart-title'},'CPL · CPA · CPS'),
+    e('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}},
+      e('div',{className:'chart-title',style:{marginBottom:0}},'CPL · CPA · CPS'),
+      e(InfoTip,{text:'Cost per lead, per appointment, and per sale by platform. Shorter bar = more efficient spend. CPS is your true cost of acquiring a customer.'})
+    ),
     e('div',{style:{display:'flex',flexDirection:'column',gap:18}},
       platforms.map(p=>{
         const color=PC[p.platform]||AMBER;
@@ -754,61 +943,209 @@ function CostBars({platforms}){
 
 // ── Summary Table ─────────────────────────────────────────────────
 function SummaryTable({platforms}){
+  const [sortIdx,setSortIdx]=useState(1);
+  const [asc,setAsc]=useState(false);
   const cols=['Platform','Spend','Leads','Appts','Sales','CPL','CPA','CPS','L→A','A→S','CTR'];
-  const rows=platforms.map(p=>[
-    p.platform,gbp(p.spend),fmtN(p.leads),fmtN(p.appts),fmtN(p.sales),
-    p.cpl?gbp(p.cpl):'—',p.cpa?gbp(p.cpa):'—',p.cps?gbp(p.cps):'—',
-    p.l2a?p.l2a.toFixed(0)+'%':'—',p.a2s?p.a2s.toFixed(0)+'%':'—',p.ctr?p.ctr.toFixed(2)+'%':'—',
+  const rawRows=platforms.map(p=>[
+    p.platform, p.spend, p.leads, p.appts, p.sales,
+    p.cpl||0, p.cpa||0, p.cps||0,
+    p.l2a||0, p.a2s||0, p.ctr||0,
   ]);
+  const sorted=[...rawRows].sort((a,b)=>{
+    const av=typeof a[sortIdx]==='string'?a[sortIdx]:Number(a[sortIdx])||0;
+    const bv=typeof b[sortIdx]==='string'?b[sortIdx]:Number(b[sortIdx])||0;
+    return asc?(av>bv?1:-1):(av<bv?1:-1);
+  });
+  const fmtCell=(v,j)=>{
+    if(j===0) return v;
+    if(j===1) return gbp(v);
+    if(j>=2&&j<=4) return fmtN(v);
+    if(j>=5&&j<=7) return v?gbp(v):'—';
+    return v?v.toFixed(0)+'%':'—';
+  };
+  const thStyle=(i)=>({
+    cursor:'pointer',userSelect:'none',
+    color:sortIdx===i?'#1C1917':'',
+    transition:'color .15s',
+  });
+  const arrow=(i)=>sortIdx===i?(asc?' ↑':' ↓'):'';
   return e('div',{className:'chart-card',style:{animationDelay:'.3s'}},
-    e('div',{className:'chart-title'},'Platform Summary'),
+    e('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}},
+      e('div',{className:'chart-title',style:{marginBottom:0}},'Platform Summary'),
+      e(InfoTip,{text:'Full breakdown per platform. Click any column header to sort. All metrics reflect the selected date range and platform filter.'})
+    ),
     e('table',{className:'tbl'},
-      e('thead',null,e('tr',null,...cols.map(c=>e('th',{key:c},c)))),
-      e('tbody',null,...rows.map((row,i)=>e('tr',{key:i},
+      e('thead',null,e('tr',null,...cols.map((c,i)=>e('th',{key:c,style:thStyle(i),
+        onClick:()=>{ if(sortIdx===i)setAsc(!asc); else{setSortIdx(i);setAsc(false);} }
+      },c+arrow(i))))),
+      e('tbody',null,...sorted.map((row,i)=>e('tr',{key:i},
         ...row.map((cell,j)=>e('td',{key:j,style:{
           color:j===0?(PC[cell]||TEXT):TEXT,
           fontWeight:j===0?700:400
-        }},cell))
+        }},fmtCell(cell,j)))
       )))
+    )
+  );
+}
+
+// ── Lead Source Breakdown ─────────────────────────────────────────
+function LeadSourceBreakdown({sources}){
+  const m=useMounted(120);
+  if(!sources||!sources.length) return null;
+  const SCOL={Google:'#1A73E8',Meta:'#7C3AED',Bing:'#0D9488',Organic:'#78716C'};
+  const SBCOL={Google:'#EEF4FF',Meta:'#F5F3FF',Bing:'#F0FDF9',Organic:'#F5F3F0'};
+  const total=sources.reduce((s,r)=>s+r.leads,0);
+  // order: paid platforms first, then organic
+  const order=['Google','Meta','Bing','Organic'];
+  const sorted=[...sources].sort((a,b)=>order.indexOf(a.source)-order.indexOf(b.source));
+
+  return e('div',{className:'chart-card',style:{animationDelay:'.05s'}},
+    e('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}},
+      e('div',{className:'chart-title',style:{marginBottom:0}},'Lead Sources'),
+      e('div',{style:{display:'flex',alignItems:'center',gap:10}},
+        e('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:'1.4rem',fontWeight:800,color:TEXT}},fmtN(total)),
+        e('div',{style:{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:DIM2,letterSpacing:2}}, 'TOTAL LEADS'),
+        e(InfoTip,{text:'All leads in SharpSpring for the period, split by how they arrived. Paid = linked to a Google, Meta or Bing campaign. Organic = no paid campaign attribution.'})
+      )
+    ),
+
+    // Stacked proportion bar
+    e('div',{style:{display:'flex',height:10,borderRadius:6,overflow:'hidden',marginBottom:20,gap:2}},
+      sorted.map(r=>{
+        const pct=total>0?r.leads/total:0;
+        const color=SCOL[r.source]||'#999';
+        return e('div',{key:r.source,title:r.source+': '+r.leads+' leads',style:{
+          flex:m?pct:0,
+          background:color,
+          borderRadius:6,
+          transition:'flex 1.4s cubic-bezier(.22,1,.36,1)',
+          minWidth:m&&pct>0?2:0,
+        }});
+      })
+    ),
+
+    // Source cards row
+    e('div',{style:{display:'grid',gridTemplateColumns:'repeat('+sorted.length+',1fr)',gap:12}},
+      sorted.map(r=>{
+        const color=SCOL[r.source]||'#999';
+        const bg=SBCOL[r.source]||'#F5F5F5';
+        const pct=total>0?(r.leads/total*100).toFixed(0):0;
+        const l2a=r.leads>0?(r.appts/r.leads*100).toFixed(0):null;
+        const isPaid=r.source!=='Organic';
+        return e('div',{key:r.source,style:{
+          background:bg,borderRadius:10,padding:'14px 16px',
+          borderTop:'3px solid '+color,
+        }},
+          e('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}},
+            e('div',{style:{fontFamily:"'JetBrains Mono',monospace",fontSize:10,fontWeight:700,color,letterSpacing:2,textTransform:'uppercase'}},r.source),
+            e('div',{style:{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color,background:color+'15',padding:'2px 8px',borderRadius:20,fontWeight:700}},pct+'%')
+          ),
+          e('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:'2rem',fontWeight:800,color:TEXT,lineHeight:1,marginBottom:6}},fmtN(r.leads)),
+          e('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:4,fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:DIM2}},
+            e('div',null,'Appts',e('div',{style:{color:TEXT,fontWeight:700,fontSize:12,marginTop:1}},fmtN(r.appts))),
+            e('div',null,'L→A',e('div',{style:{color:TEXT,fontWeight:700,fontSize:12,marginTop:1}},l2a?l2a+'%':'—')),
+            e('div',null,'Sales',e('div',{style:{color:TEXT,fontWeight:700,fontSize:12,marginTop:1}},fmtN(r.sales))),
+            e('div',null,'Type',e('div',{style:{color,fontWeight:700,fontSize:11,marginTop:1}},isPaid?'Paid':'Organic'))
+          )
+        );
+      })
     )
   );
 }
 
 // ── Root App ──────────────────────────────────────────────────────
 function App(){
-  const {totals:T,platforms,daily,period}=DATA;
+  const {totals:T,platforms,daily,period,lead_sources}=DATA;
+  const [selP,setSelP]=useState(null);
+
+  // Filtered data based on selected platform
+  const fp=selP?platforms.filter(p=>p.platform===selP):platforms;
+  const fd=selP?daily.filter(r=>r.platform===selP):daily;
+  const fT=fp.reduce((a,p)=>({
+    spend:a.spend+p.spend, leads:a.leads+p.leads, appts:a.appts+p.appts,
+    sales:a.sales+p.sales, clicks:a.clicks+(p.clicks||0),
+  }),{spend:0,leads:0,appts:0,sales:0,clicks:0});
+  fT.cpl=fT.leads>0?fT.spend/fT.leads:0;
+  fT.cpa=fT.appts>0?fT.spend/fT.appts:0;
+  fT.cps=fT.sales>0?fT.spend/fT.sales:0;
+  const DT=selP?fT:T;
+
   const days=[...new Set(daily.map(r=>r.date))].length;
-  const ICONS=['💷','📋','📅','✅','🎯','📈'];
-  const IBGS=[AMBERBG,PCbg.Google,PCbg.Meta,PCbg.Bing,AMBERBG,PCbg.Google];
+
+  const organicLeads = T.total_leads > 0 ? T.total_leads - T.leads : 0;
   const kpis=[
-    {label:'Total Spend',  value:T.spend,   prefix:'£',accent:AMBER,  icon:'💷', ibg:AMBERBG,   delay:0},
-    {label:'Paid Leads',   value:T.leads,   sub:'from '+fmtN(T.clicks)+' clicks',icon:'📋',ibg:PCbg.Google,delay:60},
-    {label:'Appointments', value:T.appts,   sub:T.leads>0?(T.appts/T.leads*100).toFixed(0)+'% of leads':'—',icon:'📅',ibg:PCbg.Meta,delay:120},
-    {label:'Sales',        value:T.sales,   sub:T.appts>0?(T.sales/T.appts*100).toFixed(0)+'% of appts':'—',accent:AMBER,icon:'✅',ibg:AMBERBG,delay:180},
-    {label:'Blended CPL',  value:Math.round(T.cpl),prefix:'£',accent:PC.Google,icon:'🎯',ibg:PCbg.Google,delay:240},
-    {label:'Blended CPS',  value:T.cps>0?Math.round(T.cps):'—',prefix:T.cps>0?'£':'',accent:PC.Bing,icon:'📈',ibg:PCbg.Bing,delay:300},
+    {label:'Total Spend',  value:DT.spend,    prefix:'£', accent:AMBER,     icon:'💷', ibg:AMBERBG,      delay:0,
+     info:'Total paid media spend across all active platforms for the selected period.'},
+    {label:'Total Leads',  value:T.total_leads, sub:fmtN(T.total_leads)+' across all sources', icon:'👥', ibg:'#F0F4FF', delay:60,
+     info:'Every lead that entered SharpSpring in the period, regardless of source — paid, organic, direct, or unknown.'},
+    {label:'Paid Leads',   value:DT.leads,    sub:'from '+fmtN(DT.clicks)+' clicks', icon:'📋', ibg:PCbg.Google, delay:120,
+     info:'Leads linked to a Google, Meta or Bing campaign via SharpSpring campaign ID. Some campaigns may be unmapped — totals can be understated.'},
+    {label:'Appointments', value:DT.appts,    showZero:true, sub:DT.leads>0?(DT.appts/DT.leads*100).toFixed(0)+'% of paid leads':'—', icon:'📅', ibg:PCbg.Meta, delay:180,
+     info:'Leads that progressed to a booked survey or appointment. Conversion rate is against paid leads only.'},
+    {label:'Sales',        value:DT.sales,    showZero:true, sub:DT.appts>0?(DT.sales/DT.appts*100).toFixed(0)+'% of appts':'—', accent:AMBER, icon:'✅', ibg:AMBERBG, delay:240,
+     info:'Appointments that confirmed as a sale. Sub-row shows close rate from appointment to sale.'},
+    {label:'Blended CPL',  value:DT.cpl>0?Math.round(DT.cpl):0, prefix:'£', accent:PC.Google, icon:'🎯', ibg:PCbg.Google, delay:300,
+     info:'Total spend ÷ total paid leads, blended across all platforms. Lower is better.'},
+    {label:'Blended CPS',  value:DT.cps>0?Math.round(DT.cps):0, prefix:'£', accent:PC.Bing,   icon:'📈', ibg:PCbg.Bing,   delay:360,
+     info:'Total spend ÷ confirmed sales — your true cost of acquiring a paying customer across all channels.'},
   ];
+
+  // Platform filter pill style
+  const pillStyle=(name)=>{
+    const active=selP===name;
+    const color=name==='All'?AMBER:PC[name];
+    const bg=name==='All'?AMBERBG:PCbg[name];
+    return {
+      background:active?color:'transparent',
+      color:active?'#fff':color,
+      borderColor:active?color:color+'55',
+      boxShadow:active?'0 4px 12px '+color+'44':'none',
+      transform:active?'scale(1.05)':'scale(1)',
+    };
+  };
 
   return e('div',null,
     // Header
     e('div',{className:'hdr'},
-      e('div',{className:'hdr-eye'},'Trust Electric Heating · Paid Media Intelligence'),
-      e('div',{className:'hdr-title'},'Ad Performance ',e('em',null,'& Attribution')),
-      e('div',{className:'hdr-rule'}),
-      e('div',{className:'hdr-meta'},
-        e('span',null,'PERIOD: '+period.toUpperCase()),
-        e('span',{style:{color:'rgba(0,0,0,0.15)'}},'│'),
-        e('span',null,days+' DAYS'),
-        ...Object.entries(PC).map(([name,color])=>e('span',{key:name,className:'badge',style:{
-          background:PCbg[name]||AMBERBG, border:'1.5px solid '+color+'33', color
-        }},name))
+      e('div',{style:{display:'flex',alignItems:'flex-end',justifyContent:'space-between',flexWrap:'wrap',gap:16}},
+        e('div',{className:'hdr-title'},'Marketing Analytics'),
+        e('div',{style:{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:8,paddingBottom:4}},
+          e('div',{style:{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:'#A8A29E',letterSpacing:'2px',textTransform:'uppercase'}},
+            'PERIOD: '+period.toUpperCase()+' · '+days+' DAYS'
+          ),
+          e('div',{style:{display:'flex',gap:6}},
+            ...Object.entries(PC).map(([name,color])=>e('span',{key:name,className:'badge',style:{
+              background:PCbg[name]||AMBERBG, border:'1.5px solid '+color+'33', color
+            }},name))
+          )
+        )
+      ),
+      e('div',{className:'hdr-rule',style:{marginTop:18}})
+    ),
+
+    // Platform filter bar
+    e('div',{className:'pf-bar'},
+      e('span',{className:'pf-lbl'},'Filter:'),
+      e('button',{className:'pf-pill',style:pillStyle('All'),onClick:()=>setSelP(null)},'All Platforms'),
+      ...Object.entries(PC).map(([name,color])=>
+        e('button',{key:name,className:'pf-pill',style:pillStyle(name),
+          onClick:()=>setSelP(selP===name?null:name)
+        },name)
       )
     ),
 
     // KPIs
     e('div',{className:'sec'},
       e('div',{className:'sec-lbl'},'Summary'),
-      e('div',{className:'g6'},...kpis.map((k,i)=>e(KpiCard,{key:i,...k})))
+      e('div',{className:'g7'},...kpis.map((k,i)=>e(KpiCard,{key:i,...k})))
+    ),
+
+    e('div',{className:'div'}),
+
+    // Lead Sources
+    e('div',{className:'sec'},
+      e('div',{className:'sec-lbl'},'Lead Sources'),
+      e(LeadSourceBreakdown,{sources:lead_sources})
     ),
 
     e('div',{className:'div'}),
@@ -816,15 +1153,15 @@ function App(){
     // Platform cards
     e('div',{className:'sec'},
       e('div',{className:'sec-lbl'},'Platform Breakdown'),
-      e('div',{className:'g3'},...platforms.map((p,i)=>e(PlatformCard,{key:p.platform,p,totalSpend:T.spend,delay:i*80})))
+      e('div',{className:'g3'},...fp.map((p,i)=>e(PlatformCard,{key:p.platform,p,totalSpend:DT.spend,delay:i*80})))
     ),
 
     e('div',{className:'div'}),
 
     // Donut + Area chart
     e('div',{className:'g21 sec'},
-      e(Donut,{platforms,total:T.spend}),
-      e(AreaChart,{daily})
+      e(Donut,{platforms:fp,total:DT.spend}),
+      e(AreaChart,{daily:fd})
     ),
 
     e('div',{className:'div'}),
@@ -832,7 +1169,7 @@ function App(){
     // Funnels
     e('div',{className:'sec'},
       e('div',{className:'sec-lbl'},'Lead Funnel by Platform'),
-      e('div',{className:'g3'},...platforms.map((p,i)=>e(FunnelCard,{key:p.platform,p,delay:i*100})))
+      e('div',{className:'g3'},...fp.map((p,i)=>e(FunnelCard,{key:p.platform,p,delay:i*100})))
     ),
 
     e('div',{className:'div'}),
@@ -840,17 +1177,17 @@ function App(){
     // Performance charts
     e('div',{className:'sec'},
       e('div',{className:'sec-lbl'},'Performance Trends'),
-      e('div',{className:'g2'},e(CplChart,{daily}),e(LeadsChart,{daily}))
+      e('div',{className:'g2'},e(CplChart,{daily:fd}),e(LeadsChart,{daily:fd}))
     ),
 
     e('div',{className:'div'}),
 
     // Compare bars
-    e('div',{className:'g2 sec'},e(PlatformBars,{platforms}),e(CostBars,{platforms})),
+    e('div',{className:'g2 sec'},e(PlatformBars,{platforms:fp}),e(CostBars,{platforms:fp})),
 
     e('div',{className:'div'}),
 
-    e('div',{className:'sec'},e(SummaryTable,{platforms})),
+    e('div',{className:'sec'},e(SummaryTable,{platforms:fp})),
 
     e('div',{className:'footer-note'},
       '⚠ Lead counts reflect SharpSpring campaign_id attribution only. Some Google campaigns (e.g. Google Search) are not mapped — paid lead totals may be understated.',

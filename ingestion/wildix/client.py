@@ -134,7 +134,7 @@ class WildixClient:
         )
         for attempt in range(3):
             try:
-                with urllib.request.urlopen(req, timeout=15, context=_CTX) as r:
+                with urllib.request.urlopen(req, timeout=60, context=_CTX) as r:
                     return json.loads(r.read().decode())
             except urllib.error.HTTPError as e:
                 if e.code == 429 or (attempt < 2 and e.code >= 500):

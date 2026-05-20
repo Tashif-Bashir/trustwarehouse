@@ -7,8 +7,8 @@ cleaned as (
         id                                          as deal_stage_id,
         nullif(trim(deal_stage_name), '')           as deal_stage_name,
         nullif(trim(description), '')               as description,
-        try_cast(default_probability as integer)    as default_probability,
-        try_cast(weight as integer)                 as weight
+        SAFE_CAST(default_probability AS INT64)    as default_probability,
+        SAFE_CAST(weight AS INT64)                 as weight
     from source
 )
 

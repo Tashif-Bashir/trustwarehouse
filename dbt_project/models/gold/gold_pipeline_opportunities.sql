@@ -44,7 +44,7 @@ leads as (
         email,
         phone,
         customer_type,
-        cast(created_at at time zone 'Europe/London' as date) as lead_created_date,
+        DATE(SAFE_CAST(created_at AS TIMESTAMP), 'Europe/London') as lead_created_date,
         lead_status,
         campaign_id     as lead_campaign_id
     from {{ ref('silver_sharpspring_leads') }}
@@ -74,8 +74,8 @@ final as (
         o.close_date,
 
         -- timeline
-        cast(o.created_at at time zone 'Europe/London' as date)        as created_date,
-        cast(o.updated_at at time zone 'Europe/London' as date)        as updated_date,
+        DATE(SAFE_CAST(o.created_at AS TIMESTAMP), 'Europe/London')    as created_date,
+        DATE(SAFE_CAST(o.updated_at AS TIMESTAMP), 'Europe/London')    as updated_date,
 
         -- linked lead attributes
         l.first_name,
@@ -100,4 +100,4 @@ final as (
 )
 
 select * from final
-order by created_date desc, deal_amount desc nulls last
+order by created_date desc, deal_amount desc

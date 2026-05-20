@@ -17,7 +17,7 @@ seeds:
     +schema: silver
     campaign_platform_mapping:
       +column_types:
-        campaign_id: varchar
+        campaign_id: STRING
 
 models:
   trust_warehouse:

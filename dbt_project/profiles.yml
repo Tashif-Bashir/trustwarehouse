@@ -2,6 +2,19 @@ trust_warehouse:
   target: dev
   outputs:
     dev:
-      type: duckdb
-      path: "md:trust-pipeline?motherduck_token={{ env_var('MOTHERDUCK_TOKEN') }}"
-      schema: main
+      type: bigquery
+      method: oauth                        # uses gcloud auth application-default login locally
+      project: trustwarehouse
+      dataset: silver                      # default dataset (models override via +schema config)
+      location: europe-west2
+      threads: 4
+      timeout_seconds: 300
+
+    prod:
+      type: bigquery
+      method: oauth                        # WIF sets up ADC in GitHub Actions via google-github-actions/auth
+      project: "{{ env_var('GCP_PROJECT_ID', 'trustwarehouse') }}"
+      dataset: silver
+      location: europe-west2
+      threads: 4
+      timeout_seconds: 300

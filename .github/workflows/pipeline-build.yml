@@ -2,23 +2,33 @@ name: Pipeline Build
 
 on:
   workflow_run:
-    workflows: ["Sync SharpSpring", "Sync Wildix"]
+    workflows: ["Sync SharpSpring", "Sync Wildix", "Sync Unleashed"]
     types:
       - completed
   schedule:
-    - cron: "*/20 * * * *"  # every 20 minutes — keeps ad platform data fresh
-  workflow_dispatch:  # manual trigger — builds everything
+    - cron: "30 7 * * *"  # once daily at 7:30am UTC — picks up overnight Airbyte syncs
+  workflow_dispatch:
 
 jobs:
   dbt-build:
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: read
+      id-token: write
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/297734667086/locations/global/workloadIdentityPools/github-pool/providers/github
+          service_account: trust-pipeline@trustwarehouse.iam.gserviceaccount.com
 
       - name: Install uv
         run: pip install uv
@@ -31,26 +41,21 @@ jobs:
         run: |
           TRIGGER="${{ github.event.workflow_run.name }}"
           if [ "$TRIGGER" = "Sync SharpSpring" ]; then
-            # SharpSpring silver + all gold models that depend on it
             echo "selector=silver_sharpspring_leads silver_sharpspring_campaigns silver_sharpspring_opportunities silver_sharpspring_deal_stages gold_lead_activity gold_campaign_attribution gold_agent_performance_daily gold_pipeline_opportunities" >> $GITHUB_OUTPUT
           elif [ "$TRIGGER" = "Sync Wildix" ]; then
-            # Wildix silver + gold models that join call data
             echo "selector=silver_wildix_calls silver_wildix_colleagues gold_lead_activity gold_agent_performance_daily" >> $GITHUB_OUTPUT
           else
-            # Manual dispatch — build everything
             echo "selector=" >> $GITHUB_OUTPUT
           fi
 
       - name: Run dbt seed + build
         env:
-          MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
-          MOTHERDUCK_DATABASE: ${{ secrets.MOTHERDUCK_DATABASE }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
-          export MOTHERDUCK_TOKEN=$(echo "$MOTHERDUCK_TOKEN" | tr -d '\r\n')
-          uv run dbt seed --project-dir dbt_project --profiles-dir dbt_project
+          uv run dbt seed --project-dir dbt_project --profiles-dir dbt_project --target prod
           SELECTOR="${{ steps.selector.outputs.selector }}"
           if [ -z "$SELECTOR" ]; then
-            uv run dbt build --project-dir dbt_project --profiles-dir dbt_project
+            uv run dbt build --project-dir dbt_project --profiles-dir dbt_project --target prod
           else
-            uv run dbt build --project-dir dbt_project --profiles-dir dbt_project --select $SELECTOR
+            uv run dbt build --project-dir dbt_project --profiles-dir dbt_project --target prod --select $SELECTOR
           fi

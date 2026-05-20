@@ -8,14 +8,14 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "dlt[duckdb,motherduck]",
-    "duckdb",
+    "dlt[bigquery]",
+    "google-cloud-bigquery",
     "python-dotenv",
     "pandera",
     "pydantic",
     "PyJWT",
     "dbt-core",
-    "dbt-duckdb",
+    "dbt-bigquery",
     "streamlit>=1.35",
     "plotly>=5.20",
     "pandas>=2.0",

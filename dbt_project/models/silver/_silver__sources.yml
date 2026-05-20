@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: bronze
-    database: trust-pipeline
+    database: trustwarehouse
     schema: bronze
     tables:
       - name: sharpspring_leads
@@ -15,3 +15,7 @@ sources:
       - name: facebook_adsads_insights
       - name: bing_adscampaign_performance_report_daily
       - name: bing_adsaccount_performance_report_daily
+      - name: unleashed_sales_orders
+      - name: unleashed_customers
+      - name: unleashed_products
+      - name: unleashed_stock_on_hand

@@ -1,4 +1,4 @@
-"""dlt pipeline — loads Wildix data into Motherduck bronze schema."""
+"""dlt pipeline — loads Wildix data into BigQuery bronze dataset."""
 
 import json
 import os
@@ -57,8 +57,16 @@ def _flatten_call(call: dict) -> dict:
 
 @dlt.resource(name="wildix_calls", write_disposition="merge", primary_key=["id", "_wms_id"])
 def calls_resource():
-    """Per-user call history from WDA — incremental, last 2 hours, deduped by (id, wms_id)."""
-    date_from = (datetime.now(timezone.utc) - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    """Per-user call history from WDA — incremental, deduped by (id, wms_id).
+    Set WILDIX_DATE_FROM=2015-01-01T00:00:00Z for a full historical backfill.
+    Or set WILDIX_LOOKBACK_HOURS for a rolling window (default 2 hours).
+    """
+    date_from_env = os.environ.get("WILDIX_DATE_FROM", "")
+    if date_from_env:
+        date_from = date_from_env
+    else:
+        lookback_hours = int(os.environ.get("WILDIX_LOOKBACK_HOURS", "2"))
+        date_from = (datetime.now(timezone.utc) - timedelta(hours=lookback_hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
     for call in _client().get_all_calls(date_from=date_from):
         yield _flatten_call(call)
 
@@ -77,16 +85,12 @@ def wildix_source():
 
 
 def run_pipeline() -> None:
-    """Run the Wildix → Motherduck bronze pipeline."""
-    token = os.environ.get("MOTHERDUCK_TOKEN")
-    database = os.environ.get("MOTHERDUCK_DATABASE", "trust-pipeline")
-
-    if not token:
-        raise RuntimeError("MOTHERDUCK_TOKEN is not set.")
+    """Run the Wildix → BigQuery bronze pipeline."""
+    project = os.environ.get("GCP_PROJECT_ID", "trustwarehouse")
 
     pipeline = dlt.pipeline(
         pipeline_name="wildix",
-        destination=dlt.destinations.motherduck(f"md:{database}?motherduck_token={token}"),
+        destination=dlt.destinations.bigquery(location="europe-west2"),
         dataset_name="bronze",
     )
 

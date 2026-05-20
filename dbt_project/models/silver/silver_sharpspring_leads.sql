@@ -34,8 +34,8 @@ cleaned as (
         nullif(trim(persona), '')                       as persona,
 
         -- scoring
-        try_cast(lead_score as integer)                 as lead_score,
-        try_cast(lead_score_weighted as double)         as lead_score_weighted,
+        SAFE_CAST(lead_score AS INT64)                 as lead_score,
+        SAFE_CAST(lead_score_weighted AS FLOAT64)         as lead_score_weighted,
 
         -- geography
         nullif(trim(street), '')                        as street,
@@ -110,15 +110,15 @@ enriched as (
     select
         *,
 
-        -- clean date of the scheduled appointment (text field has empty strings — TRY_CAST handles them)
-        try_cast(appointment_datetime_text as date)                             as appointment_date,
+        -- clean date of the scheduled appointment (text field has empty strings — SAFE_CAST returns NULL for invalid values)
+        SAFE_CAST(appointment_datetime_text AS DATE)                            as appointment_date,
 
         -- domestic vs commercial: map free-text self_described_type to a clean enum
         case
-            when self_described_type ilike '%residential%'
-              or self_described_type ilike '%home owner%'
-              or self_described_type ilike '%sheltered%'
-              or self_described_type ilike '%housing tenant%'
+            when LOWER(self_described_type) like '%residential%'
+              or LOWER(self_described_type) like '%home owner%'
+              or LOWER(self_described_type) like '%sheltered%'
+              or LOWER(self_described_type) like '%housing tenant%'
             then 'domestic'
             when self_described_type is not null
             then 'commercial'

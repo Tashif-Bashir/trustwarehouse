@@ -32,8 +32,8 @@ with leads as (
         -- attribution
         campaign_id,
 
-        -- UK local date of creation — use this to classify leads at query time
-        cast(created_at at time zone 'Europe/London' as date) as created_date
+        -- UK local date of creation
+        DATE(SAFE_CAST(created_at AS TIMESTAMP), 'Europe/London') as created_date
 
     from {{ ref('silver_sharpspring_leads') }}
     where is_active = true
@@ -43,8 +43,8 @@ with leads as (
 outbound_calls as (
     select
         remote_phone,
-        cast(to_timestamp(start_time / 1000) at time zone 'Europe/London' as timestamp) as call_at,
-        cast(to_timestamp(start_time / 1000) at time zone 'Europe/London' as date)      as call_date,
+        TIMESTAMP_MILLIS(start_time)                                        as call_at,
+        DATE(TIMESTAMP_MILLIS(start_time), 'Europe/London')                 as call_date,
         talk_time_seconds,
         colleague_name as agent_name
     from {{ ref('silver_wildix_calls') }}
@@ -67,7 +67,7 @@ lead_calls as (
         on (c.remote_phone = l.phone
             or c.remote_phone = l.mobile
             or c.remote_phone = l.phone_alt)
-        and c.call_at >= l.created_at
+        and c.call_at >= SAFE_CAST(l.created_at AS TIMESTAMP)
     where l.phone is not null
         or l.mobile is not null
         or l.phone_alt is not null
@@ -77,12 +77,12 @@ lead_calls as (
 call_metrics as (
     select
         lead_id,
-        count(*)                                              as total_call_attempts,
-        min(call_at)                                          as first_call_at,
-        max(call_at)                                          as last_call_at,
-        cast(max(call_at) as date)                            as last_call_date,
-        arg_max(agent_name, call_at)                          as last_call_agent,
-        count(*) filter (where talk_time_seconds >= 120)      as qualified_conversations
+        count(*)                                                                    as total_call_attempts,
+        min(call_at)                                                                as first_call_at,
+        max(call_at)                                                                as last_call_at,
+        DATE(max(call_at))                                                          as last_call_date,
+        ARRAY_AGG(agent_name IGNORE NULLS ORDER BY call_at DESC LIMIT 1)[SAFE_OFFSET(0)] as last_call_agent,
+        COUNTIF(talk_time_seconds >= 120)                                           as qualified_conversations
     from lead_calls
     group by lead_id
 ),
@@ -109,48 +109,44 @@ final as (
         l.campaign_id,
 
         -- call activity
-        coalesce(cm.total_call_attempts, 0)                   as total_call_attempts,
+        coalesce(cm.total_call_attempts, 0)                                         as total_call_attempts,
         cm.first_call_at,
         cm.last_call_at,
         cm.last_call_date,
         cm.last_call_agent,
-        coalesce(cm.qualified_conversations, 0)               as qualified_conversations,
+        coalesce(cm.qualified_conversations, 0)                                     as qualified_conversations,
 
         -- time from lead created to first outbound call (minutes)
-        -- null when the first call was on a different calendar day: overnight gaps
-        -- would skew the same-day response metric (e.g. evening lead called next morning)
+        -- null when the first call was on a different calendar day
         case
             when cm.first_call_at is null then null
-            when cast(cm.first_call_at as date) != l.created_date then null
-            else round(
-                date_diff('minute', l.created_at, cm.first_call_at),
-                0
-            )
-        end                                                   as mins_to_first_call,
+            when DATE(cm.first_call_at) != l.created_date then null
+            else CAST(TIMESTAMP_DIFF(cm.first_call_at, SAFE_CAST(l.created_at AS TIMESTAMP), MINUTE) AS FLOAT64)
+        end                                                                         as mins_to_first_call,
 
         -- flags
-        cm.first_call_at is not null                          as has_been_called,
-        coalesce(cm.qualified_conversations, 0) > 0           as has_qualified_conversation,
+        cm.first_call_at is not null                                                as has_been_called,
+        coalesce(cm.qualified_conversations, 0) > 0                                 as has_qualified_conversation,
 
         -- quote amount: strip junk placeholder values (≤1) and non-castable strings
         case
-            when try_cast(l.appt_amount as decimal(10,2)) > 1
-            then round(try_cast(l.appt_amount as decimal(10,2)), 2)
-        end                                                   as quote_amount,
+            when SAFE_CAST(l.appt_amount AS NUMERIC) > 1
+            then round(SAFE_CAST(l.appt_amount AS NUMERIC), 2)
+        end                                                                         as quote_amount,
 
-        -- deal amount: agents sometimes enter commas (e.g. "2,990.50") — strip before cast
+        -- deal amount: strip commas before cast
         case
-            when try_cast(regexp_replace(l.deal_amount, ',', '', 'g') as decimal(10,2)) > 1
-            then round(try_cast(regexp_replace(l.deal_amount, ',', '', 'g') as decimal(10,2)), 2)
-        end                                                   as deal_amount,
+            when SAFE_CAST(REGEXP_REPLACE(l.deal_amount, r',', '') AS NUMERIC) > 1
+            then round(SAFE_CAST(REGEXP_REPLACE(l.deal_amount, r',', '') AS NUMERIC), 2)
+        end                                                                         as deal_amount,
 
-        -- order confirmed as boolean (null = unknown, not the same as No)
+        -- order confirmed as boolean
         case
             when l.order_confirmed = 'Yes' then true
             when l.order_confirmed = 'No'  then false
-        end                                                   as order_confirmed,
+        end                                                                         as order_confirmed,
 
-        try_cast(l.order_confirmed_at as timestamp)           as order_confirmed_at,
+        SAFE_CAST(l.order_confirmed_at AS TIMESTAMP)                                as order_confirmed_at,
 
         l.is_sold
 

@@ -1,4 +1,4 @@
-"""dlt pipeline — loads SharpSpring data into Motherduck bronze schema."""
+"""dlt pipeline — loads SharpSpring data into BigQuery bronze dataset."""
 
 import os
 
@@ -56,16 +56,12 @@ def sharpspring_source():
 
 
 def run_pipeline() -> None:
-    """Run the SharpSpring → Motherduck bronze pipeline."""
-    token = os.environ.get("MOTHERDUCK_TOKEN")
-    database = os.environ.get("MOTHERDUCK_DATABASE", "trust-pipeline")
-
-    if not token:
-        raise RuntimeError("MOTHERDUCK_TOKEN is not set.")
+    """Run the SharpSpring → BigQuery bronze pipeline."""
+    project = os.environ.get("GCP_PROJECT_ID", "trustwarehouse")
 
     pipeline = dlt.pipeline(
         pipeline_name="sharpspring",
-        destination=dlt.destinations.motherduck(f"md:{database}?motherduck_token={token}"),
+        destination=dlt.destinations.bigquery(location="europe-west2"),
         dataset_name="bronze",
     )
 

@@ -125,31 +125,16 @@ def load_attr(d0, d1):
     """).to_dataframe()
     return df
 
-@st.cache_data(ttl=1800, show_spinner="Loading lead breakdown…")
-def load_customer_types(d0, d1):
-    df = _client().query(f"""
-        SELECT COALESCE(m.platform,'Other Paid') as platform,
-               COALESCE(g.customer_type,'Unknown') as customer_type,
-               count(*) as leads
-        FROM `{PROJECT}.gold.gold_lead_activity` g
-        INNER JOIN `{PROJECT}.silver.campaign_platform_mapping` m ON g.campaign_id = m.campaign_id
-        WHERE g.created_date BETWEEN '{d0}' AND '{d1}'
-        GROUP BY 1,2 ORDER BY 1,3 DESC
-    """).to_dataframe()
-    return df
-
 @st.cache_data(ttl=1800, show_spinner="Loading lead sources…")
 def load_lead_sources(d0, d1):
     df = _client().query(f"""
         SELECT
-            COALESCE(m.platform, 'Organic') as source,
-            count(*)                                                    as leads,
-            COUNTIF(g.appointment_booked = 'Yes')                      as appts,
-            COUNTIF(g.is_sold = true)                                  as sales
-        FROM `{PROJECT}.gold.gold_lead_activity` g
-        LEFT JOIN `{PROJECT}.silver.campaign_platform_mapping` m
-            ON g.campaign_id = m.campaign_id
-        WHERE g.created_date BETWEEN '{d0}' AND '{d1}'
+            COALESCE(platform, 'Organic')              as source,
+            COUNT(*)                                   as leads,
+            COUNTIF(appointment_booked = 'Yes')        as appts,
+            COUNTIF(is_sold = true)                    as sales
+        FROM `{PROJECT}.gold.gold_lead_activity`
+        WHERE created_date BETWEEN '{d0}' AND '{d1}'
         GROUP BY 1
         ORDER BY 2 DESC
     """).to_dataframe()
@@ -195,7 +180,6 @@ with _cols[3]:
 
 # ── DATA ───────────────────────────────────────────────────────────────────────
 df     = load_attr(d0.strftime("%Y-%m-%d"), d1.strftime("%Y-%m-%d"))
-df_ct  = load_customer_types(d0.strftime("%Y-%m-%d"), d1.strftime("%Y-%m-%d"))
 df_src = load_lead_sources(d0.strftime("%Y-%m-%d"), d1.strftime("%Y-%m-%d"))
 
 if df.empty:
@@ -223,7 +207,10 @@ b_cps  = round(tot_sp / tot_sa, 2) if tot_sa else 0
 
 def safe(v):
     if v is None: return None
-    if isinstance(v, float) and math.isnan(v): return None
+    try:
+        if pd.isna(v): return None
+    except (TypeError, ValueError):
+        pass
     if hasattr(v, 'item'): return v.item()
     return v
 
@@ -1192,7 +1179,7 @@ function App(){
     e('div',{className:'footer-note'},
       '⚠ Lead counts reflect SharpSpring campaign_id attribution only. Some Google campaigns (e.g. Google Search) are not mapped — paid lead totals may be understated.',
       e('br',null),
-      'Powered by MotherDuck · dbt · Airbyte · React 18 · Pure SVG'
+      'Powered by BigQuery · dbt · Airbyte · React 18 · Pure SVG'
     )
   );
 }

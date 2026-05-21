@@ -28,6 +28,8 @@ models:
         description: domestic or commercial, derived from self_described_type. Null if unknown.
       - name: campaign_id
         description: SharpSpring campaign ID the lead was attributed to. Null for organic/untracked leads.
+      - name: platform
+        description: Paid platform (Google, Meta, or Bing) resolved from campaign_id. Null for organic or unattributed leads.
       - name: is_sold
         description: True when appointment_status is one of the four sold values
         tests:

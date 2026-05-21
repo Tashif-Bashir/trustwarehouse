@@ -107,6 +107,7 @@ final as (
         l.customer_type,
         l.pipeline_category,
         l.campaign_id,
+        m.platform,
 
         -- call activity
         coalesce(cm.total_call_attempts, 0)                                         as total_call_attempts,
@@ -151,6 +152,7 @@ final as (
         l.is_sold
 
     from leads l
+    left join {{ ref('campaign_platform_mapping') }} m on l.campaign_id = m.campaign_id
     left join call_metrics cm on l.lead_id = cm.lead_id
 )
 

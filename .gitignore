@@ -20,3 +20,12 @@ _run_*.bat
 
 # dbt user config
 dbt_project/.user.yml
+
+# Internal project docs (not for public consumption)
+Claude.md
+Prompt.md
+Architecture.md
+
+# Ad-hoc query files and generated charts
+_adhoc_query.py
+*.png

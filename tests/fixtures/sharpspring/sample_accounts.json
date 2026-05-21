@@ -1,8 +1,8 @@
 [
   {
-    "id": "4789516290",
-    "ownerID": "313417428",
-    "accountName": "will",
+    "id": "1000000001",
+    "ownerID": "900000001",
+    "accountName": "REDACTED",
     "industry": null,
     "phone": null,
     "annualRevenue": null,
@@ -26,9 +26,9 @@
     "installer_network_67e285a9a3d79": null
   },
   {
-    "id": "4843600898",
-    "ownerID": "365659136",
-    "accountName": "Milan Soni",
+    "id": "1000000002",
+    "ownerID": "900000002",
+    "accountName": "REDACTED",
     "industry": null,
     "phone": null,
     "annualRevenue": null,
@@ -52,9 +52,9 @@
     "installer_network_67e285a9a3d79": null
   },
   {
-    "id": "4971667458",
-    "ownerID": "313417428",
-    "accountName": "will - example",
+    "id": "1000000003",
+    "ownerID": "900000001",
+    "accountName": "REDACTED",
     "industry": null,
     "phone": null,
     "annualRevenue": null,

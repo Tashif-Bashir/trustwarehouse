@@ -55,7 +55,7 @@ jobs:
           uv run dbt seed --project-dir dbt_project --profiles-dir dbt_project --target prod
           SELECTOR="${{ steps.selector.outputs.selector }}"
           if [ -z "$SELECTOR" ]; then
-            uv run dbt build --project-dir dbt_project --profiles-dir dbt_project --target prod
+            uv run dbt build --project-dir dbt_project --profiles-dir dbt_project --target prod --threads 8
           else
-            uv run dbt build --project-dir dbt_project --profiles-dir dbt_project --target prod --select $SELECTOR
+            uv run dbt build --project-dir dbt_project --profiles-dir dbt_project --target prod --threads 8 --select $SELECTOR
           fi

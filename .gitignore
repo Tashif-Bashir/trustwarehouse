@@ -29,3 +29,7 @@ Architecture.md
 # Ad-hoc query files and generated charts
 _adhoc_query.py
 *.png
+
+# Dashboards (run locally, not part of the public sync repo)
+*_dashboard.py
+dashboard.py

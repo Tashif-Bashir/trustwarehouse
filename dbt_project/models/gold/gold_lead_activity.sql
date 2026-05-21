@@ -37,6 +37,7 @@ with leads as (
 
     from {{ ref('silver_sharpspring_leads') }}
     where is_active = true
+    qualify row_number() over (partition by lead_id order by updated_at desc) = 1
 ),
 
 -- outbound completed calls only

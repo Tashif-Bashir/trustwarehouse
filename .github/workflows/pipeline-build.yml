@@ -9,6 +9,10 @@ on:
     - cron: "0 * * * *"  # hourly fallback — picks up Airbyte (Google/Meta/Bing) syncs
   workflow_dispatch:
 
+concurrency:
+  group: pipeline-build
+  cancel-in-progress: false
+
 jobs:
   dbt-build:
     runs-on: ubuntu-latest
@@ -52,7 +56,7 @@ jobs:
         env:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
-          uv run dbt seed --project-dir dbt_project --profiles-dir dbt_project --target prod
+          uv run dbt seed --full-refresh --project-dir dbt_project --profiles-dir dbt_project --target prod
           SELECTOR="${{ steps.selector.outputs.selector }}"
           if [ -z "$SELECTOR" ]; then
             uv run dbt build --project-dir dbt_project --profiles-dir dbt_project --target prod --threads 8

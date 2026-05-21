@@ -1,0 +1,15 @@
+version: 2
+
+seeds:
+  - name: campaign_platform_mapping
+    description: "Maps SharpSpring campaign IDs to paid platforms (Google, Meta, Bing)"
+    columns:
+      - name: campaign_id
+        description: "SharpSpring campaign ID"
+        tests:
+          - unique
+          - not_null
+      - name: platform
+        description: "Platform name: Google, Meta, or Bing"
+        tests:
+          - not_null

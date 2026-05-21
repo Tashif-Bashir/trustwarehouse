@@ -64,7 +64,7 @@ daily_leads as (
     select
         created_date                        as date,
         platform,
-        count(*)                            as leads
+        count(distinct lead_id)             as leads
     from lead_platform
     group by created_date, platform
 ),
@@ -75,7 +75,7 @@ daily_appointments as (
     select
         DATE(appointment_booked_at)         as date,
         platform,
-        count(*)                            as appointments_booked
+        count(distinct lead_id)             as appointments_booked
     from lead_platform
     where appointment_booked = 'Yes'
       and appointment_booked_at is not null
@@ -87,7 +87,7 @@ daily_sales as (
     select
         coalesce(DATE(order_confirmed_at), created_date)                    as date,
         platform,
-        count(*)                                                            as sales
+        count(distinct lead_id)                                             as sales
     from lead_platform
     where is_sold = true
     group by coalesce(DATE(order_confirmed_at), created_date), platform

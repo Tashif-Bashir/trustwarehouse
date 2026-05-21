@@ -6,7 +6,7 @@ on:
     types:
       - completed
   schedule:
-    - cron: "30 7 * * *"  # once daily at 7:30am UTC — picks up overnight Airbyte syncs
+    - cron: "0 * * * *"  # hourly fallback — picks up Airbyte (Google/Meta/Bing) syncs
   workflow_dispatch:
 
 jobs:

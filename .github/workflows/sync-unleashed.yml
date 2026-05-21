@@ -2,7 +2,7 @@ name: Sync Unleashed
 
 on:
   schedule:
-    - cron: "30 6 * * *"  # once daily at 6:30am UTC
+    - cron: "0 * * * *"  # every hour
   workflow_dispatch:
 
 jobs:

@@ -2,8 +2,7 @@ name: Sync Wildix
 
 on:
   schedule:
-    - cron: "0 7 * * *"   # twice daily: 7:00am UTC
-    - cron: "0 18 * * *"  # twice daily: 6:00pm UTC
+    - cron: "*/15 * * * *"  # every 15 minutes
   workflow_dispatch:
 
 jobs:

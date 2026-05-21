@@ -2,7 +2,7 @@ name: Sync SharpSpring
 
 on:
   schedule:
-    - cron: "0 6 * * *"  # once daily at 6:00am UTC
+    - cron: "*/30 * * * *"  # every 30 minutes
   workflow_dispatch:
 
 jobs:

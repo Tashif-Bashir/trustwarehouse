@@ -1,0 +1,1769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Trustwarehouse Analytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
+<style>
+  *,*::before,*::after{ box-sizing:border-box; margin:0; padding:0; }
+  :root{
+    --bg:#F2F3F7; --panel:#FFFFFF;
+    --ink:#171A2B; --ink2:#3B3F55;
+    --muted:#9AA0B4; --muted2:#C7CADA;
+    --line:#EDEEF3; --line2:#E5E7EF;
+    --indigo:#5B6CFF; --indigo-soft:#EEF0FF;
+    --violet:#8B5CF6; --violet-soft:#F2EDFF;
+    --amber:#F5B544; --amber-soft:#FFF4DC;
+    --mint:#3DD0A4; --mint-soft:#E2F8EF;
+    --rose:#FF6B7A; --rose-soft:#FFE9EC;
+    --sky:#5AC8FA; --sky-soft:#E6F6FF;
+    --shadow-sm:0 1px 3px rgba(20,23,40,.05);
+    --shadow-md:0 8px 24px rgba(20,23,40,.08);
+    --shadow-lg:0 12px 40px rgba(20,23,40,.10);
+  }
+  html,body{ background:var(--bg); color:var(--ink); font-family:'DM Sans',system-ui,-apple-system,sans-serif; font-size:14px; -webkit-font-smoothing:antialiased; }
+  button{ font-family:inherit; cursor:pointer; border:none; background:none; color:inherit; }
+  ::-webkit-scrollbar{ width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb{ background:var(--line2); border-radius:8px; border:2px solid var(--bg); }
+
+  /* ─── Layout ─── */
+  .app{ display:grid; grid-template-columns:230px 1fr; min-height:100vh; }
+
+  /* ─── Sidebar ─── */
+  .sidebar{
+    background:var(--panel); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; padding:22px 16px;
+    position:sticky; top:0; height:100vh; overflow-y:auto;
+  }
+  .logo{ display:flex; align-items:center; gap:10px; padding:4px 8px 22px; }
+  .logo-mark{
+    width:32px; height:32px; border-radius:9px;
+    background:linear-gradient(135deg,#5B6CFF 0%,#8B5CF6 100%);
+    display:flex; align-items:center; justify-content:center;
+    color:#fff; font-weight:700; font-size:15px;
+    box-shadow:0 5px 12px rgba(91,108,255,.35);
+  }
+  .logo-name{ font-weight:700; font-size:15px; letter-spacing:-.2px; color:var(--ink); }
+  .nav-label{ font-size:10px; letter-spacing:1.4px; text-transform:uppercase; color:var(--muted); padding:6px 10px; font-weight:600; margin-top:4px; }
+  .nav-item{
+    width:100%; display:flex; align-items:center; gap:11px;
+    padding:10px 12px; border-radius:10px; margin-bottom:2px;
+    color:var(--ink2); font-size:13.5px; font-weight:500;
+    transition:all .15s ease;
+  }
+  .nav-item:hover{ background:var(--bg); color:var(--ink); }
+  .nav-item.active{
+    background:linear-gradient(135deg,#5B6CFF 0%,#8B5CF6 100%);
+    color:#fff; box-shadow:0 6px 18px rgba(91,108,255,.30);
+  }
+  .nav-item svg{ width:17px; height:17px; flex-shrink:0; color:var(--muted); }
+  .nav-item:hover svg{ color:var(--ink); }
+  .nav-item.active svg{ color:#fff; }
+
+  /* ─── Main / Topbar ─── */
+  .main{ padding:22px 26px 48px; min-width:0; }
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:22px; gap:18px; flex-wrap:wrap;
+  }
+  .topbar-left{ display:flex; align-items:center; gap:22px; min-width:0; }
+  .page-title{ font-size:22px; font-weight:700; letter-spacing:-.4px; }
+  .tabs{
+    display:flex; background:var(--panel); border-radius:11px;
+    padding:4px; box-shadow:var(--shadow-sm); gap:2px;
+  }
+  .tab{
+    padding:8px 16px; border-radius:8px;
+    font-size:12.5px; font-weight:600; color:var(--muted);
+    transition:all .18s cubic-bezier(.22,1,.36,1);
+  }
+  .tab:hover{ color:var(--ink); }
+  .tab.active{
+    background:linear-gradient(135deg,#5B6CFF 0%,#8B5CF6 100%);
+    color:#fff; box-shadow:0 4px 14px rgba(91,108,255,.30);
+  }
+  .topbar-right{ display:flex; align-items:center; gap:10px; }
+  .refreshed{ font-size:11.5px; color:var(--muted); font-weight:500; }
+
+  /* Period picker */
+  .period-wrap{ position:relative; }
+  .period-btn{
+    display:flex; align-items:center; gap:8px;
+    background:var(--panel); padding:8px 12px; border-radius:10px;
+    box-shadow:var(--shadow-sm); font-size:12.5px; color:var(--ink2); font-weight:500;
+  }
+  .period-btn:hover{ box-shadow:var(--shadow-md); }
+  .period-btn svg{ width:14px; height:14px; color:var(--muted); }
+  .period-pop{
+    position:absolute; top:calc(100% + 6px); right:0; z-index:30;
+    background:var(--panel); border-radius:12px;
+    box-shadow:var(--shadow-lg); padding:6px;
+    min-width:180px; display:flex; flex-direction:column;
+    animation:popIn .15s ease-out;
+  }
+  .period-pop-head{
+    font-size:10px; letter-spacing:1.4px; text-transform:uppercase;
+    color:var(--muted); font-weight:600; padding:8px 12px 6px;
+  }
+  .period-pop-item{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:8px 12px; border-radius:7px;
+    font-size:13px; font-weight:500; color:var(--ink2);
+    text-align:left; transition:all .12s;
+  }
+  .period-pop-item:hover{ background:var(--indigo-soft); color:var(--indigo); }
+  .period-pop-item.active{ background:var(--indigo-soft); color:var(--indigo); font-weight:600; }
+  .period-pop-check{ display:flex; align-items:center; }
+  .period-pop-check svg{ width:14px; height:14px; }
+
+  .icon-btn{
+    width:36px; height:36px; border-radius:10px;
+    background:var(--panel); display:flex; align-items:center; justify-content:center;
+    box-shadow:var(--shadow-sm); color:var(--ink2);
+    transition:all .15s;
+  }
+  .icon-btn:hover{ box-shadow:var(--shadow-md); color:var(--indigo); }
+  .icon-btn.active{ background:var(--indigo); color:#fff; box-shadow:0 4px 12px rgba(91,108,255,.28); }
+  .icon-btn svg{ width:15px; height:15px; }
+
+  /* ─── Calendar date picker ─── */
+  .cal-pop{
+    position:absolute; right:0; top:calc(100% + 8px);
+    background:var(--panel); border-radius:14px;
+    box-shadow:var(--shadow-lg),0 0 0 1px var(--line);
+    padding:16px; z-index:200; width:272px;
+  }
+  .cal-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .cal-nav-btn{
+    width:28px; height:28px; border-radius:7px; font-size:18px; line-height:1;
+    display:flex; align-items:center; justify-content:center; color:var(--ink2);
+    transition:background .1s;
+  }
+  .cal-nav-btn:hover{ background:var(--bg); color:var(--indigo); }
+  .cal-nav-title{ font-size:13px; font-weight:600; color:var(--ink); }
+  .cal-dow{ display:grid; grid-template-columns:repeat(7,1fr); margin-bottom:4px; }
+  .cal-dow span{ text-align:center; font-size:10px; font-weight:600; color:var(--muted); padding:4px 0; }
+  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); }
+  .cal-day{
+    text-align:center; font-size:12px; padding:6px 0; border-radius:6px; cursor:pointer;
+    color:var(--ink); transition:background .08s,color .08s; user-select:none; position:relative;
+  }
+  .cal-day:hover:not(.future){ background:var(--indigo-soft); color:var(--indigo); }
+  .cal-day.other{ color:var(--muted2); }
+  .cal-day.today{ font-weight:700; }
+  .cal-day.today::after{
+    content:''; position:absolute; bottom:2px; left:50%; transform:translateX(-50%);
+    width:3px; height:3px; border-radius:50%; background:var(--indigo);
+  }
+  .cal-day.future{ opacity:.3; pointer-events:none; }
+  .cal-day.in-range{ background:var(--indigo-soft); color:var(--indigo); border-radius:0; }
+  .cal-day.range-start{ background:var(--indigo)!important; color:#fff!important; border-radius:6px 0 0 6px; }
+  .cal-day.range-end{ background:var(--indigo)!important; color:#fff!important; border-radius:0 6px 6px 0; }
+  .cal-day.range-single{ border-radius:6px!important; }
+  .cal-footer{ margin-top:12px; display:flex; align-items:center; gap:8px; border-top:1px solid var(--line); padding-top:10px; }
+  .cal-range-label{ font-size:11px; color:var(--muted); font-weight:500; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cal-apply{
+    padding:6px 13px; border-radius:8px; background:var(--indigo); color:#fff;
+    font-size:12px; font-weight:600; transition:opacity .1s; white-space:nowrap;
+  }
+  .cal-apply:hover{ opacity:.85; }
+  .cal-apply:disabled{ opacity:.35; pointer-events:none; }
+  .cal-cancel{ padding:6px 10px; border-radius:8px; background:var(--bg); color:var(--ink2); font-size:12px; font-weight:600; white-space:nowrap; }
+
+  /* ─── Grids ─── */
+  .g4{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:14px; }
+  .g3{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:14px; }
+  .g2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+  .g21{ display:grid; grid-template-columns:2fr 1fr; gap:14px; margin-bottom:14px; }
+  .g12{ display:grid; grid-template-columns:1fr 2fr; gap:14px; margin-bottom:14px; }
+  .row-mix{ display:grid; grid-template-columns:1fr 1fr 1.2fr 1.2fr; gap:14px; margin-bottom:14px; }
+
+  /* ─── Card ─── */
+  .card{
+    background:var(--panel); border-radius:16px;
+    padding:18px 20px; box-shadow:var(--shadow-sm);
+    animation-duration: var(--motion-dur);
+    animation-timing-function: var(--motion-ease);
+    animation-fill-mode: both;
+    transition: transform .25s var(--motion-ease), box-shadow .25s var(--motion-ease);
+  }
+  /* Motion variants */
+  body[data-motion="rise"]  .card{ animation-name: rise; }
+  body[data-motion="fade"]  .card{ animation-name: fadeUp; }
+  body[data-motion="scale"] .card{ animation-name: scaleIn; }
+  body[data-motion="slide"] .card{ animation-name: slideR; }
+  body[data-motion="blur"]  .card{ animation-name: blurIn; }
+  body[data-motion="pop"]   .card{ animation-name: pop; }
+  body[data-motion="none"]  .card{ animation: none !important; }
+
+  /* Hover effects */
+  body[data-hover="lift"]  .card:hover{ transform: translateY(-3px); box-shadow: var(--shadow-md); }
+  body[data-hover="glow"]  .card:hover{ box-shadow: 0 0 0 1px rgba(91,108,255,.25), 0 12px 32px rgba(91,108,255,.18); }
+  body[data-hover="tilt"]  .card:hover{ transform: translateY(-2px) rotate(-.3deg); box-shadow: var(--shadow-md); }
+  body[data-hover="zoom"]  .card:hover{ transform: scale(1.015); box-shadow: var(--shadow-md); }
+  body[data-hover="none"]  .card:hover{ transform: none; box-shadow: var(--shadow-sm); }
+
+  /* Stagger */
+  .card:nth-child(1) { animation-delay: calc(0 * var(--motion-stagger)); }
+  .card:nth-child(2) { animation-delay: calc(1 * var(--motion-stagger)); }
+  .card:nth-child(3) { animation-delay: calc(2 * var(--motion-stagger)); }
+  .card:nth-child(4) { animation-delay: calc(3 * var(--motion-stagger)); }
+  .card:nth-child(5) { animation-delay: calc(4 * var(--motion-stagger)); }
+  .card:nth-child(6) { animation-delay: calc(5 * var(--motion-stagger)); }
+  .card:nth-child(7) { animation-delay: calc(6 * var(--motion-stagger)); }
+  .card:nth-child(8) { animation-delay: calc(7 * var(--motion-stagger)); }
+
+  @media (prefers-reduced-motion: reduce){
+    .card, .svg-line, .agent-bar-fill{ animation: none !important; transition: none !important; }
+  }
+  .card-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+  .card-label{ font-size:12px; color:var(--muted); font-weight:500; }
+  .card-icon{
+    width:32px; height:32px; border-radius:9px;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .card-icon svg{ width:15px; height:15px; }
+
+  /* KPI grammar */
+  .kpi{ display:flex; flex-direction:column; }
+  .kpi-value{
+    font-size:28px; font-weight:700; letter-spacing:-.6px;
+    margin-top:12px; line-height:1; color:var(--ink);
+  }
+  .kpi-delta{
+    display:inline-flex; align-items:center; gap:4px;
+    padding:4px 10px 4px 8px; border-radius:20px;
+    font-size:10.5px; font-weight:600;
+    margin-top:10px; align-self:flex-start;
+  }
+  .kpi-delta svg{ width:11px; height:11px; }
+  .kpi-delta.good{ background:var(--mint-soft); color:#1FA77F; }
+  .kpi-delta.bad{ background:var(--rose-soft); color:var(--rose); }
+  .kpi-sub{ font-size:11px; color:var(--muted); margin-top:10px; }
+
+  /* Donut card */
+  .donut-card{ display:flex; align-items:center; gap:12px; padding:16px 18px; }
+  .donut-info{ flex:1; min-width:0; }
+  .donut-sub{ font-size:11px; color:var(--ink2); font-weight:500; margin-bottom:6px; }
+  .donut-legend{ display:flex; flex-direction:column; gap:4px; margin-top:4px; }
+  .legend-row{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--ink2); font-weight:500; }
+  .legend-dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .legend-row b{ margin-left:auto; font-weight:600; color:var(--ink); }
+
+  /* Section heading */
+  .sec-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:10px; flex-wrap:wrap; }
+  .sec-title{ font-size:14px; font-weight:600; letter-spacing:-.2px; color:var(--ink); }
+  .sec-sub{ font-size:11px; color:var(--muted); margin-top:3px; }
+  .legend-bar{ display:flex; gap:12px; align-items:center; }
+  .lg{ display:inline-flex; align-items:center; gap:5px; font-size:11px; color:var(--ink2); font-weight:500; }
+  .lg-dot{ width:7px; height:7px; border-radius:50%; }
+  .target-line{ width:24px; height:0; border-top:2px dashed var(--muted2); }
+
+  /* Bars */
+  .bars-wrap{ display:flex; align-items:flex-end; gap:8px; height:200px; padding:0 2px; }
+  .bar-col{ flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; min-width:0; }
+  .bar-stack{ width:100%; max-width:24px; display:flex; flex-direction:column-reverse; gap:2px; }
+  .bar-seg{ width:100%; border-radius:3px; transition:opacity .15s; }
+  .bar-col:hover .bar-seg{ opacity:.8; }
+  .bar-lbl{ font-size:9.5px; color:var(--muted); font-weight:500; text-transform:uppercase; letter-spacing:.3px; }
+
+  /* Table */
+  .tbl-scroll{ overflow:auto; }
+  .tbl{ width:100%; border-collapse:collapse; font-size:12.5px; }
+  .tbl thead th{
+    position:sticky; top:0; z-index:1;
+    background:var(--panel);
+    text-align:left; font-weight:500; color:var(--muted);
+    font-size:11px; padding:8px 10px; border-bottom:1px solid var(--line);
+  }
+  .tbl td{ padding:10px 10px; border-bottom:1px solid var(--line); color:var(--ink2); font-weight:500; }
+  .tbl tr:last-child td{ border-bottom:none; }
+  .tbl tr:hover td{ background:var(--bg); }
+  .avatar-cell{ display:flex; align-items:center; gap:9px; }
+  .avatar{ width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-size:10.5px; font-weight:600; flex-shrink:0; }
+  .stage-pill{ display:inline-block; padding:3px 9px; border-radius:12px; font-size:10.5px; font-weight:600; white-space:nowrap; }
+  .status-pill{
+    display:inline-flex; align-items:center; gap:4px;
+    padding:2px 9px 2px 7px; border-radius:12px;
+    font-size:10px; font-weight:600;
+  }
+  .status-pill .pill-glyph{ display:flex; align-items:center; }
+  .status-pill svg{ width:10px; height:10px; }
+  .pill-target{ background:var(--mint-soft); color:#1FA77F; }
+  .pill-miss{ background:var(--rose-soft); color:var(--rose); }
+
+  /* Platform breakdown rows */
+  .plat-row{ margin-bottom:14px; }
+  .plat-row:last-child{ margin-bottom:0; }
+
+  /* Agent bars */
+  .agent-bar-wrap{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .agent-bar-name{ width:72px; font-size:12px; font-weight:600; color:var(--ink); flex-shrink:0; text-align:right; }
+  .agent-bar-track{ flex:1; height:20px; background:var(--bg); border-radius:6px; position:relative; overflow:visible; }
+  .agent-bar-fill{ height:100%; border-radius:6px; transition:width 1.2s cubic-bezier(.22,1,.36,1); position:relative; }
+  .agent-bar-target{ position:absolute; top:-5px; bottom:-5px; width:2px; background:rgba(0,0,0,0.25); border-radius:2px; pointer-events:none; }
+  .agent-bar-nums{ width:150px; flex-shrink:0; display:flex; gap:10px; font-size:11px; color:var(--muted); }
+  .agent-bar-nums b{ color:var(--ink); font-weight:600; }
+
+  /* SVG line draw */
+  @keyframes drawLine{ from{ stroke-dashoffset:3000; } to{ stroke-dashoffset:0; } }
+  .svg-line{ stroke-dasharray:3000; stroke-dashoffset:3000; animation:drawLine 1.8s cubic-bezier(.22,1,.36,1) .3s both; }
+
+  /* Motion CSS variables + keyframes */
+  :root{
+    --motion-dur: 400ms;
+    --motion-ease: cubic-bezier(.22,1,.36,1);
+    --motion-stagger: 60ms;
+  }
+  @keyframes rise   { from{ opacity:0; transform:translateY(10px); } to{ opacity:1; transform:translateY(0); } }
+  @keyframes fadeUp { from{ opacity:0; }                              to{ opacity:1; } }
+  @keyframes scaleIn{ from{ opacity:0; transform:scale(.94); }        to{ opacity:1; transform:scale(1); } }
+  @keyframes slideR { from{ opacity:0; transform:translateX(-14px); } to{ opacity:1; transform:translateX(0); } }
+  @keyframes blurIn { from{ opacity:0; filter:blur(8px); }            to{ opacity:1; filter:blur(0); } }
+  @keyframes pop    { 0%{ opacity:0; transform:scale(.85); } 60%{ transform:scale(1.04); } 100%{ opacity:1; transform:scale(1); } }
+  @keyframes popIn  { from{ opacity:0; transform:translateY(-4px) scale(.98); } to{ opacity:1; transform:translateY(0) scale(1); } }
+  @keyframes fadeIn { from{ opacity:0; } to{ opacity:1; } }
+  .view-fade{ animation:fadeIn .25s ease-out; }
+
+  /* Empty state */
+  .empty{ padding:32px 16px; text-align:center; color:var(--muted); font-size:12.5px; }
+  .empty-glyph{ font-size:28px; margin-bottom:8px; color:var(--muted2); }
+
+  /* Loading / error */
+  .loader{ display:flex; align-items:center; justify-content:center; height:60vh; flex-direction:column; gap:16px; color:var(--muted); }
+  .spinner{ width:36px; height:36px; border:3px solid var(--line2); border-top-color:var(--indigo); border-radius:50%; animation:spin .8s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .err-box{ background:var(--rose-soft); color:var(--rose); padding:14px 18px; border-radius:12px; font-size:13px; max-width:500px; margin:40px auto; }
+
+  /* Responsive */
+  @media (max-width:1200px){
+    .row-mix{ grid-template-columns:1fr 1fr; }
+    .g21{ grid-template-columns:1fr; }
+    .g12{ grid-template-columns:1fr; }
+  }
+  @media (max-width:880px){
+    .app{ grid-template-columns:1fr; }
+    .sidebar{ display:none; }
+    .g4{ grid-template-columns:1fr 1fr; }
+    .g2{ grid-template-columns:1fr; }
+    .row-mix{ grid-template-columns:1fr 1fr; }
+    .topbar{ flex-direction:column; align-items:stretch; }
+    .topbar-left{ justify-content:space-between; }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:'DM Sans',sans-serif;color:#9AA0B4;font-size:14px;">Connecting…</div>
+</div>
+
+<script type="text/babel" data-presets="env,react">
+/* ═══════════════════════════════════════════════════════════════
+   components.jsx — shared primitives, sidebar, topbar, KPI, donut
+   ═══════════════════════════════════════════════════════════════ */
+
+const { useState, useEffect, useMemo, useRef } = React;
+
+/* ── Color tokens ──────────────────────────────────────────── */
+const PC     = { Google:'#5B6CFF', Meta:'#8B5CF6', Bing:'#3DD0A4' };
+const PCsoft = { Google:'#EEF0FF', Meta:'#F2EDFF', Bing:'#E2F8EF' };
+
+const STAGE_COLOR = {
+  'New':         '#5AC8FA',
+  'Qualified':   '#5B6CFF',
+  'Demo':        '#8B5CF6',
+  'Proposal':    '#F5B544',
+  'Negotiation': '#FF6B7A',
+  'Closed Won':  '#3DD0A4',
+  'Closed Lost': '#9AA0B4',
+};
+const stageColor = (s) => STAGE_COLOR[s] || '#C7CADA';
+
+/* ── Helpers ─────────────────────────────────────────────── */
+const gbp = (v, d = 0) => '£' + Number(v || 0).toLocaleString('en-GB', { maximumFractionDigits: d });
+const fmt = (v) => Number(v || 0).toLocaleString('en-GB');
+const fmtSec = (v) => {
+  if (!v) return '—';
+  const m = Math.floor(v / 60), s = Math.floor(v % 60);
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+};
+
+/* Delta calculator */
+function delta(cur, prev, goodDir = 'up') {
+  if (prev === 0 || prev == null) return null;
+  const pct = ((cur - prev) / prev) * 100;
+  if (!isFinite(pct)) return null;
+  const up = pct >= 0;
+  const good = goodDir === 'up' ? up : !up;
+  return { pct: Math.abs(pct).toFixed(1) + '%', up, good, raw: pct };
+}
+
+/* Date helpers for period resolution */
+function isoToday() { return new Date().toISOString().slice(0, 10); }
+function isoSub(iso, days) { const d = new Date(iso); d.setDate(d.getDate() - days); return d.toISOString().slice(0, 10); }
+function isoYest() { return isoSub(isoToday(), 1); }
+function isoMonthStart() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10); }
+function isoQStart() { const d = new Date(); const q = Math.floor(d.getMonth() / 3); return new Date(d.getFullYear(), q * 3, 1).toISOString().slice(0, 10); }
+
+function periodDates(id) {
+  const yest = isoYest();
+  switch (id) {
+    case 'today':     return { d0: isoToday(), d1: isoToday() };
+    case 'yesterday': return { d0: yest,       d1: yest };
+    case '7d':        return { d0: isoSub(yest, 6),  d1: yest };
+    case '30d':       return { d0: isoSub(yest, 29), d1: yest };
+    case 'mtd':       return { d0: isoMonthStart(),  d1: yest };
+    case 'qtd':       return { d0: isoQStart(),      d1: yest };
+    case '90d':       return { d0: isoSub(yest, 89), d1: yest };
+    default:          return { d0: isoSub(yest, 29), d1: yest };
+  }
+}
+
+/* ── Icons ──────────────────────────────────────────────── */
+const Ic = {
+  chart:     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
+  briefcase: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>,
+  phone:     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>,
+  spend:     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+  leads:     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+  appt:      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  sale:      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
+  wallet:    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>,
+  calendar:  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  target:    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>,
+  refresh:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>,
+  chev:      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>,
+  check:     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
+  x:         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  arrowUp:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 14 12 8 18 14"/></svg>,
+  arrowDown: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 10 12 16 18 10"/></svg>,
+  settings:  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+};
+
+/* ── Hooks ──────────────────────────────────────────────── */
+function useMounted(delay = 80) {
+  const [m, setM] = useState(false);
+  useEffect(() => { const id = setTimeout(() => setM(true), delay); return () => clearTimeout(id); }, []);
+  return m;
+}
+
+function useClickAway(ref, onAway) {
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) onAway(); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [onAway]);
+}
+
+/* ── Sidebar ─────────────────────────────────────────── */
+function Sidebar({ activeTab, setActiveTab }) {
+  const items = [
+    { label: 'Marketing', icon: Ic.chart },
+    { label: 'Sales',     icon: Ic.briefcase },
+    { label: 'Telesales', icon: Ic.phone },
+  ];
+  return (
+    <aside className="sidebar">
+      <div className="logo">
+        <div className="logo-mark">T</div>
+        <div className="logo-name">Trustwarehouse</div>
+      </div>
+      <div className="nav-label">Dashboards</div>
+      {items.map(it => (
+        <button key={it.label}
+          className={`nav-item${activeTab === it.label ? ' active' : ''}`}
+          onClick={() => setActiveTab(it.label)}>
+          {it.icon}<span>{it.label}</span>
+        </button>
+      ))}
+    </aside>
+  );
+}
+
+/* ── Period picker ───────────────────────────────────── */
+const PRESETS = [
+  { id: 'today',     label: 'Today' },
+  { id: 'yesterday', label: 'Yesterday' },
+  { id: '7d',        label: 'Last 7 days' },
+  { id: '30d',       label: 'Last 30 days' },
+  { id: 'mtd',       label: 'Month to date' },
+  { id: 'qtd',       label: 'Quarter to date' },
+  { id: '90d',       label: 'Last 90 days' },
+];
+
+function PeriodPicker({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useClickAway(ref, () => setOpen(false));
+  return (
+    <div ref={ref} className="period-wrap">
+      <button className="period-btn" onClick={() => setOpen(o => !o)}>
+        {Ic.calendar}
+        <span>{value.label}</span>
+        {Ic.chev}
+      </button>
+      {open && (
+        <div className="period-pop">
+          <div className="period-pop-head">Period</div>
+          {PRESETS.map(p => (
+            <button key={p.id}
+              className={`period-pop-item${value.id === p.id ? ' active' : ''}`}
+              onClick={() => { onChange(p); setOpen(false); }}>
+              {p.label}
+              {value.id === p.id && <span className="period-pop-check">{Ic.check}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Custom date range picker ────────────────────────── */
+function fmtRangeLabel(d0, d1) {
+  const fmt = (iso) => {
+    const [, m, d] = iso.split('-');
+    const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return parseInt(d, 10) + ' ' + M[parseInt(m, 10) - 1];
+  };
+  return d0 === d1 ? fmt(d0) : fmt(d0) + ' – ' + fmt(d1);
+}
+
+function CalendarPicker({ onApply, onClose }) {
+  const today = isoToday();
+  const now = new Date();
+  const [vy, setVy] = useState(now.getFullYear());
+  const [vm, setVm] = useState(now.getMonth());
+  const [start, setStart] = useState(null);
+  const [end,   setEnd]   = useState(null);
+  const [hover, setHover] = useState(null);
+
+  const goPrev = () => { if (vm === 0) { setVm(11); setVy(y => y - 1); } else setVm(m => m - 1); };
+  const goNext = () => { if (vm === 11) { setVm(0); setVy(y => y + 1); } else setVm(m => m + 1); };
+
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const DOW = ['Mo','Tu','We','Th','Fr','Sa','Su'];
+
+  const cells = React.useMemo(() => {
+    const firstDay = new Date(vy, vm, 1).getDay();
+    const dInM    = new Date(vy, vm + 1, 0).getDate();
+    const offset  = (firstDay + 6) % 7;
+    const prevM = vm === 0 ? 11 : vm - 1, prevY = vm === 0 ? vy - 1 : vy;
+    const nextM = vm === 11 ? 0 : vm + 1, nextY = vm === 11 ? vy + 1 : vy;
+    const dInPrev = new Date(prevY, prevM + 1, 0).getDate();
+    const pad = n => String(n).padStart(2, '0');
+    const iso = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
+    const out = [];
+    for (let i = offset - 1; i >= 0; i--) out.push({ iso: iso(prevY, prevM, dInPrev - i), day: dInPrev - i, other: true });
+    for (let d = 1; d <= dInM; d++) out.push({ iso: iso(vy, vm, d), day: d, other: false });
+    for (let d = 1; out.length < 42; d++) out.push({ iso: iso(nextY, nextM, d), day: d, other: true });
+    return out;
+  }, [vy, vm]);
+
+  const handleDay = (iso) => {
+    if (iso > today) return;
+    if (!start || (start && end)) { setStart(iso); setEnd(null); }
+    else if (iso < start) { setEnd(start); setStart(iso); }
+    else setEnd(iso);
+  };
+
+  const effEnd = end || (start && hover ? hover : null);
+  const lo = start && effEnd ? (start <= effEnd ? start : effEnd) : null;
+  const hi = start && effEnd ? (start <= effEnd ? effEnd : start) : null;
+
+  const dayCls = ({ iso, other }) => {
+    let c = 'cal-day';
+    if (other) c += ' other';
+    if (iso === today) c += ' today';
+    if (iso > today) c += ' future';
+    if (lo && hi) {
+      if (iso === lo && iso === hi) c += ' range-start range-end range-single';
+      else if (iso === lo) c += ' range-start';
+      else if (iso === hi) c += ' range-end';
+      else if (iso > lo && iso < hi) c += ' in-range';
+    } else if (start && !effEnd && iso === start) c += ' range-start range-single';
+    return c;
+  };
+
+  const fmtD = (iso) => {
+    if (!iso) return '–';
+    const [, m, d] = iso.split('-');
+    const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return parseInt(d, 10) + ' ' + M[parseInt(m, 10) - 1];
+  };
+
+  const hoverLabel = hover && start && !end && hover !== start ? fmtD(hover) : fmtD(end || start);
+  const rangeLabel = start ? fmtD(start) + ' – ' + hoverLabel : 'Select a start date';
+
+  return (
+    <div className="cal-pop">
+      <div className="cal-nav">
+        <button className="cal-nav-btn" onClick={goPrev}>‹</button>
+        <span className="cal-nav-title">{MONTHS[vm]} {vy}</span>
+        <button className="cal-nav-btn" onClick={goNext}>›</button>
+      </div>
+      <div className="cal-dow">{DOW.map(d => <span key={d}>{d}</span>)}</div>
+      <div className="cal-grid">
+        {cells.map(cell => (
+          <div key={cell.iso} className={dayCls(cell)}
+            onClick={() => handleDay(cell.iso)}
+            onMouseEnter={() => start && !end && setHover(cell.iso)}
+            onMouseLeave={() => setHover(null)}>
+            {cell.day}
+          </div>
+        ))}
+      </div>
+      <div className="cal-footer">
+        <span className="cal-range-label">{rangeLabel}</span>
+        <button className="cal-cancel" onClick={onClose}>Cancel</button>
+        <button className="cal-apply" disabled={!start} onClick={() => onApply(start, end || start)}>Apply</button>
+      </div>
+    </div>
+  );
+}
+
+function DateRangePicker({ onApply }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useClickAway(ref, () => setOpen(false));
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button className={`icon-btn${open ? ' active' : ''}`} title="Custom date range" onClick={() => setOpen(o => !o)}>
+        {Ic.calendar}
+      </button>
+      {open && (
+        <CalendarPicker
+          onApply={(d0, d1) => { onApply(d0, d1); setOpen(false); }}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── Topbar ──────────────────────────────────────────── */
+function Topbar({ title, activeTab, setActiveTab, period, setPeriod, refreshedAt, onRefresh, onTweaks, onCustomDate }) {
+  const tabs = ['Marketing', 'Sales', 'Telesales'];
+  const minsAgo = Math.max(1, Math.round((Date.now() - new Date(refreshedAt).getTime()) / 60000));
+  return (
+    <div className="topbar">
+      <div className="topbar-left">
+        <div className="page-title">{title}</div>
+        <div className="tabs">
+          {tabs.map(t => (
+            <button key={t} className={`tab${activeTab === t ? ' active' : ''}`} onClick={() => setActiveTab(t)}>
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="topbar-right">
+        <div className="refreshed">Updated {minsAgo}m ago</div>
+        <PeriodPicker value={period} onChange={setPeriod} />
+        <DateRangePicker onApply={onCustomDate} />
+        <button className="icon-btn" onClick={onRefresh} title="Refresh data">{Ic.refresh}</button>
+        <button className="icon-btn" onClick={onTweaks} title="Motion tweaks">{Ic.settings}</button>
+      </div>
+    </div>
+  );
+}
+
+/* ── KPI Card ────────────────────────────────────────── */
+function Kpi({ label, value, sub, delta: d, icon, iconBg, iconColor, delay = 0 }) {
+  let footer;
+  if (d) {
+    footer = (
+      <div className={`kpi-delta ${d.good ? 'good' : 'bad'}`}>
+        {d.up ? Ic.arrowUp : Ic.arrowDown}
+        <span>{d.pct} {d.up ? 'higher' : 'lower'} than last period</span>
+      </div>
+    );
+  } else if (sub) {
+    footer = <div className="kpi-sub">{sub}</div>;
+  } else {
+    footer = <div className="kpi-sub">vs last period — no data</div>;
+  }
+  return (
+    <div className="card kpi" style={{ animationDelay: delay + 'ms' }}>
+      <div className="card-head">
+        <div className="card-label">{label}</div>
+        <div className="card-icon" style={{ background: iconBg, color: iconColor }}>{icon}</div>
+      </div>
+      <div className="kpi-value">{value}</div>
+      {footer}
+    </div>
+  );
+}
+
+/* ── Donut card ──────────────────────────────────────── */
+function DonutCard({ title, segments, total, totalLabel, sub }) {
+  const size = 80, stroke = 13, r = (size - stroke) / 2, c = 2 * Math.PI * r;
+  let offset = 0;
+  const sum = segments.reduce((s, x) => s + x.value, 0) || 1;
+  return (
+    <div className="card donut-card">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#F2F3F7" strokeWidth={stroke}/>
+        {segments.map((s, i) => {
+          const len = (s.value / sum) * c, dash = `${len} ${c - len}`;
+          const el = <circle key={i} cx={size/2} cy={size/2} r={r} fill="none" stroke={s.color}
+            strokeWidth={stroke} strokeDasharray={dash} strokeDashoffset={-offset}
+            transform={`rotate(-90 ${size/2} ${size/2})`} strokeLinecap="butt"/>;
+          offset += len; return el;
+        })}
+        <text x={size/2} y={size/2 - 1} textAnchor="middle" fontSize="10.5" fontWeight="700" fill="#171A2B">{total}</text>
+        <text x={size/2} y={size/2 + 11} textAnchor="middle" fontSize="7" fill="#9AA0B4">{totalLabel}</text>
+      </svg>
+      <div className="donut-info">
+        <div className="card-label" style={{ marginBottom: 4 }}>{title}</div>
+        {sub && <div className="donut-sub">{sub}</div>}
+        <div className="donut-legend">
+          {segments.map((s, i) => (
+            <div className="legend-row" key={i}>
+              <span className="legend-dot" style={{ background: s.color }}/>
+              <span>{s.label}</span>
+              <b>{Math.round(s.value / sum * 100)}%</b>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Empty placeholder ───────────────────────────────── */
+function EmptyCard({ title, message }) {
+  return (
+    <div className="card">
+      {title && <div className="sec-head"><div className="sec-title">{title}</div></div>}
+      <div className="empty">
+        <div className="empty-glyph">∅</div>
+        <div>{message || 'No data for this period.'}</div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   charts.jsx — all chart components
+   ═══════════════════════════════════════════════════════════════ */
+
+const { useState: useStateC, useMemo: useMemoC, useRef: useRefC, useEffect: useEffectC } = React;
+
+/* Smart bucketing: ≤14d daily, 15-90d weekly, >90d monthly */
+function bucketSpend(daily) {
+  if (!daily.length) return { rows: [], granularity: 'day' };
+  const dates = [...new Set(daily.map(r => r.date))].sort();
+  const d0 = new Date(dates[0]), d1 = new Date(dates[dates.length - 1]);
+  const days = Math.round((d1 - d0) / 86400000) + 1;
+  const gran = days <= 14 ? 'day' : days <= 90 ? 'week' : 'month';
+  const keyOf = (iso) => {
+    const d = new Date(iso);
+    if (gran === 'day')   return iso;
+    if (gran === 'month') return iso.slice(0, 7);
+    const tmp = new Date(d); tmp.setUTCDate(tmp.getUTCDate() - ((tmp.getUTCDay() + 6) % 7));
+    return tmp.toISOString().slice(0, 10);
+  };
+  const labelOf = (key) => {
+    if (gran === 'day')   { const p = key.split('-'); return p[2] + '/' + p[1]; }
+    if (gran === 'month') { const [y, m] = key.split('-'); return new Date(+y, +m - 1, 1).toLocaleDateString('en-GB', { month: 'short' }); }
+    const p = key.split('-'); return 'Wk ' + p[2] + '/' + p[1];
+  };
+  const m = {};
+  daily.forEach(r => {
+    const k = keyOf(r.date);
+    if (!m[k]) m[k] = { key: k, label: labelOf(k), Google: 0, Meta: 0, Bing: 0 };
+    m[k][r.platform] = (m[k][r.platform] || 0) + (r.spend || 0);
+  });
+  const rows = Object.values(m).sort((a, b) => a.key.localeCompare(b.key));
+  return { rows, granularity: gran };
+}
+
+/* ── Spend by platform (smart-bucketed stacked bars) ─── */
+function SpendChart({ daily }) {
+  if (!daily.length) return <EmptyCard title="Ad spend by platform" message="No spend data for this period." />;
+  const { rows, granularity } = useMemoC(() => bucketSpend(daily), [daily]);
+  const maxV = Math.max(...rows.map(r => r.Google + r.Meta + r.Bing), 1);
+  const H = 200;
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Ad spend by platform</div>
+          <div className="sec-sub">{granularity === 'day' ? 'Daily' : granularity === 'week' ? 'Weekly' : 'Monthly'} · GBP</div>
+        </div>
+        <div className="legend-bar">
+          {['Google', 'Meta', 'Bing'].map(p => (
+            <span key={p} className="lg"><span className="lg-dot" style={{ background: PC[p] }}/>{p}</span>
+          ))}
+        </div>
+      </div>
+      <div className="bars-wrap">
+        {rows.map(r => {
+          const total = r.Google + r.Meta + r.Bing;
+          const h = (v) => (v / maxV) * H;
+          return (
+            <div className="bar-col" key={r.key} title={`${r.label}: ${gbp(total)}`}>
+              <div className="bar-stack">
+                {r.Google > 0 && <div className="bar-seg" style={{ height: h(r.Google), background: PC.Google }}/>}
+                {r.Meta   > 0 && <div className="bar-seg" style={{ height: h(r.Meta),   background: PC.Meta }}/>}
+                {r.Bing   > 0 && <div className="bar-seg" style={{ height: h(r.Bing),   background: PC.Bing }}/>}
+              </div>
+              <div className="bar-lbl">{r.label}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ── Activity line chart (leads only) ───────────────── */
+function ActivityChart({ daily }) {
+  const data = useMemoC(() => {
+    const m = {};
+    daily.forEach(r => {
+      if (!m[r.date]) m[r.date] = { date: r.date, leads: 0 };
+      m[r.date].leads += r.leads || 0;
+    });
+    return Object.values(m).sort((a, b) => a.date.localeCompare(b.date));
+  }, [daily]);
+  if (!data.length) return <EmptyCard title="Daily leads" message="No daily activity data." />;
+  const W = 680, H = 220, P = { t: 18, r: 18, b: 28, l: 36 };
+  const cw = W - P.l - P.r, ch = H - P.t - P.b;
+  const maxV = Math.max(...data.map(d => d.leads), 1);
+  const x = (i) => P.l + (i / (data.length - 1 || 1)) * cw;
+  const y = (v) => P.t + ch - (v / maxV) * ch;
+  const path = (k) => data.map((d, i) => (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ' ' + y(d[k]).toFixed(1)).join(' ');
+  const area = (k) => path(k) + ` L ${x(data.length - 1).toFixed(1)} ${(P.t + ch).toFixed(1)} L ${P.l} ${(P.t + ch).toFixed(1)} Z`;
+  const step = Math.max(1, Math.ceil(data.length / 5));
+  const fmtD = (d) => { const p = d.split('-'); return p[2] + '/' + p[1]; };
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Daily leads</div>
+          <div className="sec-sub">Paid leads per day by platform</div>
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ overflow: 'visible' }}>
+        <defs>
+          <linearGradient id="glv" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#8B5CF6" stopOpacity=".18"/>
+            <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        {[0, .5, 1].map(t => (
+          <line key={t} x1={P.l} x2={W - P.r} y1={P.t + ch * (1 - t)} y2={P.t + ch * (1 - t)} stroke="#EDEEF3" strokeWidth="1" strokeDasharray="3 4"/>
+        ))}
+        {[0, .5, 1].map(t => (
+          <text key={t} x={P.l - 6} y={P.t + ch * (1 - t) + 4} textAnchor="end" fontSize="9.5" fill="#9AA0B4">{Math.round(maxV * t)}</text>
+        ))}
+        {data.filter((_, i) => i % step === 0 || i === data.length - 1).map(d => (
+          <text key={d.date} x={x(data.indexOf(d))} y={H - 6} textAnchor="middle" fontSize="9.5" fill="#9AA0B4">{fmtD(d.date)}</text>
+        ))}
+        <path d={area('leads')} fill="url(#glv)"/>
+        <path d={path('leads')} fill="none" stroke="#8B5CF6" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="svg-line"/>
+      </svg>
+    </div>
+  );
+}
+
+/* ── Platform breakdown ──────────────────────────────── */
+function PlatformBreakdown({ platforms, totalSpend }) {
+  const m = useMounted(120);
+  if (!platforms.length) return null;
+  return (
+    <div className="card">
+      <div className="sec-head"><div className="sec-title">Platform breakdown</div></div>
+      {platforms.map(p => {
+        const pct = totalSpend > 0 ? Math.round(p.spend / totalSpend * 100) : 0;
+        const color = PC[p.platform] || '#9AA0B4';
+        const soft = PCsoft[p.platform] || '#F2F3F7';
+        return (
+          <div className="plat-row" key={p.platform}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+              <span style={{ width: 28, height: 28, borderRadius: 8, background: soft, color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11 }}>{p.platform[0]}</span>
+              <span style={{ fontWeight: 600, color: 'var(--ink)', fontSize: 13 }}>{p.platform}</span>
+              <span style={{ marginLeft: 'auto', fontWeight: 600, fontSize: 13, color: 'var(--ink)' }}>{gbp(p.spend)}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ flex: 1, height: 7, background: 'var(--bg)', borderRadius: 5, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: (m ? pct : 0) + '%', background: color, borderRadius: 5, transition: 'width 1.2s cubic-bezier(.22,1,.36,1)' }}/>
+              </div>
+              <span style={{ width: 30, textAlign: 'right', fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>{pct}%</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 6, marginTop: 8, fontSize: 11, color: 'var(--muted)' }}>
+              {[['Leads', fmt(p.leads)], ['CPL', gbp(p.cpl ?? 0)]].map(([l, v]) => (
+                <div key={l}>{l}<b style={{ display: 'block', color: 'var(--ink)', fontSize: 12.5, fontWeight: 600, marginTop: 2 }}>{v}</b></div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Lead sources table ───────────────────────────────── */
+function LeadSourcesCard({ sources }) {
+  if (!sources.length) return <EmptyCard title="Lead sources" message="No lead-source data." />;
+  const total = sources.reduce((s, r) => s + r.leads, 0) || 1;
+  const COLS = { Google: PC.Google, Meta: PC.Meta, Bing: PC.Bing, Organic: '#9AA0B4' };
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div className="sec-title">Lead sources</div>
+        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{fmt(total)} total</div>
+      </div>
+      <div className="tbl-scroll" style={{ maxHeight: 320 }}>
+        <table className="tbl">
+          <thead><tr>
+            <th>Source</th>
+            <th style={{ textAlign: 'right' }}>Leads</th>
+            <th style={{ textAlign: 'right' }}>Share</th>
+          </tr></thead>
+          <tbody>
+            {sources.map(r => {
+              const color = COLS[r.source] || '#9AA0B4';
+              return (
+                <tr key={r.source}>
+                  <td>
+                    <div className="avatar-cell">
+                      <span style={{ width: 24, height: 24, borderRadius: 6, background: color + '18', color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{r.source[0]}</span>
+                      <span style={{ color: 'var(--ink)', fontWeight: 600 }}>{r.source}</span>
+                    </div>
+                  </td>
+                  <td style={{ textAlign: 'right', color: 'var(--ink)', fontWeight: 600 }}>{fmt(r.leads)}</td>
+                  <td style={{ textAlign: 'right', color: 'var(--muted)' }}>{Math.round(r.leads / total * 100)}%</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── Stage bars with avg age ─────────────────────────── */
+function StageBreakdown({ stages }) {
+  const m = useMounted(100);
+  if (!stages.length) return <EmptyCard title="Pipeline by stage" />;
+  const open = stages.filter(s => !s.stage.startsWith('Closed'));
+  const maxVal = Math.max(...open.map(s => s.total_value), 1);
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Pipeline by stage</div>
+          <div className="sec-sub">Open opportunities · value &amp; count</div>
+        </div>
+      </div>
+      {open.map(s => {
+        const pct = s.total_value / maxVal;
+        const color = stageColor(s.stage);
+        return (
+          <div key={s.stage} style={{ marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }}/>
+                <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink)' }}>{s.stage}</span>
+                <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                  {s.count} deal{s.count !== 1 ? 's' : ''}
+                  {s.avg_age_days != null ? ` · avg ${s.avg_age_days}d` : ''}
+                </span>
+              </div>
+              <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink)' }}>{gbp(s.total_value)}</span>
+            </div>
+            <div style={{ height: 8, background: 'var(--bg)', borderRadius: 5, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: (m ? Math.round(pct * 100) : 0) + '%', background: color, borderRadius: 5, transition: 'width 1.2s cubic-bezier(.22,1,.36,1)' }}/>
+            </div>
+            <div style={{ marginTop: 4, fontSize: 10.5, color: 'var(--muted)' }}>Weighted: {gbp(s.weighted_value)}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Win rate by stage (replaces pipeline donut) ──────── */
+function WinRateByStage({ rows }) {
+  const m = useMounted(140);
+  if (!rows || !rows.length) return <EmptyCard title="Win rate by stage" />;
+  const maxRate = Math.max(...rows.map(r => r.rate), 1);
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Win rate by stage</div>
+          <div className="sec-sub">% of deals reaching each stage that close Won</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {rows.map(r => {
+          const color = stageColor(r.stage);
+          const pct = r.rate / maxRate;
+          return (
+            <div key={r.stage}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink)' }}>{r.stage}</span>
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                  <b style={{ color, fontSize: 14 }}>{r.rate}%</b>
+                  <span style={{ marginLeft: 8 }}>{r.won}/{r.touched}</span>
+                </span>
+              </div>
+              <div style={{ height: 10, background: 'var(--bg)', borderRadius: 6, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: (m ? Math.round(pct * 100) : 0) + '%',
+                  background: `linear-gradient(90deg, ${color}, ${color}aa)`,
+                  borderRadius: 6,
+                  transition: 'width 1.2s cubic-bezier(.22,1,.36,1)',
+                }}/>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {rows.length > 0 && (
+        <div style={{ marginTop: 14, padding: '10px 12px', background: 'var(--bg)', borderRadius: 8, fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.5 }}>
+          Reading: if a deal reaches <b style={{ color: 'var(--ink)' }}>{rows[rows.length - 1]?.stage}</b>, it has a {rows[rows.length - 1]?.rate}% chance of closing.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Recent opportunities table ─────────────────────── */
+function OpportunitiesTable({ recent }) {
+  if (!recent.length) return <EmptyCard title="Open opportunities" />;
+  const fmtDate = (d) => { if (!d) return '—'; const p = d.split('-'); return p[2] + '/' + p[1] + '/' + p[0].slice(2); };
+  const initials = (s) => s.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
+  const AVATAR_COLORS = ['#5B6CFF', '#8B5CF6', '#3DD0A4', '#F5B544', '#FF6B7A', '#5AC8FA'];
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div className="sec-title">Open opportunities</div>
+        <span style={{ fontSize: 11, color: 'var(--muted)' }}>{recent.length} shown</span>
+      </div>
+      <div className="tbl-scroll" style={{ maxHeight: 380 }}>
+        <table className="tbl">
+          <thead><tr>
+            <th>Opportunity</th>
+            <th>Contact</th>
+            <th>Stage</th>
+            <th style={{ textAlign: 'right' }}>Value</th>
+            <th style={{ textAlign: 'right' }}>Prob.</th>
+            <th>Sector</th>
+            <th>Created</th>
+          </tr></thead>
+          <tbody>
+            {recent.map((r, i) => (
+              <tr key={i}>
+                <td style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--ink)', fontWeight: 600 }}>{r.name}</td>
+                <td>
+                  <div className="avatar-cell">
+                    <span className="avatar" style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}>{initials(r.contact)}</span>
+                    <span style={{ color: 'var(--ink)', fontWeight: 500 }}>{r.contact}</span>
+                  </div>
+                </td>
+                <td>
+                  <span className="stage-pill" style={{ background: stageColor(r.stage) + '20', color: stageColor(r.stage) }}>{r.stage}</span>
+                </td>
+                <td style={{ textAlign: 'right', color: 'var(--ink)', fontWeight: 600 }}>{r.amount > 0 ? gbp(r.amount) : '—'}</td>
+                <td style={{ textAlign: 'right' }}>{r.probability > 0 ? r.probability + '%' : '—'}</td>
+                <td style={{ fontSize: 11, color: 'var(--muted)' }}>{r.sector || '—'}</td>
+                <td style={{ fontSize: 11, color: 'var(--muted)' }}>{fmtDate(r.created_date)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── Agent bars ──────────────────────────────────────── */
+function AgentBars({ agents }) {
+  const m = useMounted(100);
+  if (!agents.length) return <EmptyCard title="Agent performance" />;
+  const maxOut = Math.max(...agents.map(a => a.outbound), 1);
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Agent performance</div>
+          <div className="sec-sub">Outbound calls · target = 3 calls per appointment</div>
+        </div>
+        <div className="legend-bar">
+          <span className="lg"><span className="target-line"/> Target</span>
+          <span className="lg"><span className="lg-dot" style={{ background: 'var(--mint)' }}/>On target</span>
+          <span className="lg"><span className="lg-dot" style={{ background: 'var(--rose)' }}/>Off target</span>
+        </div>
+      </div>
+      {agents.map(a => {
+        const color = a.on_target ? '#3DD0A4' : '#FF6B7A';
+        const barPct = a.outbound / maxOut;
+        const targetPct = a.appts > 0 ? Math.min((a.appts * 3) / maxOut, 1) : null;
+        return (
+          <div className="agent-bar-wrap" key={a.name}>
+            <div className="agent-bar-name">{a.name}</div>
+            <div className="agent-bar-track">
+              <div className="agent-bar-fill" style={{
+                width: m ? Math.round(barPct * 100) + '%' : '0%',
+                background: `linear-gradient(90deg, ${color}cc, ${color}88)`,
+                minWidth: m && a.outbound > 0 ? '4px' : '0',
+              }}/>
+              {targetPct && m && <div className="agent-bar-target" style={{ left: Math.round(targetPct * 100) + '%' }} title={`Target: ${a.appts * 3} calls`}/>}
+            </div>
+            <div className="agent-bar-nums">
+              <span>{a.outbound} out</span>
+              <span style={{ color: '#1FA77F', fontWeight: 600 }}>{a.appts} appt</span>
+              <span style={{ color: 'var(--indigo)', fontWeight: 600 }}>{a.sales} sale</span>
+            </div>
+            <div>
+              <span className={a.on_target ? 'status-pill pill-target' : 'status-pill pill-miss'}>
+                <span className="pill-glyph">{a.on_target ? Ic.check : Ic.x}</span>
+                {a.on_target ? 'On target' : 'Off target'}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Telesales daily trend (dual-axis) ───────────────── */
+function TsTrendChart({ daily }) {
+  if (!daily.length) return <EmptyCard title="Daily call activity" />;
+  const W = 680, H = 200, P = { t: 16, r: 14, b: 26, l: 32 };
+  const cw = W - P.l - P.r, ch = H - P.t - P.b;
+  const maxC = Math.max(...daily.map(d => d.calls), 1);
+  const maxA = Math.max(...daily.map(d => d.appts), 1);
+  const x = (i) => P.l + (i / (daily.length - 1 || 1)) * cw;
+  const yC = (v) => P.t + ch - (v / maxC) * ch;
+  const yA = (v) => P.t + ch - (v / maxA) * ch;
+  const pathC = daily.map((d, i) => (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ' ' + yC(d.calls).toFixed(1)).join(' ');
+  const pathA = daily.map((d, i) => (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ' ' + yA(d.appts).toFixed(1)).join(' ');
+  const areaC = pathC + ` L ${x(daily.length - 1).toFixed(1)} ${(P.t + ch).toFixed(1)} L ${P.l} ${(P.t + ch).toFixed(1)} Z`;
+  const step = Math.max(1, Math.ceil(daily.length / 5));
+  const fmtD = (d) => { const p = d.split('-'); return p[2] + '/' + p[1]; };
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Daily call activity</div>
+          <div className="sec-sub">Calls (left axis) · Appointments (right axis)</div>
+        </div>
+        <div className="legend-bar">
+          <span className="lg"><span className="lg-dot" style={{ background: '#5B6CFF' }}/>Calls</span>
+          <span className="lg"><span className="lg-dot" style={{ background: '#F5B544' }}/>Appts</span>
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ overflow: 'visible' }}>
+        <defs>
+          <linearGradient id="gtsc" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#5B6CFF" stopOpacity=".16"/>
+            <stop offset="100%" stopColor="#5B6CFF" stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        {[0, .5, 1].map(t => (
+          <line key={t} x1={P.l} x2={W - P.r} y1={P.t + ch * (1 - t)} y2={P.t + ch * (1 - t)} stroke="#EDEEF3" strokeWidth="1" strokeDasharray="3 4"/>
+        ))}
+        {[0, .5, 1].map(t => (
+          <text key={'l' + t} x={P.l - 6} y={P.t + ch * (1 - t) + 4} textAnchor="end" fontSize="9.5" fill="#5B6CFF">{Math.round(maxC * t)}</text>
+        ))}
+        {[0, .5, 1].map(t => (
+          <text key={'r' + t} x={W - P.r + 6} y={P.t + ch * (1 - t) + 4} textAnchor="start" fontSize="9.5" fill="#F5B544">{Math.round(maxA * t)}</text>
+        ))}
+        {daily.filter((_, i) => i % step === 0 || i === daily.length - 1).map(d => (
+          <text key={d.date} x={x(daily.indexOf(d))} y={H - 6} textAnchor="middle" fontSize="9.5" fill="#9AA0B4">{fmtD(d.date)}</text>
+        ))}
+        <path d={areaC} fill="url(#gtsc)"/>
+        <path d={pathC} fill="none" stroke="#5B6CFF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="svg-line"/>
+        <path d={pathA} fill="none" stroke="#F5B544" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="svg-line" style={{ animationDelay: '.3s' }}/>
+      </svg>
+    </div>
+  );
+}
+
+/* ── Scatter plot (initials in dots, hover tooltip) ──── */
+function ScatterPlot({ agents }) {
+  if (!agents.length) return <EmptyCard title="Calls vs appointments" />;
+  const [hover, setHover] = useStateC(null);
+  const W = 520, H = 220, P = { t: 16, r: 20, b: 36, l: 44 };
+  const cw = W - P.l - P.r, ch = H - P.t - P.b;
+  const maxX = Math.max(...agents.map(a => a.outbound), 1);
+  const maxY = Math.max(...agents.map(a => a.appts), 1);
+  const x = (v) => P.l + (v / maxX) * cw;
+  const y = (v) => P.t + ch - (v / maxY) * ch;
+  const targetEndX = Math.min(maxX, maxY * 3);
+  const initials = (s) => s.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Calls vs appointments</div>
+          <div className="sec-sub">Each dot = one agent · dashed line = 3:1 target</div>
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ overflow: 'visible' }}>
+        {[0, .25, .5, .75, 1].map(t => (
+          <line key={'hg' + t} x1={P.l} x2={W - P.r} y1={P.t + ch * (1 - t)} y2={P.t + ch * (1 - t)} stroke="#EDEEF3" strokeWidth="1" strokeDasharray="3 4"/>
+        ))}
+        {[0, .25, .5, .75, 1].map(t => (
+          <line key={'vg' + t} x1={P.l + cw * t} y1={P.t} x2={P.l + cw * t} y2={P.t + ch} stroke="#EDEEF3" strokeWidth="1" strokeDasharray="3 4"/>
+        ))}
+        {[0, .5, 1].map(t => (
+          <text key={'yl' + t} x={P.l - 6} y={P.t + ch * (1 - t) + 4} textAnchor="end" fontSize="9.5" fill="#9AA0B4">{Math.round(maxY * t)}</text>
+        ))}
+        {[0, .5, 1].map(t => (
+          <text key={'xl' + t} x={P.l + cw * t} y={H - 18} textAnchor="middle" fontSize="9.5" fill="#9AA0B4">{Math.round(maxX * t)}</text>
+        ))}
+        <text x={P.l} y={P.t - 4} fontSize="10" fontWeight="600" fill="#3B3F55">Appointments booked</text>
+        <text x={W / 2} y={H - 4} fontSize="10" fontWeight="600" fill="#3B3F55" textAnchor="middle">Outbound calls →</text>
+        <line x1={x(0)} y1={y(0)} x2={x(targetEndX)} y2={y(targetEndX / 3)} stroke="#C7CADA" strokeWidth="1.5" strokeDasharray="5 4"/>
+        <text x={x(targetEndX * 0.55)} y={y(targetEndX * 0.55 / 3) - 6} fontSize="9.5" fill="#9AA0B4" textAnchor="middle">3:1 target</text>
+        {agents.map((a, i) => {
+          const color = a.on_target ? '#3DD0A4' : '#FF6B7A';
+          const isHover = hover === i;
+          return (
+            <g key={a.name} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} style={{ cursor: 'pointer' }}>
+              <circle cx={x(a.outbound)} cy={y(a.appts)} r={isHover ? 16 : 14} fill={color} fillOpacity={isHover ? '.35' : '.22'} stroke={color} strokeWidth="2" style={{ transition: 'all .15s' }}/>
+              <text x={x(a.outbound)} y={y(a.appts) + 3.5} textAnchor="middle" fontSize="9.5" fontWeight="700" fill={color}>{initials(a.name)}</text>
+              {isHover && (
+                <g>
+                  <rect x={x(a.outbound) + 16} y={y(a.appts) - 24} width="108" height="36" rx="6" fill="#171A2B"/>
+                  <text x={x(a.outbound) + 22} y={y(a.appts) - 11} fontSize="10" fontWeight="600" fill="#fff">{a.name}</text>
+                  <text x={x(a.outbound) + 22} y={y(a.appts) + 3} fontSize="9" fill="#C7CADA">{a.outbound} calls · {a.appts} appts</text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/* ── Agent summary table ─────────────────────────────── */
+function AgentTable({ agents }) {
+  if (!agents.length) return <EmptyCard title="Agent summary" />;
+  return (
+    <div className="card">
+      <div className="sec-head"><div className="sec-title">Agent summary</div></div>
+      <div className="tbl-scroll" style={{ maxHeight: 360 }}>
+        <table className="tbl">
+          <thead><tr>
+            <th>Agent</th>
+            <th style={{ textAlign: 'right' }}>Outbound</th>
+            <th style={{ textAlign: 'right' }}>Qual.Conv</th>
+            <th style={{ textAlign: 'right' }}>Appts</th>
+            <th style={{ textAlign: 'right' }}>Sales</th>
+            <th style={{ textAlign: 'right' }}>Deal Value</th>
+            <th style={{ textAlign: 'right' }}>Calls/Appt</th>
+            <th style={{ textAlign: 'right' }}>Avg Talk</th>
+            <th>Status</th>
+          </tr></thead>
+          <tbody>
+            {agents.map(a => (
+              <tr key={a.name}>
+                <td style={{ color: 'var(--ink)', fontWeight: 600 }}>{a.name}</td>
+                <td style={{ textAlign: 'right' }}>{fmt(a.outbound)}</td>
+                <td style={{ textAlign: 'right' }}>{fmt(a.qual_convos)}</td>
+                <td style={{ textAlign: 'right', color: 'var(--ink)', fontWeight: 600 }}>{fmt(a.appts)}</td>
+                <td style={{ textAlign: 'right', color: '#1FA77F', fontWeight: 600 }}>{fmt(a.sales)}</td>
+                <td style={{ textAlign: 'right' }}>{a.deal_value > 0 ? gbp(a.deal_value) : '—'}</td>
+                <td style={{ textAlign: 'right' }}>{a.calls_per_appt != null ? a.calls_per_appt + 'x' : '—'}</td>
+                <td style={{ textAlign: 'right' }}>{fmtSec(a.avg_talk)}</td>
+                <td>
+                  <span className={a.on_target ? 'status-pill pill-target' : 'status-pill pill-miss'}>
+                    <span className="pill-glyph">{a.on_target ? Ic.check : Ic.x}</span>
+                    {a.on_target ? 'On' : 'Off'}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   tweaks-panel.jsx — motion controls panel
+   ═══════════════════════════════════════════════════════════════ */
+
+const __TWEAKS_STYLE = `
+  .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:280px;
+    max-height:calc(100vh - 32px);display:flex;flex-direction:column;
+    transform:scale(var(--dc-inv-zoom,1));transform-origin:bottom right;
+    background:rgba(250,249,247,.78);color:#29261b;
+    -webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);
+    border:.5px solid rgba(255,255,255,.6);border-radius:14px;
+    box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 12px 40px rgba(0,0,0,.18);
+    font:11.5px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow:hidden}
+  .twk-hd{display:flex;align-items:center;justify-content:space-between;
+    padding:10px 8px 10px 14px;cursor:move;user-select:none}
+  .twk-hd b{font-size:12px;font-weight:600;letter-spacing:.01em}
+  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.55);
+    width:22px;height:22px;border-radius:6px;cursor:default;font-size:13px;line-height:1}
+  .twk-x:hover{background:rgba(0,0,0,.06);color:#29261b}
+  .twk-body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px;
+    overflow-y:auto;overflow-x:hidden;min-height:0;
+    scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.15) transparent}
+  .twk-row{display:flex;flex-direction:column;gap:5px}
+  .twk-row-h{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
+  .twk-lbl{display:flex;justify-content:space-between;align-items:baseline;color:rgba(41,38,27,.72)}
+  .twk-lbl>span:first-child{font-weight:500}
+  .twk-val{color:rgba(41,38,27,.5);font-variant-numeric:tabular-nums}
+  .twk-sect{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:rgba(41,38,27,.45);padding:10px 0 0}
+  .twk-sect:first-child{padding-top:0}
+  .twk-field{appearance:none;box-sizing:border-box;width:100%;min-width:0;height:26px;padding:0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;
+    background:rgba(255,255,255,.6);color:inherit;font:inherit;outline:none}
+  .twk-field:focus{border-color:rgba(0,0,0,.25);background:rgba(255,255,255,.85)}
+  select.twk-field{padding-right:22px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='rgba(0,0,0,.5)' d='M0 0h10L5 6z'/></svg>");
+    background-repeat:no-repeat;background-position:right 8px center}
+  .twk-slider{appearance:none;-webkit-appearance:none;width:100%;height:4px;margin:6px 0;
+    border-radius:999px;background:rgba(0,0,0,.12);outline:none}
+  .twk-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+    width:14px;height:14px;border-radius:50%;background:#fff;
+    border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+  .twk-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+    background:#fff;border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+  .twk-seg{position:relative;display:flex;padding:2px;border-radius:8px;
+    background:rgba(0,0,0,.06);user-select:none}
+  .twk-seg-thumb{position:absolute;top:2px;bottom:2px;border-radius:6px;
+    background:rgba(255,255,255,.9);box-shadow:0 1px 2px rgba(0,0,0,.12);
+    transition:left .15s cubic-bezier(.3,.7,.4,1),width .15s}
+  .twk-seg.dragging .twk-seg-thumb{transition:none}
+  .twk-seg button{appearance:none;position:relative;z-index:1;flex:1;border:0;
+    background:transparent;color:inherit;font:inherit;font-weight:500;min-height:22px;
+    border-radius:6px;cursor:default;padding:4px 6px;line-height:1.2;overflow-wrap:anywhere}
+  .twk-toggle{position:relative;width:32px;height:18px;border:0;border-radius:999px;
+    background:rgba(0,0,0,.15);transition:background .15s;cursor:default;padding:0}
+  .twk-toggle[data-on="1"]{background:#34c759}
+  .twk-toggle i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+  .twk-toggle[data-on="1"] i{transform:translateX(14px)}
+  .twk-btn{appearance:none;height:26px;padding:0 12px;border:0;border-radius:7px;
+    background:rgba(0,0,0,.78);color:#fff;font:inherit;font-weight:500;cursor:default}
+  .twk-btn:hover{background:rgba(0,0,0,.88)}
+  .twk-btn.secondary{background:rgba(0,0,0,.06);color:inherit}
+  .twk-btn.secondary:hover{background:rgba(0,0,0,.1)}
+`;
+
+function useTweaks(defaults) {
+  const [values, setValues] = React.useState(defaults);
+  const setTweak = React.useCallback((keyOrEdits, val) => {
+    const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
+      ? keyOrEdits : { [keyOrEdits]: val };
+    setValues((prev) => ({ ...prev, ...edits }));
+  }, []);
+  return [values, setTweak];
+}
+
+function TweaksPanel({ title = 'Tweaks', children, open, onClose }) {
+  const dragRef = React.useRef(null);
+  const offsetRef = React.useRef({ x: 16, y: 16 });
+  const PAD = 16;
+
+  const clampToViewport = React.useCallback(() => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const w = panel.offsetWidth, h = panel.offsetHeight;
+    const maxRight  = Math.max(PAD, window.innerWidth  - w - PAD);
+    const maxBottom = Math.max(PAD, window.innerHeight - h - PAD);
+    offsetRef.current = {
+      x: Math.min(maxRight,  Math.max(PAD, offsetRef.current.x)),
+      y: Math.min(maxBottom, Math.max(PAD, offsetRef.current.y)),
+    };
+    panel.style.right  = offsetRef.current.x + 'px';
+    panel.style.bottom = offsetRef.current.y + 'px';
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    clampToViewport();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(clampToViewport) : null;
+    if (ro) ro.observe(document.documentElement);
+    else window.addEventListener('resize', clampToViewport);
+    return () => { if (ro) ro.disconnect(); else window.removeEventListener('resize', clampToViewport); };
+  }, [open, clampToViewport]);
+
+  const onDragStart = (e) => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const r = panel.getBoundingClientRect();
+    const sx = e.clientX, sy = e.clientY;
+    const startRight  = window.innerWidth  - r.right;
+    const startBottom = window.innerHeight - r.bottom;
+    const move = (ev) => {
+      offsetRef.current = { x: startRight - (ev.clientX - sx), y: startBottom - (ev.clientY - sy) };
+      clampToViewport();
+    };
+    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  if (!open) return null;
+  return (
+    <>
+      <style>{__TWEAKS_STYLE}</style>
+      <div ref={dragRef} className="twk-panel"
+           style={{ right: offsetRef.current.x, bottom: offsetRef.current.y }}>
+        <div className="twk-hd" onMouseDown={onDragStart}>
+          <b>{title}</b>
+          <button className="twk-x" aria-label="Close tweaks"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={onClose}>✕</button>
+        </div>
+        <div className="twk-body">{children}</div>
+      </div>
+    </>
+  );
+}
+
+function TweakSection({ label, children }) {
+  return (
+    <>
+      <div className="twk-sect">{label}</div>
+      {children}
+    </>
+  );
+}
+
+function TweakRow({ label, value, children }) {
+  return (
+    <div className="twk-row">
+      <div className="twk-lbl">
+        <span>{label}</span>
+        {value != null && <span className="twk-val">{value}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit = '', onChange }) {
+  return (
+    <TweakRow label={label} value={`${value}${unit}`}>
+      <input type="range" className="twk-slider" min={min} max={max} step={step}
+             value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </TweakRow>
+  );
+}
+
+function TweakToggle({ label, value, onChange }) {
+  return (
+    <div className="twk-row" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+      <div className="twk-lbl"><span>{label}</span></div>
+      <button type="button" className="twk-toggle" data-on={value ? '1' : '0'}
+              role="switch" aria-checked={!!value}
+              onClick={() => onChange(!value)}><i /></button>
+    </div>
+  );
+}
+
+function TweakRadio({ label, value, options, onChange }) {
+  const trackRef = React.useRef(null);
+  const [dragging, setDragging] = React.useState(false);
+  const valueRef = React.useRef(value);
+  valueRef.current = value;
+  const labelLen = (o) => String(o).length;
+  const maxLen = options.reduce((m, o) => Math.max(m, labelLen(o)), 0);
+  const fitsAsSegments = maxLen <= ({ 2: 16, 3: 10 }[options.length] ?? 0);
+  if (!fitsAsSegments) {
+    return (
+      <TweakRow label={label}>
+        <select className="twk-field" value={value} onChange={(e) => onChange(e.target.value)}>
+          {options.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      </TweakRow>
+    );
+  }
+  const idx = Math.max(0, options.indexOf(value));
+  const n = options.length;
+  const segAt = (clientX) => {
+    const r = trackRef.current.getBoundingClientRect();
+    const i = Math.floor(((clientX - r.left - 2) / (r.width - 4)) * n);
+    return options[Math.max(0, Math.min(n - 1, i))];
+  };
+  const onPointerDown = (e) => {
+    setDragging(true);
+    const v0 = segAt(e.clientX);
+    if (v0 !== valueRef.current) onChange(v0);
+    const move = (ev) => { if (!trackRef.current) return; const v = segAt(ev.clientX); if (v !== valueRef.current) onChange(v); };
+    const up = () => { setDragging(false); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  return (
+    <TweakRow label={label}>
+      <div ref={trackRef} role="radiogroup" onPointerDown={onPointerDown}
+           className={dragging ? 'twk-seg dragging' : 'twk-seg'}>
+        <div className="twk-seg-thumb"
+             style={{ left: `calc(2px + ${idx} * (100% - 4px) / ${n})`, width: `calc((100% - 4px) / ${n})` }} />
+        {options.map(o => (
+          <button key={o} type="button" role="radio" aria-checked={o === value}>{o}</button>
+        ))}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakSelect({ label, value, options, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <select className="twk-field" value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+    </TweakRow>
+  );
+}
+
+function TweakButton({ label, onClick, secondary = false }) {
+  return (
+    <button type="button" className={secondary ? 'twk-btn secondary' : 'twk-btn'} onClick={onClick}>{label}</button>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   views.jsx — MarketingView, TelesalesView, SalesView, App
+   ═══════════════════════════════════════════════════════════════ */
+
+function MarketingView({ data }) {
+  const { totals: T, prev_totals: PT, platforms, daily, lead_sources } = data;
+  const pt = PT || {};
+  const spendSegs = platforms.map(p => ({ label: p.platform, value: p.spend, color: PC[p.platform] }));
+  const leadSegs  = platforms.map(p => ({ label: p.platform, value: p.leads, color: PC[p.platform] }));
+  return (
+    <>
+      <div className="g4">
+        <Kpi label="Total spend" value={gbp(T.spend)}  icon={Ic.spend}  iconBg="var(--rose-soft)"   iconColor="var(--rose)"   delta={delta(T.spend, pt.spend, 'down')} delay={0}/>
+        <Kpi label="Paid leads"  value={fmt(T.leads)}  icon={Ic.leads}  iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(T.leads, pt.leads, 'up')}   delay={60}/>
+        <Kpi label="Blended CPL" value={gbp(T.cpl)}   icon={Ic.target} iconBg="var(--amber-soft)"  iconColor="#A87B0A"       delta={delta(T.cpl, pt.cpl, 'down')}     delay={120}/>
+        <Kpi label="Clicks"      value={fmt(T.clicks)} icon={Ic.chart}  iconBg="var(--sky-soft)"    iconColor="var(--sky)"    delay={180}/>
+      </div>
+      <div className="g2">
+        <DonutCard title="Spend split" segments={spendSegs} total={gbp(T.spend/1000,1)+'k'} totalLabel="SPEND"
+          sub={fmt(T.clicks) + ' clicks'}/>
+        <DonutCard title="Leads split" segments={leadSegs} total={fmt(T.leads)} totalLabel="LEADS"
+          sub={gbp(T.cpl) + ' blended CPL'}/>
+      </div>
+      <div className="g21">
+        <SpendChart daily={daily}/>
+        <PlatformBreakdown platforms={platforms} totalSpend={T.spend}/>
+      </div>
+      <div className="g12">
+        <LeadSourcesCard sources={lead_sources}/>
+        <ActivityChart daily={daily}/>
+      </div>
+    </>
+  );
+}
+
+function TelesalesView({ data }) {
+  const { agents, daily, totals: T, prev_totals: PT } = data;
+  const pt = PT || {};
+  if (!agents.length) return <EmptyCard title="" message="No telesales data for this period."/>;
+  return (
+    <>
+      <div className="g4">
+        <Kpi label="Outbound calls"    value={fmt(T.outbound)}                icon={Ic.phone}  iconBg="var(--indigo-soft)" iconColor="var(--indigo)" delta={delta(T.outbound, pt.outbound, 'up')} delay={0}/>
+        <Kpi label="Appointments"      value={fmt(T.appts)}                   icon={Ic.appt}   iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(T.appts, pt.appts, 'up')}       delay={60}/>
+        <Kpi label="Sales"             value={fmt(T.sales)}                   icon={Ic.sale}   iconBg="var(--mint-soft)"   iconColor="#1FA77F"       delta={delta(T.sales, pt.sales, 'up')}       delay={120}/>
+        <Kpi label="Agents on target"  value={`${T.on_target_count} / ${agents.length}`}
+             icon={Ic.target}
+             iconBg={T.on_target_pct >= 75 ? 'var(--mint-soft)' : 'var(--rose-soft)'}
+             iconColor={T.on_target_pct >= 75 ? '#1FA77F' : 'var(--rose)'}
+             delta={delta(T.on_target_count, pt.on_target_count, 'up')}
+             delay={180}/>
+      </div>
+      <AgentBars agents={agents}/>
+      <div className="g2">
+        <TsTrendChart daily={daily}/>
+        <ScatterPlot agents={agents}/>
+      </div>
+      <AgentTable agents={agents}/>
+    </>
+  );
+}
+
+function SalesView({ data }) {
+  const { stages, recent, win_rate_by_stage, totals: T, prev_totals: PT } = data;
+  const pt = PT || {};
+  if (!stages.length && !recent.length) return <EmptyCard title="" message="No pipeline data available."/>;
+  const openCount = T.count - T.won;
+  const prevOpen  = (pt.count || 0) - (pt.won || 0);
+  const winRate   = T.count > 0 ? Math.round(T.won / T.count * 100) : 0;
+  return (
+    <>
+      <div className="g4">
+        <Kpi label="Active deals"    value={fmt(openCount)}        icon={Ic.briefcase} iconBg="var(--indigo-soft)" iconColor="var(--indigo)" delta={delta(openCount, prevOpen, 'up')}                           delay={0}/>
+        <Kpi label="Won deals"       value={fmt(T.won)}            icon={Ic.sale}      iconBg="var(--mint-soft)"   iconColor="#1FA77F"       delta={delta(T.won, pt.won, 'up')}                                 delay={60}/>
+        <Kpi label="Pipeline value"  value={gbp(T.pipeline_value)} icon={Ic.spend}     iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(T.pipeline_value, pt.pipeline_value, 'up')}           delay={120}/>
+        <Kpi label="Weighted value"  value={gbp(T.weighted_value)} icon={Ic.wallet}    iconBg="var(--amber-soft)"  iconColor="#A87B0A"       delta={delta(T.weighted_value, pt.weighted_value, 'up')}           delay={180}/>
+      </div>
+      <div className="g21">
+        <StageBreakdown stages={stages}/>
+        <WinRateByStage rows={win_rate_by_stage}/>
+      </div>
+      <OpportunitiesTable recent={recent}/>
+    </>
+  );
+}
+
+/* ── Motion presets ──────────────────────────────────── */
+const TWEAK_DEFAULTS = {
+  motion: 'rise', hover: 'lift', duration: 400, stagger: 60, easing: 'smooth', replayOnTab: true,
+};
+const EASE_PRESETS = {
+  smooth: 'cubic-bezier(.22,1,.36,1)',
+  bounce: 'cubic-bezier(.34,1.56,.64,1)',
+  snappy: 'cubic-bezier(.16,1,.3,1)',
+  linear: 'linear',
+  ease:   'ease-out',
+};
+
+/* ── App root ─────────────────────────────────────────── */
+function App() {
+  const [activeTab, setActiveTab] = React.useState(
+    () => sessionStorage.getItem('dash:tab') || 'Marketing'
+  );
+  React.useEffect(() => { sessionStorage.setItem('dash:tab', activeTab); }, [activeTab]);
+
+  const [period, setPeriod] = React.useState({ id: '30d', label: 'Last 30 days' });
+  const [data,   setData]   = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error,   setError]   = React.useState(null);
+  const [refreshKey, setRefreshKey] = React.useState(0);
+  const [bustCache,  setBustCache]  = React.useState(false);
+  const [tweaksOpen, setTweaksOpen] = React.useState(false);
+
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+  /* Resolve preset id → actual dates (custom periods carry d0/d1 directly) */
+  const { d0, d1 } = React.useMemo(() => {
+    if (period.id === 'custom') return { d0: period.d0, d1: period.d1 };
+    return periodDates(period.id);
+  }, [period.id, period.d0, period.d1]);
+
+  /* Fetch from local API — bust server cache first when explicitly refreshed */
+  React.useEffect(() => {
+    if (!d0 || !d1) return;
+    setLoading(true); setError(null);
+    const doFetch = () =>
+      fetch(`/api/data?d0=${d0}&d1=${d1}`)
+        .then(r => { if (!r.ok) throw new Error(`Server error ${r.status}`); return r.json(); })
+        .then(d => { if (d.error) throw new Error(d.error); setData(d); })
+        .catch(e => setError(e.message))
+        .finally(() => setLoading(false));
+    if (bustCache) {
+      setBustCache(false);
+      fetch('/api/refresh').then(doFetch).catch(doFetch);
+    } else {
+      doFetch();
+    }
+  }, [d0, d1, refreshKey]);
+
+  /* Apply motion settings to <body> */
+  React.useEffect(() => {
+    const b = document.body;
+    b.setAttribute('data-motion', t.motion);
+    b.setAttribute('data-hover',  t.hover);
+    b.style.setProperty('--motion-dur',     t.duration + 'ms');
+    b.style.setProperty('--motion-stagger', t.stagger  + 'ms');
+    b.style.setProperty('--motion-ease',    EASE_PRESETS[t.easing] || EASE_PRESETS.smooth);
+  }, [t.motion, t.hover, t.duration, t.stagger, t.easing]);
+
+  const viewKey = t.replayOnTab ? (activeTab + refreshKey) : ('view-' + refreshKey);
+  const refreshedAt = data?.refreshed_at || new Date().toISOString();
+
+  return (
+    <div className="app">
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab}/>
+      <main className="main">
+        <Topbar
+          title={activeTab}
+          activeTab={activeTab} setActiveTab={setActiveTab}
+          period={period} setPeriod={(p) => { setPeriod(p); setRefreshKey(k => k + 1); }}
+          refreshedAt={refreshedAt}
+          onRefresh={() => { setBustCache(true); setRefreshKey(k => k + 1); }}
+          onTweaks={() => setTweaksOpen(o => !o)}
+          onCustomDate={(d0, d1) => {
+            setPeriod({ id: 'custom', label: fmtRangeLabel(d0, d1), d0, d1 });
+            setRefreshKey(k => k + 1);
+          }}
+        />
+        {loading && (
+          <div className="loader">
+            <div className="spinner"/>
+            <span>Loading BigQuery data…</span>
+          </div>
+        )}
+        {!loading && error && <div className="err-box">Error: {error}</div>}
+        {!loading && !error && data && (
+          <div key={viewKey} className="view-fade">
+            {activeTab === 'Marketing' && <MarketingView data={data.marketing}/>}
+            {(activeTab === 'Sales' || activeTab === 'Telesales') && (
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'60vh',gap:'16px'}}>
+                <div style={{fontSize:'48px'}}>🚧</div>
+                <div style={{fontSize:'28px',fontWeight:'700',color:'#E5003B',letterSpacing:'-0.5px'}}>{activeTab} Dashboard</div>
+                <div style={{fontSize:'16px',color:'#888',fontWeight:'500'}}>Coming soon — we're working on it.</div>
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+
+      <TweaksPanel title="Tweaks" open={tweaksOpen} onClose={() => setTweaksOpen(false)}>
+        <TweakSection label="Card entry"/>
+        <TweakRadio  label="Animation"
+          value={t.motion}
+          options={['rise', 'fade', 'scale', 'slide', 'blur', 'pop', 'none']}
+          onChange={(v) => setTweak('motion', v)}/>
+        <TweakSlider label="Duration"
+          value={t.duration} min={0} max={1200} step={50} unit="ms"
+          onChange={(v) => setTweak('duration', v)}/>
+        <TweakSlider label="Stagger"
+          value={t.stagger} min={0} max={200} step={10} unit="ms"
+          onChange={(v) => setTweak('stagger', v)}/>
+        <TweakSelect label="Easing"
+          value={t.easing}
+          options={['smooth', 'bounce', 'snappy', 'ease', 'linear']}
+          onChange={(v) => setTweak('easing', v)}/>
+
+        <TweakSection label="Card hover"/>
+        <TweakRadio  label="Effect"
+          value={t.hover}
+          options={['lift', 'glow', 'tilt', 'zoom', 'none']}
+          onChange={(v) => setTweak('hover', v)}/>
+
+        <TweakSection label="Behaviour"/>
+        <TweakToggle label="Replay on tab switch"
+          value={t.replayOnTab}
+          onChange={(v) => setTweak('replayOnTab', v)}/>
+        <TweakButton label="Replay now"
+          onClick={() => setRefreshKey(k => k + 1)}/>
+      </TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

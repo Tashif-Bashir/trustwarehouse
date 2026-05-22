@@ -1,0 +1,5 @@
+google-cloud-bigquery>=3.11
+google-auth>=2.20
+pandas>=2.0
+db-dtypes>=0.5
+python-dotenv>=1.0

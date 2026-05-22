@@ -43,54 +43,71 @@ platform_spend as (
     select * from bing_spend
 ),
 
--- Map SharpSpring campaign_id to the three paid platforms via seed file
+-- Map SharpSpring campaign_id to the three paid platforms via seed file.
+-- Falls back to UTM/gclid inference for leads the CRM misattributed to organic.
 lead_platform as (
     select
         l.lead_id,
         DATE(SAFE_CAST(l.created_at AS TIMESTAMP), 'Europe/London')         as created_date,
-        m.platform,
+        coalesce(
+            m.platform,
+            case
+                when (l.gclid is not null and l.gclid != '')                then 'Google'
+                when regexp_contains(lower(l.marketing_url), r'utm_source=google')
+                 and regexp_contains(lower(l.marketing_url), r'utm_medium=(cpc|ppc|paid)')
+                                                                            then 'Google'
+                when regexp_contains(lower(l.marketing_url), r'gad_source=1')
+                                                                            then 'Google'
+                when regexp_contains(lower(l.marketing_url), r'utm_source=(facebook|instagram|meta)')
+                 and regexp_contains(lower(l.marketing_url), r'utm_medium=(cpc|paid|paidsocial)')
+                                                                            then 'Meta'
+                when regexp_contains(lower(l.marketing_url), r'utm_source=bing')
+                 and regexp_contains(lower(l.marketing_url), r'utm_medium=(cpc|ppc|paid)')
+                                                                            then 'Bing'
+            end
+        )                                                                   as platform,
         l.appointment_booked,
-        SAFE_CAST(l.appointment_booked_at AS TIMESTAMP)                     as appointment_booked_at,
-        l.is_sold,
-        SAFE_CAST(l.order_confirmed_at AS TIMESTAMP)                        as order_confirmed_at
+        l.is_sold
     from {{ ref('silver_sharpspring_leads') }} l
-    inner join {{ ref('campaign_platform_mapping') }} m
+    left join {{ ref('campaign_platform_mapping') }} m
         on l.campaign_id = m.campaign_id
     where l.is_active = true
 ),
 
--- Leads created per day per platform
+-- Leads created per day per platform (organic leads have NULL platform — excluded here)
 daily_leads as (
     select
         created_date                        as date,
         platform,
         count(distinct lead_id)             as leads
     from lead_platform
+    where platform is not null
     group by created_date, platform
 ),
 
--- Appointments booked per day per platform
--- date = when the appointment was booked, not when the lead came in
+-- Appointments booked, cohorted by lead created_date (not appointment_booked_at —
+-- 73% of appointments have no timestamp so the old filter silently dropped them).
 daily_appointments as (
     select
-        DATE(appointment_booked_at)         as date,
+        created_date                        as date,
         platform,
         count(distinct lead_id)             as appointments_booked
     from lead_platform
     where appointment_booked = 'Yes'
-      and appointment_booked_at is not null
-    group by DATE(appointment_booked_at), platform
+      and platform is not null
+    group by created_date, platform
 ),
 
--- Sales confirmed per day per platform
+-- Sales cohorted by lead created_date.
 daily_sales as (
     select
-        coalesce(DATE(order_confirmed_at), created_date)                    as date,
+        created_date                        as date,
         platform,
-        count(distinct lead_id)                                             as sales
+        count(distinct lead_id)             as sales
     from lead_platform
     where is_sold = true
-    group by coalesce(DATE(order_confirmed_at), created_date), platform
+      and platform is not null
+    group by created_date, platform
 ),
 
 final as (

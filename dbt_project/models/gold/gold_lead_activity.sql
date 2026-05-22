@@ -31,9 +31,23 @@ with leads as (
 
         -- attribution
         campaign_id,
+        gclid,
+        marketing_url,
 
         -- UK local date of creation
-        DATE(SAFE_CAST(created_at AS TIMESTAMP), 'Europe/London') as created_date
+        DATE(SAFE_CAST(created_at AS TIMESTAMP), 'Europe/London') as created_date,
+
+        -- infer paid platform from UTM params / gclid when SharpSpring campaign_id is missing
+        case
+            when (gclid is not null and gclid != '')                                             then 'Google'
+            when regexp_contains(lower(marketing_url), r'utm_source=google')
+             and regexp_contains(lower(marketing_url), r'utm_medium=(cpc|ppc|paid)')            then 'Google'
+            when regexp_contains(lower(marketing_url), r'gad_source=1')                         then 'Google'
+            when regexp_contains(lower(marketing_url), r'utm_source=(facebook|instagram|meta)')
+             and regexp_contains(lower(marketing_url), r'utm_medium=(cpc|paid|paidsocial)')     then 'Meta'
+            when regexp_contains(lower(marketing_url), r'utm_source=bing')
+             and regexp_contains(lower(marketing_url), r'utm_medium=(cpc|ppc|paid)')            then 'Bing'
+        end                                                                                      as inferred_platform
 
     from {{ ref('silver_sharpspring_leads') }}
     where is_active = true
@@ -108,7 +122,7 @@ final as (
         l.customer_type,
         l.pipeline_category,
         l.campaign_id,
-        m.platform,
+        coalesce(m.platform, l.inferred_platform)                                               as platform,
 
         -- call activity
         coalesce(cm.total_call_attempts, 0)                                         as total_call_attempts,

@@ -34,3 +34,6 @@ _adhoc_query.py
 *_dashboard.py
 dashboard.py
 dashboard/static/
+
+.vercel
+uv.lock

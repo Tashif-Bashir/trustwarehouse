@@ -1,10 +1,10 @@
 """Vercel serverless API — Flask entry point for all /api/* routes."""
 from flask import Flask, jsonify, request
 from datetime import date, timedelta
-import sys, os
+import os, sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from dashboard.data import load_all_data
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _data import load_all_data
 
 app = Flask(__name__)
 

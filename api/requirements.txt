@@ -1,0 +1,5 @@
+flask>=3.0
+google-cloud-bigquery>=3.11
+google-auth>=2.20
+pandas>=2.0
+python-dotenv>=1.0

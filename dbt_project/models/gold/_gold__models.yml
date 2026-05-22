@@ -112,7 +112,8 @@ models:
   - name: gold_campaign_attribution
     description: >
       One row per platform per day. Joins paid ad spend (Google/Meta/Bing)
-      with SharpSpring lead, appointment, and sale counts.
+      with SharpSpring lead counts. Appointments and sales live in
+      gold_lead_activity and gold_agent_performance_daily.
     columns:
       - name: date
         description: Calendar date
@@ -123,20 +124,17 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['Google', 'Meta', 'Bing']
+              arguments:
+                values: ['Google', 'Meta', 'Bing']
       - name: spend_gbp
         description: Total ad spend in GBP for this platform on this date
         tests:
           - not_null
       - name: leads
-        description: SharpSpring leads created on this date attributed to this platform
+        description: Paid leads created on this date attributed to this platform (includes UTM-inferred)
         tests:
           - not_null
-      - name: appointments_booked
-        description: Appointments booked on this date attributed to this platform
-        tests:
-          - not_null
-      - name: sales
-        description: Sales confirmed on this date attributed to this platform
-        tests:
-          - not_null
+      - name: cost_per_lead
+        description: spend_gbp / leads. Null when leads = 0.
+      - name: click_to_lead_rate
+        description: leads / clicks. Null when clicks = 0.

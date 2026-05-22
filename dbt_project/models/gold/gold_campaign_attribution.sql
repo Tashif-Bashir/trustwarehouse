@@ -50,23 +50,18 @@ lead_platform as (
     select
         l.lead_id,
         DATE(SAFE_CAST(l.created_at AS TIMESTAMP), 'Europe/London')         as created_date,
-        coalesce(
-            m.platform,
-            case
-                when (l.gclid is not null and l.gclid != '')                then 'Google'
-                when regexp_contains(lower(l.marketing_url), r'utm_source=google')
-                 and regexp_contains(lower(l.marketing_url), r'utm_medium=(cpc|ppc|paid)')
-                                                                            then 'Google'
-                when regexp_contains(lower(l.marketing_url), r'gad_source=1')
-                                                                            then 'Google'
-                when regexp_contains(lower(l.marketing_url), r'utm_source=(facebook|instagram|meta)')
-                 and regexp_contains(lower(l.marketing_url), r'utm_medium=(cpc|paid|paidsocial)')
-                                                                            then 'Meta'
-                when regexp_contains(lower(l.marketing_url), r'utm_source=bing')
-                 and regexp_contains(lower(l.marketing_url), r'utm_medium=(cpc|ppc|paid)')
-                                                                            then 'Bing'
-            end
-        )                                                                   as platform
+        case
+            when m.platform is not null and (
+                (l.gclid is not null and l.gclid != '')
+                or regexp_contains(lower(l.marketing_url), r'gad_source=1')
+                or (regexp_contains(lower(l.marketing_url), r'utm_source=google')
+                    and regexp_contains(lower(l.marketing_url), r'utm_medium=(cpc|ppc|paid)'))
+                or (regexp_contains(lower(l.marketing_url), r'utm_source=(facebook|instagram|meta)')
+                    and regexp_contains(lower(l.marketing_url), r'utm_medium=(cpc|paid|paidsocial)'))
+                or (regexp_contains(lower(l.marketing_url), r'utm_source=bing')
+                    and regexp_contains(lower(l.marketing_url), r'utm_medium=(cpc|ppc|paid)'))
+            ) then m.platform
+        end                                                                 as platform
     from {{ ref('silver_sharpspring_leads') }} l
     left join {{ ref('campaign_platform_mapping') }} m
         on l.campaign_id = m.campaign_id

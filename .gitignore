@@ -33,3 +33,4 @@ _adhoc_query.py
 # Dashboards (run locally, not part of the public sync repo)
 *_dashboard.py
 dashboard.py
+dashboard/

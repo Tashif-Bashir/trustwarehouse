@@ -122,7 +122,9 @@ final as (
         l.customer_type,
         l.pipeline_category,
         l.campaign_id,
-        coalesce(m.platform, l.inferred_platform)                                               as platform,
+        case when m.platform is not null and l.inferred_platform is not null
+            then m.platform
+        end                                                                                      as platform,
 
         -- call activity
         coalesce(cm.total_call_attempts, 0)                                         as total_call_attempts,

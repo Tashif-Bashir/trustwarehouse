@@ -43,7 +43,8 @@ with leads as (
             when regexp_contains(lower(marketing_url), r'utm_source=google')
              and regexp_contains(lower(marketing_url), r'utm_medium=(cpc|ppc|paid)')            then 'Google'
             when regexp_contains(lower(marketing_url), r'gad_source=1')                         then 'Google'
-            when regexp_contains(lower(marketing_url), r'utm_source=(facebook|instagram|meta)')
+            when regexp_contains(lower(marketing_url), r'fbclid=')                              then 'Meta'
+            when regexp_contains(lower(marketing_url), r'utm_source=(facebook|instagram|meta|fb)')
              and regexp_contains(lower(marketing_url), r'utm_medium=(cpc|paid|paidsocial)')     then 'Meta'
             when regexp_contains(lower(marketing_url), r'utm_source=bing')
              and regexp_contains(lower(marketing_url), r'utm_medium=(cpc|ppc|paid)')            then 'Bing'
@@ -122,9 +123,7 @@ final as (
         l.customer_type,
         l.pipeline_category,
         l.campaign_id,
-        case when m.platform is not null and l.inferred_platform is not null
-            then m.platform
-        end                                                                                      as platform,
+        m.platform                                                                               as platform,
 
         -- call activity
         coalesce(cm.total_call_attempts, 0)                                         as total_call_attempts,

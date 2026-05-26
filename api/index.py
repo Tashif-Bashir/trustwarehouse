@@ -187,6 +187,25 @@ def _load_all(d0s, d1s):
 
 app = Flask(__name__)
 
+_html_cache = None
+_html_lock  = threading.Lock()
+
+def _get_html():
+    global _html_cache
+    if _html_cache is None:
+        with _html_lock:
+            if _html_cache is None:
+                here = os.path.dirname(os.path.abspath(__file__))
+                for path in [
+                    os.path.join(here, '..', 'public', 'index.html'),
+                    os.path.join(here, '..', 'index.html'),
+                ]:
+                    if os.path.exists(path):
+                        with open(path, 'rb') as f:
+                            _html_cache = f.read()
+                        break
+    return _html_cache
+
 @app.route('/api/data')
 def get_data():
     d0 = request.args.get('d0')
@@ -202,3 +221,12 @@ def get_data():
 @app.route('/api/refresh')
 def refresh():
     return jsonify({'ok': True})
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_frontend(path):
+    from flask import Response
+    html = _get_html()
+    if html is None:
+        return 'Dashboard unavailable', 404
+    return Response(html, mimetype='text/html')

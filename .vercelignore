@@ -1,0 +1,10 @@
+pyproject.toml
+uv.lock
+*.lock
+dbt_project/
+ingestion/
+tests/
+shared/
+docs/
+dashboard/
+public/

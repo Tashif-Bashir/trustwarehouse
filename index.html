@@ -412,7 +412,7 @@
 const { useState, useEffect, useMemo, useRef } = React;
 
 /* ── Color tokens ──────────────────────────────────────────── */
-const PC     = { Google:'#5B6CFF', Meta:'#8B5CF6', Bing:'#3DD0A4' };
+const PC     = { Google:'#5B6CFF', Meta:'#8B5CF6', Bing:'#3DD0A4', Email:'#F59E0B', Content:'#EC4899', Enquiry:'#F97316', Direct:'#94A3B8' };
 const PCsoft = { Google:'#EEF0FF', Meta:'#F2EDFF', Bing:'#E2F8EF' };
 
 const STAGE_COLOR = {
@@ -956,7 +956,7 @@ function PlatformBreakdown({ platforms, totalSpend }) {
 function LeadSourcesCard({ sources }) {
   if (!sources.length) return <EmptyCard title="Lead sources" message="No lead-source data." />;
   const total = sources.reduce((s, r) => s + r.leads, 0) || 1;
-  const COLS = { Google: PC.Google, Meta: PC.Meta, Bing: PC.Bing, Organic: '#9AA0B4' };
+  const COLS = PC;
   return (
     <div className="card">
       <div className="sec-head">
@@ -998,9 +998,10 @@ function LeadSplitCard({ sources, totalLeads }) {
   if (!sources || !sources.length) return <EmptyCard title="Leads breakdown"/>;
 
   const total         = totalLeads || sources.reduce((s, r) => s + r.leads, 0) || 1;
-  const COLS          = { Google: '#5B6CFF', Meta: '#8B5CF6', Organic: '#94A3B8', Bing: '#3DD0A4' };
-  const paidTotal     = sources.filter(r => r.source !== 'Organic').reduce((s, r) => s + r.leads, 0);
-  const organicTotal  = sources.find(r => r.source === 'Organic')?.leads || 0;
+  const PAID          = new Set(['Google', 'Meta', 'Bing']);
+  const COLS          = PC;
+  const paidTotal     = sources.filter(r => PAID.has(r.source)).reduce((s, r) => s + r.leads, 0);
+  const organicTotal  = sources.filter(r => !PAID.has(r.source)).reduce((s, r) => s + r.leads, 0);
   const callableTotal = sources.reduce((s, r) => s + (r.callable || 0), 0);
 
   const size = 80, stroke = 13, r = (size - stroke) / 2, c = 2 * Math.PI * r;

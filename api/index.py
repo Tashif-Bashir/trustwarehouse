@@ -59,13 +59,21 @@ def _attr(d0, d1):
 
 def _sources(d0, d1):
     return _q(f"""
-        SELECT COALESCE(platform,'Organic') as source,
-               COUNT(DISTINCT lead_id) as leads,
-               COUNT(DISTINCT CASE WHEN appointment_booked='Yes' THEN lead_id END) as appts,
-               COUNT(DISTINCT CASE WHEN is_sold=true THEN lead_id END) as sales,
-               COUNT(DISTINCT CASE WHEN phone IS NOT NULL THEN lead_id END) as callable
-        FROM `{PROJECT}.gold.gold_lead_activity`
-        WHERE created_date BETWEEN '{d0}' AND '{d1}'
+        SELECT
+            CASE
+                WHEN la.platform IS NOT NULL THEN la.platform
+                WHEN REGEXP_CONTAINS(LOWER(COALESCE(sl.marketing_url, '')), r'utm_source=sharpspring') THEN 'Email'
+                WHEN REGEXP_CONTAINS(LOWER(COALESCE(sl.marketing_url, sl.form_page, '')), r'/news/|guide|/blog') THEN 'Content'
+                WHEN COALESCE(sl.marketing_url, sl.form_page) IS NOT NULL THEN 'Enquiry'
+                ELSE 'Direct'
+            END as source,
+            COUNT(DISTINCT la.lead_id) as leads,
+            COUNT(DISTINCT CASE WHEN la.appointment_booked='Yes' THEN la.lead_id END) as appts,
+            COUNT(DISTINCT CASE WHEN la.is_sold=true THEN la.lead_id END) as sales,
+            COUNT(DISTINCT CASE WHEN la.phone IS NOT NULL THEN la.lead_id END) as callable
+        FROM `{PROJECT}.gold.gold_lead_activity` la
+        JOIN `{PROJECT}.silver.silver_sharpspring_leads` sl ON la.lead_id = sl.lead_id
+        WHERE la.created_date BETWEEN '{d0}' AND '{d1}'
         GROUP BY 1 ORDER BY 2 DESC
     """)
 

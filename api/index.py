@@ -62,7 +62,12 @@ def _sources(d0, d1):
         SELECT COALESCE(platform,'Organic') as source,
                COUNT(DISTINCT lead_id) as leads,
                COUNT(DISTINCT CASE WHEN appointment_booked='Yes' THEN lead_id END) as appts,
-               COUNT(DISTINCT CASE WHEN is_sold=true THEN lead_id END) as sales
+               COUNT(DISTINCT CASE WHEN is_sold=true THEN lead_id END) as sales,
+               -- TODO: replace with a dedicated is_callable field on gold_lead_activity
+               -- when added; for now callable = not yet appointed and not sold
+               COUNT(DISTINCT CASE WHEN COALESCE(appointment_booked,'') != 'Yes'
+                                        AND NOT COALESCE(is_sold, false)
+                                   THEN lead_id END) as callable
         FROM `{PROJECT}.gold.gold_lead_activity`
         WHERE created_date BETWEEN '{d0}' AND '{d1}'
         GROUP BY 1 ORDER BY 2 DESC
@@ -154,7 +159,7 @@ def _load_all(d0s, d1s):
 
     platforms = [{'platform':str(r['platform']),'spend':float(r['spend']),'leads':int(r['leads']),'clicks':int(r['clicks']),'cpl':_safe(r['cpl']),'ctr':_safe(r['ctr'])} for _,r in pa.iterrows()]
     daily     = [{'date':str(r['date']),'platform':str(r['platform']),'spend':_safe(float(r['spend_gbp'])),'leads':int(r['leads']) if pd.notna(r['leads']) else 0} for _,r in df_attr.iterrows()]
-    sources   = [{'source':str(r['source']),'leads':int(r['leads']),'appts':int(r['appts']),'sales':int(r['sales'])} for _,r in df_src.iterrows()]
+    sources   = [{'source':str(r['source']),'leads':int(r['leads']),'appts':int(r['appts']),'sales':int(r['sales']),'callable':int(r['callable']) if pd.notna(r.get('callable')) else 0} for _,r in df_src.iterrows()]
     tot_all   = int(df_src['leads'].sum()) if not df_src.empty else 0
     marketing = {'totals':{'spend':tot_sp,'leads':tot_ld,'clicks':tot_cl,'cpl':round(tot_sp/tot_ld,2) if tot_ld else 0,'total_leads':tot_all},'prev_totals':prev_marketing_totals,'platforms':platforms,'daily':daily,'lead_sources':sources}
 

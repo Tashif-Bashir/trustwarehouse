@@ -1002,18 +1002,28 @@ function LeadBreakdownBar({ sources, totalLeads }) {
   const paidTotal = sources.filter(r => r.source !== 'Organic').reduce((s, r) => s + r.leads, 0);
   const organicTotal = sources.find(r => r.source === 'Organic')?.leads || 0;
   return (
-    <div className="card">
-      <div className="sec-head">
+    <div className="card" style={{ padding: '28px 28px 24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 22 }}>
         <div>
           <div className="sec-title">Lead breakdown</div>
-          <div className="sec-sub">Paid vs organic &middot; all sources</div>
+          <div className="sec-sub" style={{ marginTop: 3 }}>Paid vs organic &middot; all sources</div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-          <span style={{ fontSize: 24, fontWeight: 700, color: 'var(--ink)' }}>{fmt(total)}</span>
-          <span style={{ fontSize: 12, color: 'var(--muted)' }}>total leads</span>
+        <div style={{ display: 'flex', gap: 28, flexShrink: 0 }}>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>Paid</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--rose)', lineHeight: 1 }}>{fmt(paidTotal)}</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>Organic</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: '#9AA0B4', lineHeight: 1 }}>{fmt(organicTotal)}</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>Total</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)', lineHeight: 1 }}>{fmt(total)}</div>
+          </div>
         </div>
       </div>
-      <div style={{ display: 'flex', height: 38, borderRadius: 8, overflow: 'hidden', gap: 2, marginBottom: 18 }}>
+      <div style={{ display: 'flex', height: 42, borderRadius: 10, overflow: 'hidden', gap: 3, marginBottom: 22 }}>
         {sources.map(r => {
           const pct = r.leads / total * 100;
           const color = COLS[r.source] || '#9AA0B4';
@@ -1024,38 +1034,24 @@ function LeadBreakdownBar({ sources, totalLeads }) {
               background: color,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               overflow: 'hidden',
-              transition: 'flex 1.3s cubic-bezier(.22,1,.36,1)'
+              transition: 'flex 1.4s cubic-bezier(.22,1,.36,1)'
             }}>
-              {pct >= 9 && <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', userSelect: 'none' }}>{Math.round(pct)}%</span>}
+              {pct >= 9 && <span style={{ fontSize: 12, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', userSelect: 'none' }}>{Math.round(pct)}%</span>}
             </div>
           );
         })}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px 0' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 20px' }}>
-          {sources.map(r => {
-            const color = COLS[r.source] || '#9AA0B4';
-            const pct = Math.round(r.leads / total * 100);
-            return (
-              <div key={r.source} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                <span style={{ width: 10, height: 10, borderRadius: 3, background: color, flexShrink: 0 }}/>
-                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{r.source}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{fmt(r.leads)}</span>
-                <span style={{ fontSize: 11, color: 'var(--muted)', opacity: .7 }}>({pct}%)</span>
-              </div>
-            );
-          })}
-        </div>
-        <div style={{ display: 'flex', gap: 16, flexShrink: 0 }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Paid</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--rose)' }}>{fmt(paidTotal)}</div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Organic</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#9AA0B4' }}>{fmt(organicTotal)}</div>
-          </div>
-        </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 32px' }}>
+        {sources.map(r => {
+          const color = COLS[r.source] || '#9AA0B4';
+          return (
+            <div key={r.source} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <span style={{ width: 12, height: 12, borderRadius: 4, background: color, flexShrink: 0 }}/>
+              <span style={{ fontSize: 13, color: 'var(--muted)' }}>{r.source}</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{fmt(r.leads)}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

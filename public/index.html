@@ -995,173 +995,83 @@ function LeadSourcesCard({ sources }) {
 
 /* ── Lead breakdown stacked bar ──────────────────────── */
 function LeadBreakdownBar({ sources, totalLeads }) {
-  const m = useMounted(60);
-  const [hovered, setHovered] = React.useState(null);
-  const [tip, setTip]         = React.useState(null);
-  const barRef                = React.useRef(null);
-
   if (!sources || !sources.length) return null;
 
-  const total        = totalLeads || sources.reduce((s, r) => s + r.leads, 0) || 1;
-  const COLS         = { Google: PC.Google, Meta: PC.Meta, Bing: PC.Bing, Organic: '#9AA0B4' };
-  const paidTotal    = sources.filter(r => r.source !== 'Organic').reduce((s, r) => s + r.leads, 0);
-  const organicTotal = sources.find(r => r.source === 'Organic')?.leads || 0;
+  const total         = totalLeads || sources.reduce((s, r) => s + r.leads, 0) || 1;
+  const COLS          = { Google: '#5B6CFF', Meta: '#8B5CF6', Organic: '#94A3B8', Bing: '#3DD0A4' };
+  const paidTotal     = sources.filter(r => r.source !== 'Organic').reduce((s, r) => s + r.leads, 0);
+  const organicTotal  = sources.find(r => r.source === 'Organic')?.leads || 0;
   const callableTotal = sources.reduce((s, r) => s + (r.callable || 0), 0);
 
-  const enterSeg = (r, el) => {
-    setHovered(r.source);
-    if (barRef.current && el) {
-      const bar = barRef.current.getBoundingClientRect();
-      const seg = el.getBoundingClientRect();
-      const cx  = seg.left + seg.width / 2 - bar.left;
-      setTip({ x: Math.min(Math.max(cx, 90), bar.width - 90), src: r });
-    }
-  };
-  const leave = () => { setHovered(null); setTip(null); };
-
-  const headerStats = [
-    { label: 'Paid',     value: paidTotal,     color: 'var(--rose)' },
-    { label: 'Organic',  value: organicTotal,  color: 'var(--muted)' },
-    { label: 'Callable', value: callableTotal, color: 'var(--mint)' },
-    { label: 'Total',    value: total,          color: 'var(--ink)' },
-  ];
+  /* SVG donut — same geometry pattern as DonutCard */
+  const sz = 78, sw = 11, rad = (sz - sw) / 2, circ = 2 * Math.PI * rad;
+  let segOff = 0;
 
   return (
-    <div className="card" style={{ padding: '26px 26px 22px' }}>
+    <div className="card" style={{ padding: '14px 18px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
 
-      {/* ── Header ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', marginBottom: 22 }}>
-        <div>
-          <div className="sec-title">Lead breakdown</div>
-          <div className="sec-sub" style={{ marginTop: 3 }}>Paid vs organic &middot; all sources</div>
+        {/* 1 — Donut ring */}
+        <svg width={sz} height={sz} viewBox={`0 0 ${sz} ${sz}`} style={{ flexShrink: 0 }} aria-hidden="true">
+          <circle cx={sz/2} cy={sz/2} r={rad} fill="none" stroke="var(--bg)" strokeWidth={sw}/>
+          {sources.map(s => {
+            const len = (s.leads / total) * circ;
+            const el  = (
+              <circle key={s.source}
+                cx={sz/2} cy={sz/2} r={rad} fill="none"
+                stroke={COLS[s.source] || '#94A3B8'}
+                strokeWidth={sw}
+                strokeDasharray={`${len} ${circ - len}`}
+                strokeDashoffset={-segOff}
+                transform={`rotate(-90 ${sz/2} ${sz/2})`}
+                strokeLinecap="butt"
+              />
+            );
+            segOff += len;
+            return el;
+          })}
+          <text x={sz/2} y={sz/2 - 2} textAnchor="middle" fontSize="17" fontWeight="700"
+            fill="#171A2B" fontFamily="'DM Sans',system-ui">{fmt(total)}</text>
+          <text x={sz/2} y={sz/2 + 12} textAnchor="middle" fontSize="8" fill="#9AA0B4"
+            letterSpacing="1.2" fontWeight="600" fontFamily="'DM Sans',system-ui">LEADS</text>
+        </svg>
+
+        {/* 2 — Title block */}
+        <div style={{ flexShrink: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3 }}>Lead breakdown</div>
+          <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>Source mix &middot; all channels</div>
         </div>
-        <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', flexShrink: 0 }}>
-          {headerStats.map(({ label, value, color }) => (
-            <div key={label} style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>{label}</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color, lineHeight: 1 }}>{fmt(value)}</div>
+
+        {/* 3 — Source legend */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {sources.map(r => (
+            <div key={r.source} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '2.5px 0' }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: COLS[r.source] || '#94A3B8', flexShrink: 0 }}/>
+              <span style={{ fontSize: 12, color: 'var(--ink2)', flex: 1, whiteSpace: 'nowrap' }}>{r.source}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink)' }}>{fmt(r.leads)}</span>
             </div>
           ))}
         </div>
-      </div>
 
-      {/* ── Stacked bar ── */}
-      <div style={{ position: 'relative', marginBottom: 20 }}>
-        <div
-          ref={barRef}
-          role="list"
-          aria-label="Lead source breakdown"
-          style={{ display: 'flex', height: 44, borderRadius: 11, overflow: 'hidden' }}
-          onMouseLeave={leave}
-        >
-          {sources.map((r, i) => {
-            const pct   = r.leads / total * 100;
-            const color = COLS[r.source] || '#9AA0B4';
-            const isHov = hovered === r.source;
-            const dim   = hovered !== null && !isHov;
-            if (!r.leads) return null;
-            return (
-              <div
-                key={r.source}
-                role="listitem"
-                tabIndex={0}
-                aria-label={`${r.source}: ${fmt(r.leads)} leads, ${Math.round(pct)}%, ${r.source === 'Organic' ? 'Organic' : 'Paid'}${r.callable != null ? `, ${r.callable} callable` : ''}`}
-                onMouseEnter={e => enterSeg(r, e.currentTarget)}
-                onFocus={e    => enterSeg(r, e.currentTarget)}
-                onBlur={leave}
-                onKeyDown={e  => e.key === 'Escape' && leave()}
-                style={{
-                  flex: m ? r.leads : 0,
-                  background: `linear-gradient(180deg, ${color}ee 0%, ${color} 100%)`,
-                  borderLeft: i > 0 ? '2px solid rgba(255,255,255,0.5)' : 'none',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  overflow: 'hidden', cursor: 'pointer', outline: 'none',
-                  opacity: dim ? 0.22 : 1,
-                  filter: isHov ? 'brightness(1.08)' : 'none',
-                  boxShadow: isHov ? 'inset 0 1px 0 rgba(255,255,255,0.35)' : 'none',
-                  transition: 'flex 1.4s cubic-bezier(.22,1,.36,1), opacity 0.16s ease-out, filter 0.16s ease-out',
-                }}
-              >
-                {pct >= 9 && (
-                  <span style={{
-                    fontSize: 12, fontWeight: 700, color: '#fff',
-                    whiteSpace: 'nowrap', userSelect: 'none',
-                    textShadow: '0 1px 3px rgba(0,0,0,0.18)',
-                    opacity: dim ? 0 : 1,
-                    transition: 'opacity 0.16s ease-out',
-                  }}>
-                    {Math.round(pct)}%
-                  </span>
-                )}
+        {/* 4 — Right-side stats */}
+        <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+          <div style={{ width: 1, height: 54, background: 'var(--line)', marginRight: 20 }}/>
+          {[
+            { label: 'Paid',     value: paidTotal,     color: '#FF6B7A' },
+            { label: 'Organic',  value: organicTotal,  color: '#94A3B8' },
+            { label: 'Callable', value: callableTotal, color: '#1FA77F' },
+          ].map(({ label, value, color }, i) => (
+            <React.Fragment key={label}>
+              {i > 0 && <div style={{ width: 1, height: 36, background: 'var(--line)', margin: '0 16px' }}/>}
+              <div style={{ textAlign: 'center', minWidth: 44 }}>
+                <div style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '1.1px', marginBottom: 5 }}>{label}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color, lineHeight: 1 }}>{fmt(value)}</div>
               </div>
-            );
-          })}
+            </React.Fragment>
+          ))}
         </div>
 
-        {/* ── Tooltip ── */}
-        {tip && (
-          <div
-            role="tooltip"
-            style={{
-              position: 'absolute', bottom: 'calc(100% + 11px)',
-              left: tip.x, transform: 'translateX(-50%)',
-              background: 'var(--panel)', border: '1px solid var(--line)',
-              borderRadius: 10, padding: '11px 14px',
-              boxShadow: 'var(--shadow-md)',
-              pointerEvents: 'none', zIndex: 20, minWidth: 155,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
-              <span style={{ width: 10, height: 10, borderRadius: 3, background: COLS[tip.src.source] || '#9AA0B4', flexShrink: 0 }}/>
-              <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>{tip.src.source}</span>
-              <span style={{
-                fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 600,
-                background: tip.src.source === 'Organic' ? '#9AA0B418' : 'var(--indigo-soft)',
-                color:      tip.src.source === 'Organic' ? 'var(--muted)'  : 'var(--indigo)',
-              }}>
-                {tip.src.source === 'Organic' ? 'Organic' : 'Paid'}
-              </span>
-            </div>
-            {[
-              { label: 'Leads',    value: fmt(tip.src.leads) },
-              { label: 'Share',    value: Math.round(tip.src.leads / total * 100) + '%' },
-              ...(tip.src.callable != null
-                ? [{ label: 'Callable', value: `${tip.src.callable} of ${tip.src.leads}` }]
-                : []),
-            ].map(({ label, value }) => (
-              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 20, marginBottom: 3 }}>
-                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{label}</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>{value}</span>
-              </div>
-            ))}
-            {/* Caret border */}
-            <div style={{ position:'absolute', top:'100%', left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'7px solid transparent', borderRight:'7px solid transparent', borderTop:'7px solid var(--line)' }}/>
-            {/* Caret fill */}
-            <div style={{ position:'absolute', top:'calc(100% - 1px)', left:'50%', transform:'translateX(-50%)', width:0, height:0, borderLeft:'6px solid transparent', borderRight:'6px solid transparent', borderTop:'6px solid var(--panel)' }}/>
-          </div>
-        )}
       </div>
-
-      {/* ── Legend ── */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 30px' }}>
-        {sources.map(r => {
-          const color = COLS[r.source] || '#9AA0B4';
-          const dim   = hovered !== null && hovered !== r.source;
-          return (
-            <div
-              key={r.source}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', opacity: dim ? 0.28 : 1, transition: 'opacity 0.16s ease-out' }}
-              onMouseEnter={() => setHovered(r.source)}
-              onMouseLeave={() => setHovered(null)}
-            >
-              <span style={{ width: 12, height: 12, borderRadius: 4, background: color, flexShrink: 0 }}/>
-              <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink)', lineHeight: 1 }}>{fmt(r.leads)}</span>
-              <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>{r.source}</span>
-            </div>
-          );
-        })}
-      </div>
-
     </div>
   );
 }

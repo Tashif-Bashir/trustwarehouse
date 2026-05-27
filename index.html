@@ -993,9 +993,9 @@ function LeadSourcesCard({ sources }) {
   );
 }
 
-/* ── Lead breakdown stacked bar ──────────────────────── */
-function LeadBreakdownBar({ sources, totalLeads }) {
-  if (!sources || !sources.length) return null;
+/* ── Lead split card (replaces LeadBreakdownBar + Leads split donut) ── */
+function LeadSplitCard({ sources, totalLeads }) {
+  if (!sources || !sources.length) return <EmptyCard title="Leads breakdown"/>;
 
   const total         = totalLeads || sources.reduce((s, r) => s + r.leads, 0) || 1;
   const COLS          = { Google: '#5B6CFF', Meta: '#8B5CF6', Organic: '#94A3B8', Bing: '#3DD0A4' };
@@ -1003,74 +1003,58 @@ function LeadBreakdownBar({ sources, totalLeads }) {
   const organicTotal  = sources.find(r => r.source === 'Organic')?.leads || 0;
   const callableTotal = sources.reduce((s, r) => s + (r.callable || 0), 0);
 
-  /* SVG donut — same geometry pattern as DonutCard */
-  const sz = 78, sw = 11, rad = (sz - sw) / 2, circ = 2 * Math.PI * rad;
-  let segOff = 0;
+  const size = 80, stroke = 13, r = (size - stroke) / 2, c = 2 * Math.PI * r;
+  let offset = 0;
 
   return (
-    <div className="card" style={{ padding: '14px 18px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+    <div className="card donut-card">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }} aria-hidden="true">
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--bg)" strokeWidth={stroke}/>
+        {sources.map(s => {
+          const len = (s.leads / total) * c;
+          const el  = (
+            <circle key={s.source} cx={size/2} cy={size/2} r={r}
+              fill="none" stroke={COLS[s.source] || '#94A3B8'}
+              strokeWidth={stroke} strokeDasharray={`${len} ${c - len}`}
+              strokeDashoffset={-offset}
+              transform={`rotate(-90 ${size/2} ${size/2})`}
+              strokeLinecap="butt"
+            />
+          );
+          offset += len;
+          return el;
+        })}
+        <text x={size/2} y={size/2 - 1} textAnchor="middle" fontSize="10.5" fontWeight="700" fill="#171A2B">{fmt(total)}</text>
+        <text x={size/2} y={size/2 + 11} textAnchor="middle" fontSize="7" fill="#9AA0B4">LEADS</text>
+      </svg>
 
-        {/* 1 — Donut ring */}
-        <svg width={sz} height={sz} viewBox={`0 0 ${sz} ${sz}`} style={{ flexShrink: 0 }} aria-hidden="true">
-          <circle cx={sz/2} cy={sz/2} r={rad} fill="none" stroke="var(--bg)" strokeWidth={sw}/>
+      <div className="donut-info">
+        <div className="card-label" style={{ marginBottom: 6 }}>Leads breakdown</div>
+        <div className="donut-legend" style={{ marginBottom: 10 }}>
           {sources.map(s => {
-            const len = (s.leads / total) * circ;
-            const el  = (
-              <circle key={s.source}
-                cx={sz/2} cy={sz/2} r={rad} fill="none"
-                stroke={COLS[s.source] || '#94A3B8'}
-                strokeWidth={sw}
-                strokeDasharray={`${len} ${circ - len}`}
-                strokeDashoffset={-segOff}
-                transform={`rotate(-90 ${sz/2} ${sz/2})`}
-                strokeLinecap="butt"
-              />
+            const pct = Math.round(s.leads / total * 100);
+            return (
+              <div className="legend-row" key={s.source}>
+                <span className="legend-dot" style={{ background: COLS[s.source] || '#94A3B8' }}/>
+                <span style={{ flex: 1 }}>{s.source}</span>
+                <b style={{ marginRight: 5 }}>{fmt(s.leads)}</b>
+                <span style={{ color: 'var(--muted)', fontSize: 10.5, minWidth: 28, textAlign: 'right' }}>{pct}%</span>
+              </div>
             );
-            segOff += len;
-            return el;
           })}
-          <text x={sz/2} y={sz/2 - 2} textAnchor="middle" fontSize="17" fontWeight="700"
-            fill="#171A2B" fontFamily="'DM Sans',system-ui">{fmt(total)}</text>
-          <text x={sz/2} y={sz/2 + 12} textAnchor="middle" fontSize="8" fill="#9AA0B4"
-            letterSpacing="1.2" fontWeight="600" fontFamily="'DM Sans',system-ui">LEADS</text>
-        </svg>
-
-        {/* 2 — Title block */}
-        <div style={{ flexShrink: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3 }}>Lead breakdown</div>
-          <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>Source mix &middot; all channels</div>
         </div>
-
-        {/* 3 — Source legend */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {sources.map(r => (
-            <div key={r.source} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '2.5px 0' }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: COLS[r.source] || '#94A3B8', flexShrink: 0 }}/>
-              <span style={{ fontSize: 12, color: 'var(--ink2)', flex: 1, whiteSpace: 'nowrap' }}>{r.source}</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink)' }}>{fmt(r.leads)}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* 4 — Right-side stats */}
-        <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-          <div style={{ width: 1, height: 54, background: 'var(--line)', marginRight: 20 }}/>
+        <div style={{ display: 'flex', gap: 14, borderTop: '1px solid var(--line)', paddingTop: 9 }}>
           {[
             { label: 'Paid',     value: paidTotal,     color: '#FF6B7A' },
             { label: 'Organic',  value: organicTotal,  color: '#94A3B8' },
             { label: 'Callable', value: callableTotal, color: '#1FA77F' },
-          ].map(({ label, value, color }, i) => (
-            <React.Fragment key={label}>
-              {i > 0 && <div style={{ width: 1, height: 36, background: 'var(--line)', margin: '0 16px' }}/>}
-              <div style={{ textAlign: 'center', minWidth: 44 }}>
-                <div style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '1.1px', marginBottom: 5 }}>{label}</div>
-                <div style={{ fontSize: 15, fontWeight: 700, color, lineHeight: 1 }}>{fmt(value)}</div>
-              </div>
-            </React.Fragment>
+          ].map(({ label, value, color }) => (
+            <div key={label}>
+              <div style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>{label}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color }}>{fmt(value)}</div>
+            </div>
           ))}
         </div>
-
       </div>
     </div>
   );
@@ -1672,28 +1656,21 @@ function TweakButton({ label, onClick, secondary = false }) {
 function MarketingView({ data }) {
   const { totals: T, prev_totals: PT, platforms, daily, lead_sources } = data;
   const pt = PT || {};
-  const totalLeads = T.total_leads || T.leads;
+  const totalLeads     = T.total_leads || T.leads;
   const prevTotalLeads = pt.total_leads != null ? pt.total_leads : pt.leads;
-  const spendSegs = platforms.map(p => ({ label: p.platform, value: p.spend, color: PC[p.platform] }));
-  const organicLeads = Math.max(0, totalLeads - T.leads);
-  const leadSegs = [
-    ...platforms.map(p => ({ label: p.platform, value: p.leads, color: PC[p.platform] })),
-    ...(organicLeads > 0 ? [{ label: 'Organic', value: organicLeads, color: '#9AA0B4' }] : [])
-  ];
+  const spendSegs      = platforms.map(p => ({ label: p.platform, value: p.spend, color: PC[p.platform] }));
   return (
     <>
       <div className="g4">
-        <Kpi label="Total spend"  value={gbp(T.spend)}   icon={Ic.spend}  iconBg="var(--rose-soft)"   iconColor="var(--rose)"   delta={delta(T.spend, pt.spend, 'down')}         delay={0}/>
-        <Kpi label="Total leads"  value={fmt(totalLeads)} icon={Ic.leads}  iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(totalLeads, prevTotalLeads, 'up')}   delay={60}/>
-        <Kpi label="Blended CPL"  value={gbp(T.cpl)}     icon={Ic.target} iconBg="var(--amber-soft)"  iconColor="#A87B0A"       delta={delta(T.cpl, pt.cpl, 'down')}             delay={120}/>
-        <Kpi label="Clicks"       value={fmt(T.clicks)}  icon={Ic.chart}  iconBg="var(--sky-soft)"    iconColor="var(--sky)"    delay={180}/>
+        <Kpi label="Total spend"  value={gbp(T.spend)}    icon={Ic.spend}  iconBg="var(--rose-soft)"   iconColor="var(--rose)"   delta={delta(T.spend, pt.spend, 'down')}       delay={0}/>
+        <Kpi label="Total leads"  value={fmt(totalLeads)} icon={Ic.leads}  iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(totalLeads, prevTotalLeads, 'up')} delay={60}/>
+        <Kpi label="Blended CPL"  value={gbp(T.cpl)}      icon={Ic.target} iconBg="var(--amber-soft)"  iconColor="#A87B0A"       delta={delta(T.cpl, pt.cpl, 'down')}           delay={120}/>
+        <Kpi label="Clicks"       value={fmt(T.clicks)}   icon={Ic.chart}  iconBg="var(--sky-soft)"    iconColor="var(--sky)"    delay={180}/>
       </div>
-      <LeadBreakdownBar sources={lead_sources} totalLeads={totalLeads}/>
       <div className="g2">
         <DonutCard title="Spend split" segments={spendSegs} total={gbp(T.spend/1000,1)+'k'} totalLabel="SPEND"
           sub={fmt(T.clicks) + ' clicks'}/>
-        <DonutCard title="Leads split" segments={leadSegs} total={fmt(totalLeads)} totalLabel="LEADS"
-          sub={fmt(T.leads) + ' paid · ' + fmt(organicLeads) + ' organic'}/>
+        <LeadSplitCard sources={lead_sources} totalLeads={totalLeads}/>
       </div>
       <div className="g21">
         <SpendChart daily={daily}/>

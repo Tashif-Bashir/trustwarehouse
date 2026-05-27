@@ -993,6 +993,74 @@ function LeadSourcesCard({ sources }) {
   );
 }
 
+/* ── Lead breakdown stacked bar ──────────────────────── */
+function LeadBreakdownBar({ sources, totalLeads }) {
+  const m = useMounted(60);
+  if (!sources || !sources.length) return null;
+  const total = totalLeads || sources.reduce((s, r) => s + r.leads, 0) || 1;
+  const COLS = { Google: PC.Google, Meta: PC.Meta, Bing: PC.Bing, Organic: '#9AA0B4' };
+  const paidTotal = sources.filter(r => r.source !== 'Organic').reduce((s, r) => s + r.leads, 0);
+  const organicTotal = sources.find(r => r.source === 'Organic')?.leads || 0;
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Lead breakdown</div>
+          <div className="sec-sub">Paid vs organic &middot; all sources</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+          <span style={{ fontSize: 24, fontWeight: 700, color: 'var(--ink)' }}>{fmt(total)}</span>
+          <span style={{ fontSize: 12, color: 'var(--muted)' }}>total leads</span>
+        </div>
+      </div>
+      <div style={{ display: 'flex', height: 38, borderRadius: 8, overflow: 'hidden', gap: 2, marginBottom: 18 }}>
+        {sources.map(r => {
+          const pct = r.leads / total * 100;
+          const color = COLS[r.source] || '#9AA0B4';
+          if (!r.leads) return null;
+          return (
+            <div key={r.source} title={`${r.source}: ${fmt(r.leads)} (${Math.round(pct)}%)`} style={{
+              flex: m ? r.leads : 0,
+              background: color,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              overflow: 'hidden',
+              transition: 'flex 1.3s cubic-bezier(.22,1,.36,1)'
+            }}>
+              {pct >= 9 && <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', userSelect: 'none' }}>{Math.round(pct)}%</span>}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px 0' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 20px' }}>
+          {sources.map(r => {
+            const color = COLS[r.source] || '#9AA0B4';
+            const pct = Math.round(r.leads / total * 100);
+            return (
+              <div key={r.source} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 3, background: color, flexShrink: 0 }}/>
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{r.source}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{fmt(r.leads)}</span>
+                <span style={{ fontSize: 11, color: 'var(--muted)', opacity: .7 }}>({pct}%)</span>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display: 'flex', gap: 16, flexShrink: 0 }}>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Paid</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--rose)' }}>{fmt(paidTotal)}</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Organic</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#9AA0B4' }}>{fmt(organicTotal)}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Stage bars with avg age ─────────────────────────── */
 function StageBreakdown({ stages }) {
   const m = useMounted(100);
@@ -1589,21 +1657,28 @@ function TweakButton({ label, onClick, secondary = false }) {
 function MarketingView({ data }) {
   const { totals: T, prev_totals: PT, platforms, daily, lead_sources } = data;
   const pt = PT || {};
+  const totalLeads = T.total_leads || T.leads;
+  const prevTotalLeads = pt.total_leads != null ? pt.total_leads : pt.leads;
   const spendSegs = platforms.map(p => ({ label: p.platform, value: p.spend, color: PC[p.platform] }));
-  const leadSegs  = platforms.map(p => ({ label: p.platform, value: p.leads, color: PC[p.platform] }));
+  const organicLeads = Math.max(0, totalLeads - T.leads);
+  const leadSegs = [
+    ...platforms.map(p => ({ label: p.platform, value: p.leads, color: PC[p.platform] })),
+    ...(organicLeads > 0 ? [{ label: 'Organic', value: organicLeads, color: '#9AA0B4' }] : [])
+  ];
   return (
     <>
       <div className="g4">
-        <Kpi label="Total spend" value={gbp(T.spend)}  icon={Ic.spend}  iconBg="var(--rose-soft)"   iconColor="var(--rose)"   delta={delta(T.spend, pt.spend, 'down')} delay={0}/>
-        <Kpi label="Paid leads"  value={fmt(T.leads)}  icon={Ic.leads}  iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(T.leads, pt.leads, 'up')}   delay={60}/>
-        <Kpi label="Blended CPL" value={gbp(T.cpl)}   icon={Ic.target} iconBg="var(--amber-soft)"  iconColor="#A87B0A"       delta={delta(T.cpl, pt.cpl, 'down')}     delay={120}/>
-        <Kpi label="Clicks"      value={fmt(T.clicks)} icon={Ic.chart}  iconBg="var(--sky-soft)"    iconColor="var(--sky)"    delay={180}/>
+        <Kpi label="Total spend"  value={gbp(T.spend)}   icon={Ic.spend}  iconBg="var(--rose-soft)"   iconColor="var(--rose)"   delta={delta(T.spend, pt.spend, 'down')}         delay={0}/>
+        <Kpi label="Total leads"  value={fmt(totalLeads)} icon={Ic.leads}  iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(totalLeads, prevTotalLeads, 'up')}   delay={60}/>
+        <Kpi label="Blended CPL"  value={gbp(T.cpl)}     icon={Ic.target} iconBg="var(--amber-soft)"  iconColor="#A87B0A"       delta={delta(T.cpl, pt.cpl, 'down')}             delay={120}/>
+        <Kpi label="Clicks"       value={fmt(T.clicks)}  icon={Ic.chart}  iconBg="var(--sky-soft)"    iconColor="var(--sky)"    delay={180}/>
       </div>
+      <LeadBreakdownBar sources={lead_sources} totalLeads={totalLeads}/>
       <div className="g2">
         <DonutCard title="Spend split" segments={spendSegs} total={gbp(T.spend/1000,1)+'k'} totalLabel="SPEND"
           sub={fmt(T.clicks) + ' clicks'}/>
-        <DonutCard title="Leads split" segments={leadSegs} total={fmt(T.leads)} totalLabel="LEADS"
-          sub={gbp(T.cpl) + ' blended CPL'}/>
+        <DonutCard title="Leads split" segments={leadSegs} total={fmt(totalLeads)} totalLabel="LEADS"
+          sub={fmt(T.leads) + ' paid · ' + fmt(organicLeads) + ' organic'}/>
       </div>
       <div className="g21">
         <SpendChart daily={daily}/>

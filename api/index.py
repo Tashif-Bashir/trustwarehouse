@@ -134,6 +134,7 @@ def _load_all(d0s, d1s):
     df_attr      = _cached(f'attr:{d0s}:{d1s}',  lambda: _attr(d0s, d1s))
     df_attr_prev = _cached(f'attr:{p0s}:{p1s}',  lambda: _attr(p0s, p1s))
     df_src       = _cached(f'src:{d0s}:{d1s}',   lambda: _sources(d0s, d1s))
+    df_src_prev  = _cached(f'src:{p0s}:{p1s}',   lambda: _sources(p0s, p1s))
     df_ts        = _cached(f'ts:{d0s}:{d1s}',    lambda: _telesales(d0s, d1s))
     df_ts_prev   = _cached(f'ts:{p0s}:{p1s}',    lambda: _telesales(p0s, p1s))
     df_ts_day    = _cached(f'tsd:{d0s}:{d1s}',   lambda: _ts_daily(d0s, d1s))
@@ -148,7 +149,8 @@ def _load_all(d0s, d1s):
     if not df_attr_prev.empty:
         pp = df_attr_prev.groupby("platform").agg(spend=("spend_gbp","sum"),leads=("leads","sum")).reset_index()
         p_sp = float(pp["spend"].sum()); p_ld = int(pp["leads"].sum())
-        prev_marketing_totals = {"spend": p_sp, "leads": p_ld, "cpl": round(p_sp/p_ld,2) if p_ld else 0}
+        p_all = int(df_src_prev['leads'].sum()) if not df_src_prev.empty else 0
+        prev_marketing_totals = {"spend": p_sp, "leads": p_ld, "cpl": round(p_sp/p_ld,2) if p_ld else 0, "total_leads": p_all}
 
     platforms = [{'platform':str(r['platform']),'spend':float(r['spend']),'leads':int(r['leads']),'clicks':int(r['clicks']),'cpl':_safe(r['cpl']),'ctr':_safe(r['ctr'])} for _,r in pa.iterrows()]
     daily     = [{'date':str(r['date']),'platform':str(r['platform']),'spend':_safe(float(r['spend_gbp'])),'leads':int(r['leads']) if pd.notna(r['leads']) else 0} for _,r in df_attr.iterrows()]

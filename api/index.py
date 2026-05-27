@@ -63,10 +63,7 @@ def _sources(d0, d1):
                COUNT(DISTINCT lead_id) as leads,
                COUNT(DISTINCT CASE WHEN appointment_booked='Yes' THEN lead_id END) as appts,
                COUNT(DISTINCT CASE WHEN is_sold=true THEN lead_id END) as sales,
-               -- TODO: replace with a dedicated is_callable field on gold_lead_activity
-               -- when added; for now callable = not yet appointed and not sold
-               COUNT(DISTINCT CASE WHEN COALESCE(appointment_booked,'') != 'Yes'
-                                        AND NOT COALESCE(is_sold, false)
+               COUNT(DISTINCT CASE WHEN phone IS NOT NULL OR mobile IS NOT NULL
                                    THEN lead_id END) as callable
         FROM `{PROJECT}.gold.gold_lead_activity`
         WHERE created_date BETWEEN '{d0}' AND '{d1}'

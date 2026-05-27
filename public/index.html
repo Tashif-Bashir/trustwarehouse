@@ -256,6 +256,35 @@
   .legend-dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; }
   .legend-row b{ margin-left:auto; font-weight:600; color:var(--ink); }
 
+  /* ── Source info tooltip ── */
+  .info-tip{ position:relative; display:inline-flex; align-items:center; }
+  .info-tip-icon{
+    width:13px; height:13px; border-radius:50%;
+    border:1.5px solid #9AA0B4; color:#9AA0B4;
+    font-size:8px; font-weight:700; font-style:italic;
+    font-family:Georgia,'Times New Roman',serif;
+    display:inline-flex; align-items:center; justify-content:center;
+    cursor:help; flex-shrink:0; line-height:1;
+    transition:border-color .15s,color .15s;
+  }
+  .info-tip:hover .info-tip-icon{ border-color:var(--ink2); color:var(--ink2); }
+  .info-tip-bubble{
+    display:none; position:absolute;
+    bottom:calc(100% + 8px); left:0;
+    background:#1C1F35; color:#E8EAF2;
+    font-size:11px; line-height:1.5; font-weight:400; font-style:normal;
+    font-family:'DM Sans',sans-serif;
+    padding:9px 12px; border-radius:8px;
+    width:195px; z-index:200;
+    box-shadow:0 4px 18px rgba(0,0,0,.28);
+    pointer-events:none;
+  }
+  .info-tip-bubble::after{
+    content:''; position:absolute; top:100%; left:5px;
+    border:5px solid transparent; border-top-color:#1C1F35;
+  }
+  .info-tip:hover .info-tip-bubble{ display:block; }
+
   /* Section heading */
   .sec-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:10px; flex-wrap:wrap; }
   .sec-title{ font-size:14px; font-weight:600; letter-spacing:-.2px; color:var(--ink); }
@@ -414,6 +443,15 @@ const { useState, useEffect, useMemo, useRef } = React;
 /* ── Color tokens ──────────────────────────────────────────── */
 const PC     = { Google:'#5B6CFF', Meta:'#8B5CF6', Bing:'#3DD0A4', Email:'#F59E0B', Content:'#EC4899', Enquiry:'#F97316', Direct:'#94A3B8' };
 const PCsoft = { Google:'#EEF0FF', Meta:'#F2EDFF', Bing:'#E2F8EF' };
+const SOURCE_TIPS = {
+  Google:  'Paid search — lead clicked a Google Ads ad. Campaign ID was matched in SharpSpring.',
+  Meta:    'Paid social — lead clicked a Meta (Facebook or Instagram) ad. Campaign ID was matched in SharpSpring.',
+  Bing:    'Paid search — lead clicked a Microsoft/Bing Ads ad. Campaign ID was matched in SharpSpring.',
+  Email:   'Lead clicked a link inside a SharpSpring email campaign (utm_source=sharpspring found in the URL).',
+  Content: 'Lead came from a blog post, guide, or news article on the website before submitting a form.',
+  Enquiry: 'Lead submitted a form from a tracked page (e.g. service page, landing page) that doesn\'t fit another category.',
+  Direct:  'No URL tracking data was recorded — likely a direct visit, bookmark, or a click from WhatsApp/email where UTM params are stripped.',
+};
 
 const STAGE_COLOR = {
   'New':         '#5AC8FA',
@@ -1037,7 +1075,15 @@ function LeadSplitCard({ sources, totalLeads }) {
             return (
               <div className="legend-row" key={s.source}>
                 <span className="legend-dot" style={{ background: COLS[s.source] || '#94A3B8' }}/>
-                <span style={{ flex: 1 }}>{s.source}</span>
+                <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {s.source}
+                  {SOURCE_TIPS[s.source] && (
+                    <span className="info-tip">
+                      <span className="info-tip-icon">i</span>
+                      <span className="info-tip-bubble">{SOURCE_TIPS[s.source]}</span>
+                    </span>
+                  )}
+                </span>
                 <b style={{ marginRight: 5 }}>{fmt(s.leads)}</b>
                 <span style={{ color: 'var(--muted)', fontSize: 10.5, minWidth: 28, textAlign: 'right' }}>{pct}%</span>
               </div>

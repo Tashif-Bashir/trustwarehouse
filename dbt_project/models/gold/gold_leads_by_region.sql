@@ -54,7 +54,17 @@ final as (
     select
         created_date,
         -- priority: 1) UTM campaign region, 2) postcode-derived region, 3) Unknown
-        coalesce(utm_region, derived_region, 'Unknown')     as region,
+        -- normalise postcode regions to match UTM naming (West/East Midlands → Midlands)
+        coalesce(
+            utm_region,
+            case derived_region
+                when 'West Midlands'  then 'Midlands'
+                when 'East Midlands'  then 'Midlands'
+                when 'Greater London' then 'Greater London'
+                else derived_region
+            end,
+            'Unknown'
+        )                                                   as region,
         platform,
         count(distinct lead_id)                             as leads,
         count(distinct case when appointment_booked = 'Yes'

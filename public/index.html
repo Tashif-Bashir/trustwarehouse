@@ -1769,11 +1769,11 @@ function MarketingView({ data }) {
         <div className="g2">
           <RegionBarCard
             title="Leads by region"
-            rows={regions}
+            rows={regions.filter(r => r.leads > 0)}
             valueKey="leads"
             formatVal={v => fmt(v)}
             color="var(--violet)"
-            sub="From SharpSpring postcodes"
+            sub="Derived from UTM campaign · postcode fallback"
           />
           <RegionBarCard
             title="Google spend by region"

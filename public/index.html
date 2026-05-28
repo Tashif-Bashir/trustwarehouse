@@ -1696,6 +1696,95 @@ function TweakButton({ label, onClick, secondary = false }) {
   );
 }
 
+/* ── UK Choropleth Map ───────────────────────────────────── */
+const UK_REGIONS_SVG = {
+  'Scotland':         { d:'M48,2 L148,2 L155,18 L158,45 L148,65 L122,80 L95,82 L72,80 L50,68 L40,42 Z', lx:100, ly:42 },
+  'Northern England': { d:'M50,80 L95,82 L98,100 L90,122 L68,128 L50,120 L44,102 Z', lx:70, ly:105 },
+  'North East':       { d:'M95,82 L122,80 L148,72 L155,95 L148,118 L125,125 L100,120 L95,100 Z', lx:126, ly:100 },
+  'Yorkshire':        { d:'M88,120 L100,120 L125,122 L148,118 L155,138 L145,158 L120,162 L95,158 L82,148 L82,132 Z', lx:118, ly:140 },
+  'Wales':            { d:'M42,120 L68,120 L70,140 L68,162 L55,172 L40,168 L32,152 L35,132 Z', lx:52, ly:148 },
+  'Midlands':         { d:'M68,120 L95,120 L108,122 L118,125 L125,140 L125,158 L112,168 L88,172 L68,168 L60,158 L60,138 L65,128 Z', lx:95, ly:148 },
+  'East of England':  { d:'M118,125 L145,120 L165,132 L168,155 L158,172 L135,175 L115,168 L112,155 L118,140 Z', lx:142, ly:150 },
+  'Greater London':   { d:'M108,172 L135,172 L138,182 L125,190 L106,188 L104,178 Z', lx:122, ly:181 },
+  'South East':       { d:'M85,172 L112,172 L132,178 L152,175 L168,178 L172,192 L160,210 L130,218 L100,212 L80,202 L75,188 Z', lx:128, ly:198 },
+  'South West':       { d:'M35,168 L80,168 L80,185 L75,202 L62,215 L46,222 L28,218 L20,205 L22,188 L32,175 Z', lx:50, ly:198 },
+};
+
+function UKSpendMap({ regions = [] }) {
+  const [hovered, setHovered] = React.useState(null);
+  const [tip, setTip] = React.useState({ x:0, y:0 });
+  const svgRef = React.useRef(null);
+
+  const spendMap = {}, cplMap = {};
+  regions.forEach(r => { spendMap[r.region] = r.spend_gbp || 0; cplMap[r.region] = r.cpl; });
+  const maxSpend = Math.max(...Object.values(spendMap).filter(v => v > 0), 1);
+
+  function getColor(name) {
+    const s = spendMap[name] || 0;
+    if (!s) return 'var(--line)';
+    const t = s / maxSpend;
+    const r = Math.round(255 + t * (229-255));
+    const g = Math.round(233 + t * (0-233));
+    const b = Math.round(236 + t * (59-236));
+    return `rgb(${r},${g},${b})`;
+  }
+
+  function onMove(e, name) {
+    if (!svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    setTip({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    setHovered(name);
+  }
+
+  const fmtK = v => !v ? '—' : v >= 1000 ? `£${(v/1000).toFixed(1)}k` : `£${Math.round(v)}`;
+
+  return (
+    <div className="card" style={{padding:'18px 20px'}}>
+      <div style={{marginBottom:10}}>
+        <div className="card-label">Google spend by region</div>
+        <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>Google Ads only · National excluded</div>
+      </div>
+      <div style={{position:'relative'}}>
+        <svg ref={svgRef} viewBox="0 0 180 228" style={{width:'100%',height:'auto',display:'block'}}
+          onMouseLeave={() => setHovered(null)}>
+          {Object.entries(UK_REGIONS_SVG).map(([name, {d, lx, ly}]) => {
+            const isHov = hovered === name;
+            const spend = spendMap[name] || 0;
+            return (
+              <g key={name}>
+                <path d={d} fill={getColor(name)} stroke="white" strokeWidth={1.2}
+                  style={{cursor:'pointer',transition:'filter .15s',filter:isHov?'brightness(.88)':'none'}}
+                  onMouseMove={e => onMove(e, name)}
+                  onMouseEnter={e => onMove(e, name)}/>
+                {spend > 0 && (
+                  <text x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
+                    style={{fontSize:'6px',fontWeight:700,fill:'#fff',pointerEvents:'none',
+                      textShadow:'0 1px 2px rgba(0,0,0,.4)',fontFamily:'DM Sans,sans-serif'}}>
+                    {fmtK(spend)}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+        {hovered && (
+          <div style={{position:'absolute',left:tip.x+12,top:tip.y-12,background:'#1C1F35',
+            color:'#E8EAF2',fontSize:11,lineHeight:1.5,padding:'7px 10px',borderRadius:7,
+            pointerEvents:'none',zIndex:50,whiteSpace:'nowrap',boxShadow:'0 4px 12px rgba(0,0,0,.25)'}}>
+            <div style={{fontWeight:600,marginBottom:2}}>{hovered}</div>
+            <div>{fmtK(spendMap[hovered] || 0)}</div>
+            {cplMap[hovered] && <div style={{color:'#9AA0B4',fontSize:10}}>CPL {fmtK(cplMap[hovered])}</div>}
+          </div>
+        )}
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginTop:8}}>
+        <div style={{height:5,borderRadius:3,flex:1,background:'linear-gradient(to right,#FFE9EC,#E5003B)'}}/>
+        <span style={{fontSize:10,color:'var(--muted)',whiteSpace:'nowrap'}}>Low → High</span>
+      </div>
+    </div>
+  );
+}
+
 /* ── Region horizontal bar card (reusable) ───────────────── */
 function RegionBarCard({ title, rows, valueKey, formatVal, color, icon, sub, warning }) {
   const m = useMounted(200);
@@ -1763,16 +1852,17 @@ function MarketingView({ data }) {
           sub={fmt(T.clicks) + ' clicks'}/>
         <LeadSplitCard sources={lead_sources} totalLeads={totalLeads}/>
       </div>
-      <div className="g21">
+      <div style={{display:'grid',gridTemplateColumns:'1.6fr 1fr 1fr',gap:14,marginBottom:14}}>
         <SpendChart daily={daily}/>
         <PlatformBreakdown platforms={platforms} totalSpend={T.spend}/>
+        <UKSpendMap regions={regions.filter(r => r.spend_gbp > 0)}/>
       </div>
       <div className="g12">
         <LeadSourcesCard sources={lead_sources}/>
         <ActivityChart daily={daily}/>
       </div>
-      {regions.length > 0 && (
-        <div className="g2">
+      {regions.filter(r => r.leads > 0).length > 0 && (
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
           <RegionBarCard
             title="Leads by region"
             rows={regions.filter(r => r.leads > 0)}
@@ -1781,14 +1871,6 @@ function MarketingView({ data }) {
             color="var(--violet)"
             sub="Derived from UTM campaign · postcode fallback"
             warning="Partial data — region is only known when a lead has a regional UTM campaign name, a postcode, or a manually entered region in SharpSpring. Leads from generic campaigns with no postcode cannot be attributed."
-          />
-          <RegionBarCard
-            title="Google spend by region"
-            rows={[...regions].sort((a,b) => b.spend_gbp - a.spend_gbp).filter(r => r.spend_gbp > 0)}
-            valueKey="spend_gbp"
-            formatVal={v => gbp(v)}
-            color="var(--rose)"
-            sub="Google Ads only · National campaigns excluded"
           />
         </div>
       )}

@@ -1697,17 +1697,18 @@ function TweakButton({ label, onClick, secondary = false }) {
 }
 
 /* ── UK Choropleth Map ───────────────────────────────────── */
+// Regions ordered large→small so smaller ones always paint on top
 const UK_REGIONS_SVG = {
-  'Scotland':         { d:'M48,2 L148,2 L155,18 L158,45 L148,65 L122,80 L95,82 L72,80 L50,68 L40,42 Z', lx:100, ly:42 },
-  'Northern England': { d:'M50,80 L95,82 L98,100 L90,122 L68,128 L50,120 L44,102 Z', lx:70, ly:105 },
-  'North East':       { d:'M95,82 L122,80 L148,72 L155,95 L148,118 L125,125 L100,120 L95,100 Z', lx:126, ly:100 },
-  'Yorkshire':        { d:'M88,120 L100,120 L125,122 L148,118 L155,138 L145,158 L120,162 L95,158 L82,148 L82,132 Z', lx:118, ly:140 },
-  'Wales':            { d:'M42,120 L68,120 L70,140 L68,162 L55,172 L40,168 L32,152 L35,132 Z', lx:52, ly:148 },
-  'Midlands':         { d:'M68,120 L95,120 L108,122 L118,125 L125,140 L125,158 L112,168 L88,172 L68,168 L60,158 L60,138 L65,128 Z', lx:95, ly:148 },
-  'East of England':  { d:'M118,125 L145,120 L165,132 L168,155 L158,172 L135,175 L115,168 L112,155 L118,140 Z', lx:142, ly:150 },
-  'Greater London':   { d:'M108,172 L135,172 L138,182 L125,190 L106,188 L104,178 Z', lx:122, ly:181 },
-  'South East':       { d:'M85,172 L112,172 L132,178 L152,175 L168,178 L172,192 L160,210 L130,218 L100,212 L80,202 L75,188 Z', lx:128, ly:198 },
-  'South West':       { d:'M35,168 L80,168 L80,185 L75,202 L62,215 L46,222 L28,218 L20,205 L22,188 L32,175 Z', lx:50, ly:198 },
+  'Scotland':         { d:'M45,0 L148,0 L156,16 L158,44 L148,66 L122,82 L95,84 L72,82 L50,68 L40,42 Z', lx:100, ly:42 },
+  'Northern England': { d:'M50,84 L95,84 L98,106 L92,128 L70,135 L52,126 L46,106 Z', lx:70, ly:108 },
+  'North East':       { d:'M95,84 L148,78 L156,98 L150,122 L128,130 L98,126 L98,106 Z', lx:128, ly:105 },
+  'Wales':            { d:'M42,126 L68,126 L70,148 L66,172 L52,183 L36,176 L28,160 L32,140 Z', lx:50, ly:154 },
+  'East of England':  { d:'M122,130 L150,124 L166,138 L170,162 L158,178 L136,182 L114,175 L110,162 L116,146 Z', lx:142, ly:156 },
+  'South West':       { d:'M36,176 L78,176 L80,194 L76,210 L62,222 L44,228 L26,222 L18,208 L22,192 L30,180 Z', lx:50, ly:202 },
+  'South East':       { d:'M82,180 L112,180 L136,180 L156,178 L172,188 L174,206 L160,224 L128,230 L96,222 L76,210 L74,194 Z', lx:128, ly:206 },
+  'Midlands':         { d:'M68,130 L92,130 L82,142 L80,154 L92,166 L120,170 L122,178 L98,182 L76,180 L60,170 L56,154 L58,138 L64,132 Z', lx:92, ly:157 },
+  'Yorkshire':        { d:'M92,126 L128,130 L150,122 L156,142 L146,164 L118,170 L92,166 L80,154 L82,138 Z', lx:118, ly:148 },
+  'Greater London':   { d:'M104,178 L140,178 L144,192 L126,202 L102,200 L100,186 Z', lx:122, ly:190 },
 };
 
 function UKSpendMap({ regions = [] }) {
@@ -1745,7 +1746,7 @@ function UKSpendMap({ regions = [] }) {
         <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>Google Ads only · National excluded</div>
       </div>
       <div style={{position:'relative'}}>
-        <svg ref={svgRef} viewBox="0 0 180 228" style={{width:'100%',height:'auto',display:'block',overflow:'visible'}}
+        <svg ref={svgRef} viewBox="0 0 180 234" style={{width:'100%',height:'auto',display:'block',overflow:'visible'}}
           onMouseLeave={() => setHovered(null)}>
           {/* render hovered region last so it paints on top */}
           {[...Object.entries(UK_REGIONS_SVG).filter(([n]) => n !== hovered),

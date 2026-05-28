@@ -15,6 +15,7 @@ from google.analytics.data_v1beta.types import (
     Metric,
     RunReportRequest,
 )
+from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
 
 PROPERTY_ID   = "336938127"
@@ -64,9 +65,12 @@ def _fetch(start: date, end: date) -> pd.DataFrame:
 
 
 def _upsert(bq: bigquery.Client, df: pd.DataFrame, start: date, end: date) -> None:
-    bq.query(
-        f"DELETE FROM `{TABLE_ID}` WHERE date BETWEEN '{start}' AND '{end}'"
-    ).result()
+    try:
+        bq.query(
+            f"DELETE FROM `{TABLE_ID}` WHERE date BETWEEN '{start}' AND '{end}'"
+        ).result()
+    except NotFound:
+        pass  # table doesn't exist yet; load_table_from_dataframe will create it
 
     job_config = bigquery.LoadJobConfig(
         write_disposition=bigquery.WriteDisposition.WRITE_APPEND,

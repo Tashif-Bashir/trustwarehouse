@@ -105,10 +105,18 @@ cleaned as (
     from source
 ),
 
+postcode_lookup as (
+    select * from {{ ref('postcode_area_region') }}
+),
+
 -- derived classifications that depend on columns computed in cleaned
 enriched as (
     select
-        *,
+        c.*,
+        coalesce(
+            pc.uk_region,
+            c.region
+        ) as derived_region,
 
         -- clean date of the scheduled appointment (text field has empty strings — SAFE_CAST returns NULL for invalid values)
         SAFE_CAST(appointment_datetime_text AS DATE)                            as appointment_date,
@@ -130,7 +138,9 @@ enriched as (
             'sold', 'sold on site', 'sold in office', 'chc sold'
         ), false)                                                               as is_sold
 
-    from cleaned
+    from cleaned c
+    left join postcode_lookup pc
+        on regexp_extract(upper(c.postcode), r'^([A-Z]+)') = pc.postcode_area
 )
 
 select * from enriched

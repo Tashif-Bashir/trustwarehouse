@@ -1745,21 +1745,34 @@ function UKSpendMap({ regions = [] }) {
         <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>Google Ads only · National excluded</div>
       </div>
       <div style={{position:'relative'}}>
-        <svg ref={svgRef} viewBox="0 0 180 228" style={{width:'100%',height:'auto',display:'block'}}
+        <svg ref={svgRef} viewBox="0 0 180 228" style={{width:'100%',height:'auto',display:'block',overflow:'visible'}}
           onMouseLeave={() => setHovered(null)}>
-          {Object.entries(UK_REGIONS_SVG).map(([name, {d, lx, ly}]) => {
+          {/* render hovered region last so it paints on top */}
+          {[...Object.entries(UK_REGIONS_SVG).filter(([n]) => n !== hovered),
+             ...Object.entries(UK_REGIONS_SVG).filter(([n]) => n === hovered)
+          ].map(([name, {d, lx, ly}]) => {
             const isHov = hovered === name;
+            const isDimmed = hovered && !isHov;
             const spend = spendMap[name] || 0;
             return (
-              <g key={name}>
-                <path d={d} fill={getColor(name)} stroke="white" strokeWidth={1.2}
-                  style={{cursor:'pointer',transition:'filter .15s',filter:isHov?'brightness(.88)':'none'}}
+              <g key={name} style={{
+                transformBox:'fill-box',
+                transformOrigin:'center',
+                transform: isHov ? 'scale(1.10)' : 'scale(1)',
+                filter: isHov
+                  ? 'drop-shadow(0 6px 18px rgba(0,0,0,0.38))'
+                  : isDimmed ? 'blur(1.2px)' : 'none',
+                opacity: isDimmed ? 0.22 : 1,
+                transition:'transform .35s cubic-bezier(.34,1.56,.64,1), filter .22s ease, opacity .22s ease',
+              }}>
+                <path d={d} fill={getColor(name)} stroke="white" strokeWidth={isHov ? 1.5 : 1.2}
+                  style={{cursor:'pointer'}}
                   onMouseMove={e => onMove(e, name)}
                   onMouseEnter={e => onMove(e, name)}/>
                 {spend > 0 && (
                   <text x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
                     style={{fontSize:'6px',fontWeight:700,fill:'#fff',pointerEvents:'none',
-                      textShadow:'0 1px 2px rgba(0,0,0,.4)',fontFamily:'DM Sans,sans-serif'}}>
+                      fontFamily:'DM Sans,sans-serif'}}>
                     {fmtK(spend)}
                   </text>
                 )}

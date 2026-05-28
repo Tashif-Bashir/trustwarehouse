@@ -1697,15 +1697,22 @@ function TweakButton({ label, onClick, secondary = false }) {
 }
 
 /* ── Region horizontal bar card (reusable) ───────────────── */
-function RegionBarCard({ title, rows, valueKey, formatVal, color, icon, sub }) {
+function RegionBarCard({ title, rows, valueKey, formatVal, color, icon, sub, warning }) {
   const m = useMounted(200);
   if (!rows || !rows.length) return <EmptyCard title={title}/>;
   const max = Math.max(...rows.map(r => r[valueKey] || 0), 1);
   return (
     <div className="card">
       <div className="card-head">
-        <div>
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
           <div className="card-label">{title}</div>
+          {warning && (
+            <div className="info-tip" style={{marginTop:1}}>
+              <span className="info-tip-icon">i</span>
+              <div className="info-tip-bubble" style={{width:220}}>{warning}</div>
+            </div>
+          )}
+        </div>
           {sub && <div style={{fontSize:11,color:'var(--muted)',marginTop:3}}>{sub}</div>}
         </div>
         {icon && <div className="card-icon" style={{background:'var(--indigo-soft)'}}>{icon}</div>}
@@ -1774,6 +1781,7 @@ function MarketingView({ data }) {
             formatVal={v => fmt(v)}
             color="var(--violet)"
             sub="Derived from UTM campaign · postcode fallback"
+            warning="Partial data — region is only known when a lead has a regional UTM campaign name, a postcode, or a manually entered region in SharpSpring. Leads from generic campaigns with no postcode cannot be attributed."
           />
           <RegionBarCard
             title="Google spend by region"

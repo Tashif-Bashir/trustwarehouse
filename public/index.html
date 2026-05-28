@@ -1749,7 +1749,7 @@ function MarketingView({ data }) {
       <div className="g4">
         <Kpi label="Total spend"  value={gbp(T.spend)}    icon={Ic.spend}  iconBg="var(--rose-soft)"   iconColor="var(--rose)"   delta={delta(T.spend, pt.spend, 'down')}       delay={0}/>
         <Kpi label="Total leads"  value={fmt(totalLeads)} icon={Ic.leads}  iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(totalLeads, prevTotalLeads, 'up')} delay={60}/>
-        <Kpi label="Blended CPL"  value={gbp(T.cpl)}      icon={Ic.target} iconBg="var(--amber-soft)"  iconColor="#A87B0A"       delta={delta(T.cpl, pt.cpl, 'down')}           delay={120}/>
+        <Kpi label="Paid CPL"     value={gbp(T.cpl)}      icon={Ic.target} iconBg="var(--amber-soft)"  iconColor="#A87B0A"       delta={delta(T.cpl, pt.cpl, 'down')}           delay={120}/>
         <Kpi label="Clicks"       value={fmt(T.clicks)}   icon={Ic.chart}  iconBg="var(--sky-soft)"    iconColor="var(--sky)"    delay={180}/>
       </div>
       <div className="g2">

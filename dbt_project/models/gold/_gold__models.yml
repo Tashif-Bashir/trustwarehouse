@@ -138,3 +138,35 @@ models:
         description: spend_gbp / leads. Null when leads = 0.
       - name: click_to_lead_rate
         description: leads / clicks. Null when clicks = 0.
+
+  - name: gold_leads_by_region
+    description: >
+      One row per date × region × platform. Aggregates lead counts, appointments,
+      and sales by UK region derived from postcode. Use for regional performance views.
+    columns:
+      - name: created_date
+        description: UK local date of lead creation
+        tests:
+          - not_null
+      - name: region
+        description: UK region derived from postcode prefix (falls back to SharpSpring region field, then 'Unknown')
+        tests:
+          - not_null
+      - name: platform
+        description: Paid platform (Google, Meta, Bing) or null for organic leads
+      - name: leads
+        description: Total leads created in this region on this date
+        tests:
+          - not_null
+      - name: appointments
+        description: Leads with appointment_booked = Yes
+        tests:
+          - not_null
+      - name: sales
+        description: Leads where is_sold = true
+        tests:
+          - not_null
+      - name: lead_to_appt_rate
+        description: appointments / leads
+      - name: appt_to_sale_rate
+        description: sales / appointments

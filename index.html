@@ -1771,11 +1771,21 @@ function UKSpendMap({ regions = [] }) {
 
   const fmtK = v => !v ? '—' : v >= 1000 ? `£${(v/1000).toFixed(1)}k` : `£${Math.round(v)}`;
 
-  // hovered region always paints last (on top)
+  // Greater London always renders last so it's always on top and interactive.
+  // When any other region is hovered, London stays on top AND stays undimmed.
+  const ALWAYS_TOP = 'Greater London';
   const entries = Object.entries(UK_REGIONS_SVG);
-  const sorted  = hovered
-    ? [...entries.filter(([n]) => n !== hovered), entries.find(([n]) => n === hovered)]
-    : entries;
+  const sorted = (() => {
+    const base  = entries.filter(([n]) => n !== ALWAYS_TOP && n !== hovered);
+    const top   = entries.find(([n]) => n === ALWAYS_TOP);
+    const hovE  = hovered && hovered !== ALWAYS_TOP ? entries.find(([n]) => n === hovered) : null;
+    if (hovered === ALWAYS_TOP) {
+      // London is hovered — it goes last, everything else before it
+      return [...entries.filter(([n]) => n !== ALWAYS_TOP), top];
+    }
+    // Something else hovered — hovered region second-to-last, London always last
+    return hovE ? [...base, hovE, top] : [...base, top];
+  })();
 
   return (
     <div className="card" style={{padding:'18px 20px'}}>
@@ -1789,7 +1799,7 @@ function UKSpendMap({ regions = [] }) {
           onMouseLeave={() => setHovered(null)}>
           {sorted.map(([name, {d, lx, ly}]) => {
             const isHov   = hovered === name;
-            const isDim   = hovered && !isHov;
+            const isDim   = hovered && !isHov && name !== ALWAYS_TOP;
             const spend   = spendMap[name] || 0;
             const isSmall = name === 'Greater London' || name === 'Midlands';
             return (

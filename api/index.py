@@ -3,6 +3,7 @@ import os, time, threading, json as _json
 from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from google.cloud import bigquery
 from flask import Flask, jsonify, request
 
@@ -158,16 +159,36 @@ def _prev_period(d0s, d1s):
 
 def _load_all(d0s, d1s):
     p0s, p1s = _prev_period(d0s, d1s)
-    df_attr      = _cached(f'attr:{d0s}:{d1s}',  lambda: _attr(d0s, d1s))
-    df_attr_prev = _cached(f'attr:{p0s}:{p1s}',  lambda: _attr(p0s, p1s))
-    df_src       = _cached(f'src:{d0s}:{d1s}',   lambda: _sources(d0s, d1s))
-    df_src_prev  = _cached(f'src:{p0s}:{p1s}',   lambda: _sources(p0s, p1s))
-    df_ts        = _cached(f'ts:{d0s}:{d1s}',    lambda: _telesales(d0s, d1s))
-    df_ts_prev   = _cached(f'ts:{p0s}:{p1s}',    lambda: _telesales(p0s, p1s))
-    df_ts_day    = _cached(f'tsd:{d0s}:{d1s}',   lambda: _ts_daily(d0s, d1s))
-    df_stg, df_rec   = _cached('pipeline', _pipeline)
-    df_reg_leads     = _cached(f'regl:{d0s}:{d1s}',  lambda: _regional_leads(d0s, d1s))
-    df_reg_spend     = _cached(f'regs:{d0s}:{d1s}',  lambda: _regional_spend(d0s, d1s))
+
+    tasks = {
+        'attr':       (f'attr:{d0s}:{d1s}',  lambda: _attr(d0s, d1s)),
+        'attr_prev':  (f'attr:{p0s}:{p1s}',  lambda: _attr(p0s, p1s)),
+        'src':        (f'src:{d0s}:{d1s}',   lambda: _sources(d0s, d1s)),
+        'src_prev':   (f'src:{p0s}:{p1s}',   lambda: _sources(p0s, p1s)),
+        'ts':         (f'ts:{d0s}:{d1s}',    lambda: _telesales(d0s, d1s)),
+        'ts_prev':    (f'ts:{p0s}:{p1s}',    lambda: _telesales(p0s, p1s)),
+        'ts_day':     (f'tsd:{d0s}:{d1s}',   lambda: _ts_daily(d0s, d1s)),
+        'pipeline':   ('pipeline',            _pipeline),
+        'reg_leads':  (f'regl:{d0s}:{d1s}',  lambda: _regional_leads(d0s, d1s)),
+        'reg_spend':  (f'regs:{d0s}:{d1s}',  lambda: _regional_spend(d0s, d1s)),
+    }
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        futures = {ex.submit(_cached, key, fn): name for name, (key, fn) in tasks.items()}
+        for future in as_completed(futures):
+            results[futures[future]] = future.result()
+
+    df_attr      = results['attr']
+    df_attr_prev = results['attr_prev']
+    df_src       = results['src']
+    df_src_prev  = results['src_prev']
+    df_ts        = results['ts']
+    df_ts_prev   = results['ts_prev']
+    df_ts_day    = results['ts_day']
+    df_stg, df_rec   = results['pipeline']
+    df_reg_leads     = results['reg_leads']
+    df_reg_spend     = results['reg_spend']
 
     pa = df_attr.groupby("platform").agg(spend=("spend_gbp","sum"),clicks=("clicks","sum"),impr=("impressions","sum"),leads=("leads","sum")).reset_index()
     pa["cpl"] = (pa["spend"] / pa["leads"].replace(0, float("nan"))).round(2)

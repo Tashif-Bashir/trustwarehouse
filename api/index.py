@@ -106,6 +106,24 @@ def _ts_daily(d0, d1):
     except Exception:
         return pd.DataFrame()
 
+def _regional_leads(d0, d1):
+    return _q(f"""
+        SELECT region, SUM(leads) as leads
+        FROM `{PROJECT}.gold.gold_leads_by_region`
+        WHERE created_date BETWEEN '{d0}' AND '{d1}'
+          AND region != 'Unknown'
+        GROUP BY region ORDER BY leads DESC LIMIT 12
+    """)
+
+def _regional_spend(d0, d1):
+    return _q(f"""
+        SELECT region, ROUND(SUM(spend_gbp),2) as spend_gbp
+        FROM `{PROJECT}.gold.gold_google_ads_spend_by_region`
+        WHERE date BETWEEN '{d0}' AND '{d1}'
+          AND region != 'National'
+        GROUP BY region ORDER BY spend_gbp DESC
+    """)
+
 def _pipeline():
     try:
         stages = _q(f"""
@@ -147,7 +165,9 @@ def _load_all(d0s, d1s):
     df_ts        = _cached(f'ts:{d0s}:{d1s}',    lambda: _telesales(d0s, d1s))
     df_ts_prev   = _cached(f'ts:{p0s}:{p1s}',    lambda: _telesales(p0s, p1s))
     df_ts_day    = _cached(f'tsd:{d0s}:{d1s}',   lambda: _ts_daily(d0s, d1s))
-    df_stg, df_rec = _cached('pipeline', _pipeline)
+    df_stg, df_rec   = _cached('pipeline', _pipeline)
+    df_reg_leads     = _cached(f'regl:{d0s}:{d1s}',  lambda: _regional_leads(d0s, d1s))
+    df_reg_spend     = _cached(f'regs:{d0s}:{d1s}',  lambda: _regional_spend(d0s, d1s))
 
     pa = df_attr.groupby("platform").agg(spend=("spend_gbp","sum"),clicks=("clicks","sum"),impr=("impressions","sum"),leads=("leads","sum")).reset_index()
     pa["cpl"] = (pa["spend"] / pa["leads"].replace(0, float("nan"))).round(2)
@@ -165,7 +185,18 @@ def _load_all(d0s, d1s):
     daily     = [{'date':str(r['date']),'platform':str(r['platform']),'spend':_safe(float(r['spend_gbp'])),'leads':int(r['leads']) if pd.notna(r['leads']) else 0} for _,r in df_attr.iterrows()]
     sources   = [{'source':str(r['source']),'leads':int(r['leads']),'appts':int(r['appts']),'sales':int(r['sales']),'callable':int(r['callable']) if pd.notna(r.get('callable')) else 0} for _,r in df_src.iterrows()]
     tot_all   = int(df_src['leads'].sum()) if not df_src.empty else 0
-    marketing = {'totals':{'spend':tot_sp,'leads':tot_ld,'clicks':tot_cl,'cpl':round(tot_sp/tot_ld,2) if tot_ld else 0,'total_leads':tot_all},'prev_totals':prev_marketing_totals,'platforms':platforms,'daily':daily,'lead_sources':sources}
+    spend_map = {str(r['region']): float(r['spend_gbp']) for _, r in df_reg_spend.iterrows()} if not df_reg_spend.empty else {}
+    regions = []
+    seen = set()
+    for _, r in df_reg_leads.iterrows():
+        reg = str(r['region']); leads_n = int(r['leads']); sp = spend_map.get(reg, 0); seen.add(reg)
+        regions.append({'region': reg, 'leads': leads_n, 'spend_gbp': sp, 'cpl': round(sp / leads_n, 2) if leads_n > 0 and sp > 0 else None})
+    for reg, sp in spend_map.items():
+        if reg not in seen:
+            regions.append({'region': reg, 'leads': 0, 'spend_gbp': sp, 'cpl': None})
+    regions.sort(key=lambda x: x['leads'], reverse=True)
+
+    marketing = {'totals':{'spend':tot_sp,'leads':tot_ld,'clicks':tot_cl,'cpl':round(tot_sp/tot_ld,2) if tot_ld else 0,'total_leads':tot_all},'prev_totals':prev_marketing_totals,'platforms':platforms,'daily':daily,'lead_sources':sources,'regions':regions}
 
     agents = []
     if not df_ts.empty:

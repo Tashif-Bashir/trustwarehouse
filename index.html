@@ -1696,12 +1696,50 @@ function TweakButton({ label, onClick, secondary = false }) {
   );
 }
 
+/* ── Region horizontal bar card (reusable) ───────────────── */
+function RegionBarCard({ title, rows, valueKey, formatVal, color, icon, sub }) {
+  const m = useMounted(200);
+  if (!rows || !rows.length) return <EmptyCard title={title}/>;
+  const max = Math.max(...rows.map(r => r[valueKey] || 0), 1);
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div>
+          <div className="card-label">{title}</div>
+          {sub && <div style={{fontSize:11,color:'var(--muted)',marginTop:3}}>{sub}</div>}
+        </div>
+        {icon && <div className="card-icon" style={{background:'var(--indigo-soft)'}}>{icon}</div>}
+      </div>
+      <div style={{marginTop:14,display:'flex',flexDirection:'column',gap:9}}>
+        {rows.slice(0,10).map((r,i) => {
+          const val = r[valueKey] || 0;
+          const pct = max > 0 ? val / max * 100 : 0;
+          return (
+            <div key={r.region}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                <span style={{fontSize:11.5,fontWeight:500,color:'var(--ink2)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'55%'}}>{r.region}</span>
+                <div style={{display:'flex',gap:10,alignItems:'center'}}>
+                  {r.cpl != null && valueKey === 'spend_gbp' && <span style={{fontSize:10.5,color:'var(--muted)',fontWeight:500}}>{'£'+r.cpl+' CPL'}</span>}
+                  <span style={{fontSize:11.5,fontWeight:700,color:'var(--ink)'}}>{formatVal(val)}</span>
+                </div>
+              </div>
+              <div style={{height:5,background:'var(--line)',borderRadius:4,overflow:'hidden'}}>
+                <div style={{height:'100%',width:(m ? pct : 0)+'%',background:color,borderRadius:4,transition:'width 1s cubic-bezier(.22,1,.36,1) '+(i*0.05)+'s'}}/>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════════
    views.jsx — MarketingView, TelesalesView, SalesView, App
    ═══════════════════════════════════════════════════════════════ */
 
 function MarketingView({ data }) {
-  const { totals: T, prev_totals: PT, platforms, daily, lead_sources } = data;
+  const { totals: T, prev_totals: PT, platforms, daily, lead_sources, regions = [] } = data;
   const pt = PT || {};
   const totalLeads     = T.total_leads || T.leads;
   const prevTotalLeads = pt.total_leads != null ? pt.total_leads : pt.leads;
@@ -1727,6 +1765,26 @@ function MarketingView({ data }) {
         <LeadSourcesCard sources={lead_sources}/>
         <ActivityChart daily={daily}/>
       </div>
+      {regions.length > 0 && (
+        <div className="g2">
+          <RegionBarCard
+            title="Leads by region"
+            rows={regions}
+            valueKey="leads"
+            formatVal={v => fmt(v)}
+            color="var(--violet)"
+            sub="From SharpSpring postcodes"
+          />
+          <RegionBarCard
+            title="Google spend by region"
+            rows={[...regions].sort((a,b) => b.spend_gbp - a.spend_gbp).filter(r => r.spend_gbp > 0)}
+            valueKey="spend_gbp"
+            formatVal={v => gbp(v)}
+            color="var(--rose)"
+            sub="Google Ads only · National campaigns excluded"
+          />
+        </div>
+      )}
     </>
   );
 }

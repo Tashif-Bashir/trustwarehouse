@@ -12,6 +12,7 @@ sources:
       - name: wildix_calls
       - name: wildix_colleagues
       - name: google_adscampaign
+      - name: google_adscampaign_budget
       - name: facebook_adsads_insights
       - name: bing_adscampaign_performance_report_daily
       - name: bing_adsaccount_performance_report_daily

@@ -170,3 +170,30 @@ models:
         description: appointments / leads
       - name: appt_to_sale_rate
         description: sales / appointments
+
+  - name: gold_google_ads_spend_by_region
+    description: >
+      One row per date × region. Google Ads spend, clicks, and impressions
+      broken down by region derived from campaign name. National campaigns
+      (no regional targeting) are grouped under 'National'.
+    columns:
+      - name: date
+        description: Campaign date
+        tests:
+          - not_null
+      - name: region
+        description: UK region parsed from campaign name, or 'National' for non-regional campaigns
+        tests:
+          - not_null
+      - name: spend_gbp
+        description: Total ad spend in GBP for this region on this date
+        tests:
+          - not_null
+      - name: clicks
+        description: Total clicks
+        tests:
+          - not_null
+      - name: impressions
+        description: Total impressions
+        tests:
+          - not_null

@@ -1697,23 +1697,58 @@ function TweakButton({ label, onClick, secondary = false }) {
 }
 
 /* ── UK Choropleth Map ───────────────────────────────────── */
-// Regions ordered large→small so smaller ones always paint on top
+/*
+ * Perfectly tiling jigsaw — shared border points are IDENTICAL across regions.
+ *
+ * Key shared boundary lines (viewBox 0 0 200 302):
+ *   Scotland/England border y≈92:  x=38→115→162
+ *   NW/NE England divider x=115:   y=92→150
+ *   Wales/England border  x=88:    y=150→245
+ *   Yorkshire bottom      y=198:   x=88→158
+ *   Midlands/EoE divider  x=115:   y=198→245
+ *   SW/SE divider         x=88:    y=245→298
+ *   EoE/SE divider        x=162:   y=245 (point)
+ *
+ * Render order: large first → small last (Scotland, SE, SW, Wales, EoE,
+ *               NW Eng, NE Eng, Midlands, Yorkshire, Greater London)
+ * Yorkshire and Greater London always paint on top of everything.
+ */
 const UK_REGIONS_SVG = {
-  'Scotland':         { d:'M45,0 L148,0 L156,16 L158,44 L148,66 L122,82 L95,84 L72,82 L50,68 L40,42 Z', lx:100, ly:42 },
-  'Northern England': { d:'M50,84 L95,84 L98,106 L92,128 L70,135 L52,126 L46,106 Z', lx:70, ly:108 },
-  'North East':       { d:'M95,84 L148,78 L156,98 L150,122 L128,130 L98,126 L98,106 Z', lx:128, ly:105 },
-  'Wales':            { d:'M42,126 L68,126 L70,148 L66,172 L52,183 L36,176 L28,160 L32,140 Z', lx:50, ly:154 },
-  'East of England':  { d:'M122,130 L150,124 L166,138 L170,162 L158,178 L136,182 L114,175 L110,162 L116,146 Z', lx:142, ly:156 },
-  'South West':       { d:'M36,176 L78,176 L80,194 L76,210 L62,222 L44,228 L26,222 L18,208 L22,192 L30,180 Z', lx:50, ly:202 },
-  'South East':       { d:'M82,180 L112,180 L136,180 L156,178 L172,188 L174,206 L160,224 L128,230 L96,222 L76,210 L74,194 Z', lx:128, ly:206 },
-  'Midlands':         { d:'M68,130 L92,130 L82,142 L80,154 L92,166 L120,170 L122,178 L98,182 L76,180 L60,170 L56,154 L58,138 L64,132 Z', lx:92, ly:157 },
-  'Yorkshire':        { d:'M92,126 L128,130 L150,122 L156,142 L146,164 L118,170 L92,166 L80,154 L82,138 Z', lx:118, ly:148 },
-  'Greater London':   { d:'M104,178 L140,178 L144,192 L126,202 L102,200 L100,186 Z', lx:122, ly:190 },
+  'Scotland':
+    { d:'M38,0 L162,0 L170,22 L176,52 L165,80 L162,92 L115,92 L38,92 L28,80 L24,55 L30,28 Z',
+      lx:100, ly:46 },
+  'South East':
+    { d:'M88,245 L115,245 L162,245 L168,258 L172,278 L162,295 L128,300 L98,295 L88,298 Z',
+      lx:132, ly:278 },
+  'South West':
+    { d:'M36,245 L88,245 L88,298 L70,298 L50,296 L32,285 L22,268 L24,252 Z',
+      lx:55,  ly:272 },
+  'Wales':
+    { d:'M38,150 L88,150 L88,245 L68,252 L48,246 L34,230 L26,212 L30,188 L34,165 Z',
+      lx:54,  ly:200 },
+  'East of England':
+    { d:'M158,150 L170,162 L175,188 L168,220 L162,245 L115,245 L115,198 L158,198 Z',
+      lx:148, ly:198 },
+  'Northern England':
+    { d:'M38,92 L115,92 L115,150 L38,150 Z',
+      lx:76,  ly:121 },
+  'North East':
+    { d:'M115,92 L162,92 L168,108 L165,138 L158,150 L115,150 Z',
+      lx:138, ly:120 },
+  'Midlands':
+    { d:'M88,198 L115,198 L115,245 L88,245 Z',
+      lx:102, ly:222 },
+  'Yorkshire':
+    { d:'M88,150 L158,150 L158,198 L88,198 Z',
+      lx:122, ly:174 },
+  'Greater London':
+    { d:'M108,258 L148,258 L150,276 L126,284 L106,282 L104,266 Z',
+      lx:127, ly:271 },
 };
 
 function UKSpendMap({ regions = [] }) {
   const [hovered, setHovered] = React.useState(null);
-  const [tip, setTip] = React.useState({ x:0, y:0 });
+  const [tip, setTip]         = React.useState({ x:0, y:0 });
   const svgRef = React.useRef(null);
 
   const spendMap = {}, cplMap = {};
@@ -1723,21 +1758,24 @@ function UKSpendMap({ regions = [] }) {
   function getColor(name) {
     const s = spendMap[name] || 0;
     if (!s) return 'var(--line)';
-    const t = s / maxSpend;
-    const r = Math.round(255 + t * (229-255));
-    const g = Math.round(233 + t * (0-233));
-    const b = Math.round(236 + t * (59-236));
-    return `rgb(${r},${g},${b})`;
+    const t = Math.pow(s / maxSpend, 0.65);
+    return `rgb(${Math.round(255+t*(229-255))},${Math.round(233+t*(0-233))},${Math.round(236+t*(59-236))})`;
   }
 
   function onMove(e, name) {
     if (!svgRef.current) return;
-    const rect = svgRef.current.getBoundingClientRect();
-    setTip({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    const r = svgRef.current.getBoundingClientRect();
+    setTip({ x: e.clientX - r.left, y: e.clientY - r.top });
     setHovered(name);
   }
 
   const fmtK = v => !v ? '—' : v >= 1000 ? `£${(v/1000).toFixed(1)}k` : `£${Math.round(v)}`;
+
+  // hovered region always paints last (on top)
+  const entries = Object.entries(UK_REGIONS_SVG);
+  const sorted  = hovered
+    ? [...entries.filter(([n]) => n !== hovered), entries.find(([n]) => n === hovered)]
+    : entries;
 
   return (
     <div className="card" style={{padding:'18px 20px'}}>
@@ -1746,34 +1784,33 @@ function UKSpendMap({ regions = [] }) {
         <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>Google Ads only · National excluded</div>
       </div>
       <div style={{position:'relative'}}>
-        <svg ref={svgRef} viewBox="0 0 180 234" style={{width:'100%',height:'auto',display:'block',overflow:'visible'}}
+        <svg ref={svgRef} viewBox="0 0 200 302"
+          style={{width:'100%',height:'auto',display:'block',overflow:'visible'}}
           onMouseLeave={() => setHovered(null)}>
-          {/* render hovered region last so it paints on top */}
-          {[...Object.entries(UK_REGIONS_SVG).filter(([n]) => n !== hovered),
-             ...Object.entries(UK_REGIONS_SVG).filter(([n]) => n === hovered)
-          ].map(([name, {d, lx, ly}]) => {
-            const isHov = hovered === name;
-            const isDimmed = hovered && !isHov;
-            const spend = spendMap[name] || 0;
+          {sorted.map(([name, {d, lx, ly}]) => {
+            const isHov   = hovered === name;
+            const isDim   = hovered && !isHov;
+            const spend   = spendMap[name] || 0;
+            const isSmall = name === 'Greater London' || name === 'Midlands';
             return (
               <g key={name} style={{
-                transformBox:'fill-box',
-                transformOrigin:'center',
-                transform: isHov ? 'scale(1.10)' : 'scale(1)',
-                filter: isHov
-                  ? 'drop-shadow(0 6px 18px rgba(0,0,0,0.38))'
-                  : isDimmed ? 'blur(1.2px)' : 'none',
-                opacity: isDimmed ? 0.22 : 1,
-                transition:'transform .35s cubic-bezier(.34,1.56,.64,1), filter .22s ease, opacity .22s ease',
-              }}>
-                <path d={d} fill={getColor(name)} stroke="white" strokeWidth={isHov ? 1.5 : 1.2}
-                  style={{cursor:'pointer'}}
-                  onMouseMove={e => onMove(e, name)}
-                  onMouseEnter={e => onMove(e, name)}/>
+                transformBox:'fill-box', transformOrigin:'center',
+                transform:  isHov ? 'scale(1.08)' : 'scale(1)',
+                filter:     isHov ? 'drop-shadow(0 6px 20px rgba(0,0,0,0.42))'
+                          : isDim ? 'blur(1.5px)' : 'none',
+                opacity:    isDim ? 0.18 : 1,
+                transition:'transform .38s cubic-bezier(.34,1.56,.64,1), filter .22s ease, opacity .22s ease',
+                cursor:'pointer',
+              }}
+              onMouseMove={e => onMove(e, name)}
+              onMouseEnter={e => onMove(e, name)}>
+                <path d={d} fill={getColor(name)} stroke="#fff"
+                  strokeWidth={isHov ? 1.8 : 1.4} strokeLinejoin="round"/>
                 {spend > 0 && (
                   <text x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
-                    style={{fontSize:'6px',fontWeight:700,fill:'#fff',pointerEvents:'none',
-                      fontFamily:'DM Sans,sans-serif'}}>
+                    style={{fontSize: isSmall ? '5px' : '6.5px', fontWeight:700,
+                      fill:'#fff', pointerEvents:'none', fontFamily:'DM Sans,sans-serif',
+                      filter:'drop-shadow(0 1px 2px rgba(0,0,0,0.5))'}}>
                     {fmtK(spend)}
                   </text>
                 )}
@@ -1782,18 +1819,20 @@ function UKSpendMap({ regions = [] }) {
           })}
         </svg>
         {hovered && (
-          <div style={{position:'absolute',left:tip.x+12,top:tip.y-12,background:'#1C1F35',
-            color:'#E8EAF2',fontSize:11,lineHeight:1.5,padding:'7px 10px',borderRadius:7,
-            pointerEvents:'none',zIndex:50,whiteSpace:'nowrap',boxShadow:'0 4px 12px rgba(0,0,0,.25)'}}>
+          <div style={{position:'absolute', left: Math.min(tip.x+14, 160), top: tip.y-16,
+            background:'#1C1F35', color:'#E8EAF2', fontSize:11, lineHeight:1.55,
+            padding:'8px 11px', borderRadius:8, pointerEvents:'none', zIndex:50,
+            whiteSpace:'nowrap', boxShadow:'0 4px 16px rgba(0,0,0,.28)'}}>
             <div style={{fontWeight:600,marginBottom:2}}>{hovered}</div>
             <div>{fmtK(spendMap[hovered] || 0)}</div>
-            {cplMap[hovered] && <div style={{color:'#9AA0B4',fontSize:10}}>CPL {fmtK(cplMap[hovered])}</div>}
+            {cplMap[hovered] && <div style={{color:'#9AA0B4',fontSize:10,marginTop:2}}>CPL {fmtK(cplMap[hovered])}</div>}
           </div>
         )}
       </div>
-      <div style={{display:'flex',alignItems:'center',gap:8,marginTop:8}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginTop:10}}>
+        <span style={{fontSize:9.5,color:'var(--muted)'}}>Low</span>
         <div style={{height:5,borderRadius:3,flex:1,background:'linear-gradient(to right,#FFE9EC,#E5003B)'}}/>
-        <span style={{fontSize:10,color:'var(--muted)',whiteSpace:'nowrap'}}>Low → High</span>
+        <span style={{fontSize:9.5,color:'var(--muted)'}}>High</span>
       </div>
     </div>
   );

@@ -19,7 +19,7 @@ from google.cloud import bigquery
 
 PROPERTY_ID   = "336938127"
 PROJECT       = os.getenv("GCP_PROJECT_ID", "trustwarehouse")
-TABLE_ID      = f"{PROJECT}.bronze.ga4_session_source_medium"
+TABLE_ID      = f"{PROJECT}.bronze.ga4direct_session_source_medium"
 LOOKBACK_DAYS = 3  # overlap catches late-arriving GA4 data
 
 

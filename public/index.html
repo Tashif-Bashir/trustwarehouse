@@ -1758,7 +1758,8 @@ function UKSpendMap({ regions = [] }) {
   function getColor(name) {
     const s = spendMap[name] || 0;
     if (!s) return 'var(--line)';
-    const t = Math.pow(s / maxSpend, 0.65);
+    // min 0.18 ensures lowest-spend regions always show a visible rose tint, never near-white
+    const t = Math.max(Math.pow(s / maxSpend, 0.65), 0.18);
     return `rgb(${Math.round(255+t*(229-255))},${Math.round(233+t*(0-233))},${Math.round(236+t*(59-236))})`;
   }
 
@@ -1807,11 +1808,12 @@ function UKSpendMap({ regions = [] }) {
                 <path d={d} fill={getColor(name)} stroke="#fff"
                   strokeWidth={isHov ? 1.8 : 1.4} strokeLinejoin="round"/>
                 {spend > 0 && (
-                  <text x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
+                  <text textAnchor="middle" dominantBaseline="middle"
                     style={{fontSize: isSmall ? '5px' : '6.5px', fontWeight:700,
                       fill:'#fff', pointerEvents:'none', fontFamily:'DM Sans,sans-serif',
                       filter:'drop-shadow(0 1px 2px rgba(0,0,0,0.5))'}}>
-                    {fmtK(spend)}
+                    <tspan x={lx} dy="0">{fmtK(spend)}</tspan>
+                    {isSmall && <tspan x={lx} dy="7" style={{fontSize:'4.5px',fontWeight:500,opacity:0.85}}>{name}</tspan>}
                   </text>
                 )}
               </g>

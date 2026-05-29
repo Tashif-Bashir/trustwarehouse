@@ -2034,14 +2034,12 @@ function MarketingView({ data }) {
         <LeadSourcesCard sources={lead_sources}/>
         <ActivityChart daily={daily}/>
       </div>
-      {(ga4_sessions.length > 0 || ga4_pages.length > 0) && (
-        <div className="g2">
-          <GA4SessionsCard sessions={ga4_sessions}/>
-          <GA4PagesCard pages={ga4_pages}/>
-        </div>
-      )}
-      {regions.filter(r => r.leads > 0).length > 0 && (
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+      {/* GA4 + Leads by region — pack into a smart grid depending on what has data */}
+      {(() => {
+        const hasSessions = ga4_sessions.length > 0;
+        const hasPages    = ga4_pages.length > 0;
+        const hasRegions  = regions.filter(r => r.leads > 0).length > 0;
+        const leadsCard   = hasRegions ? (
           <RegionBarCard
             title="Leads by region"
             rows={regions.filter(r => r.leads > 0)}
@@ -2051,8 +2049,20 @@ function MarketingView({ data }) {
             sub="Derived from UTM campaign · postcode fallback"
             warning="Partial data — region is only known when a lead has a regional UTM campaign name, a postcode, or a manually entered region in SharpSpring. Leads from generic campaigns with no postcode cannot be attributed."
           />
-        </div>
-      )}
+        ) : null;
+
+        // Collect non-null cards in order
+        const cards = [
+          hasSessions ? <GA4SessionsCard key="ga4s" sessions={ga4_sessions}/> : null,
+          hasPages    ? <GA4PagesCard    key="ga4p" pages={ga4_pages}/> : null,
+          leadsCard   ? React.cloneElement(leadsCard, {key:'reg'}) : null,
+        ].filter(Boolean);
+
+        if (cards.length === 0) return null;
+        if (cards.length === 1) return <div style={{marginBottom:14}}>{cards[0]}</div>;
+        if (cards.length === 2) return <div className="g2">{cards}</div>;
+        return <div className="g3">{cards}</div>;
+      })()}
     </>
   );
 }

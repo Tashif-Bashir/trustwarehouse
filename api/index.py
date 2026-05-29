@@ -107,6 +107,53 @@ def _ts_daily(d0, d1):
     except Exception:
         return pd.DataFrame()
 
+def _ga4_sessions(d0, d1):
+    d0g = d0.replace('-',''); d1g = d1.replace('-','')
+    try:
+        return _q(f"""
+            SELECT
+                CASE
+                    WHEN LOWER(sessionSource) IN ('google','googleads') AND LOWER(sessionMedium) IN ('cpc','ppc','paid','paidsearch') THEN 'Google Paid'
+                    WHEN LOWER(sessionSource) = 'google' AND LOWER(sessionMedium) = 'organic' THEN 'Google Organic'
+                    WHEN LOWER(sessionSource) IN ('facebookads','facebook','fb','instagram','meta')
+                      OR (LOWER(sessionSource) LIKE '%facebook%' AND LOWER(sessionMedium) IN ('cpc','paid','paidsocial','social')) THEN 'Meta'
+                    WHEN LOWER(sessionSource) IN ('bing','bingads','microsoft') AND LOWER(sessionMedium) IN ('cpc','ppc','paid') THEN 'Bing'
+                    WHEN LOWER(sessionSource) = '(direct)' OR LOWER(sessionMedium) = '(none)' THEN 'Direct'
+                    WHEN LOWER(sessionMedium) = 'organic' THEN 'Organic Search'
+                    WHEN LOWER(sessionMedium) IN ('referral','social') THEN 'Referral'
+                    ELSE 'Other'
+                END as channel,
+                SUM(SAFE_CAST(sessions AS INT64))  as sessions,
+                SUM(SAFE_CAST(newUsers AS INT64))   as new_users,
+                SUM(SAFE_CAST(totalUsers AS INT64)) as total_users
+            FROM `{PROJECT}.bronze.ga4direct_session_source_medium`
+            WHERE date BETWEEN '{d0g}' AND '{d1g}'
+            GROUP BY 1
+            ORDER BY sessions DESC
+        """)
+    except Exception:
+        return pd.DataFrame()
+
+def _ga4_pages(d0, d1):
+    try:
+        return _q(f"""
+            SELECT
+                REGEXP_REPLACE(pagePath, r'\\?.*', '') as path,
+                SUM(screenPageViews) as views,
+                SUM(totalUsers) as users,
+                ROUND(SUM(SAFE_CAST(userEngagementDuration AS FLOAT64))
+                    / NULLIF(SUM(totalUsers),0), 0) as avg_eng_secs
+            FROM `{PROJECT}.bronze.ga4pages_path_report`
+            WHERE date BETWEEN '{d0}' AND '{d1}'
+              AND pagePath NOT IN ('/', '', '(not set)')
+              AND pagePath NOT LIKE '%/wp-%'
+            GROUP BY 1
+            ORDER BY views DESC
+            LIMIT 8
+        """)
+    except Exception:
+        return pd.DataFrame()
+
 def _regional_leads(d0, d1):
     return _q(f"""
         SELECT region, SUM(leads) as leads
@@ -169,8 +216,10 @@ def _load_all(d0s, d1s):
         'ts_prev':    (f'ts:{p0s}:{p1s}',    lambda: _telesales(p0s, p1s)),
         'ts_day':     (f'tsd:{d0s}:{d1s}',   lambda: _ts_daily(d0s, d1s)),
         'pipeline':   ('pipeline',            _pipeline),
-        'reg_leads':  (f'regl:{d0s}:{d1s}',  lambda: _regional_leads(d0s, d1s)),
-        'reg_spend':  (f'regs:{d0s}:{d1s}',  lambda: _regional_spend(d0s, d1s)),
+        'reg_leads':   (f'regl:{d0s}:{d1s}',   lambda: _regional_leads(d0s, d1s)),
+        'reg_spend':   (f'regs:{d0s}:{d1s}',   lambda: _regional_spend(d0s, d1s)),
+        'ga4_sessions':(f'ga4s:{d0s}:{d1s}',   lambda: _ga4_sessions(d0s, d1s)),
+        'ga4_pages':   (f'ga4p:{d0s}:{d1s}',   lambda: _ga4_pages(d0s, d1s)),
     }
 
     results = {}
@@ -189,6 +238,8 @@ def _load_all(d0s, d1s):
     df_stg, df_rec   = results['pipeline']
     df_reg_leads     = results['reg_leads']
     df_reg_spend     = results['reg_spend']
+    df_ga4_sessions  = results['ga4_sessions']
+    df_ga4_pages     = results['ga4_pages']
 
     pa = df_attr.groupby("platform").agg(spend=("spend_gbp","sum"),clicks=("clicks","sum"),impr=("impressions","sum"),leads=("leads","sum")).reset_index()
     pa["cpl"] = (pa["spend"] / pa["leads"].replace(0, float("nan"))).round(2)
@@ -217,7 +268,10 @@ def _load_all(d0s, d1s):
             regions.append({'region': reg, 'leads': 0, 'spend_gbp': sp, 'cpl': None})
     regions.sort(key=lambda x: x['leads'], reverse=True)
 
-    marketing = {'totals':{'spend':tot_sp,'leads':tot_ld,'clicks':tot_cl,'cpl':round(tot_sp/tot_ld,2) if tot_ld else 0,'total_leads':tot_all},'prev_totals':prev_marketing_totals,'platforms':platforms,'daily':daily,'lead_sources':sources,'regions':regions}
+    ga4_sessions = [{'channel':str(r['channel']),'sessions':int(r['sessions']),'new_users':int(r['new_users']),'total_users':int(r['total_users'])} for _,r in df_ga4_sessions.iterrows()] if not df_ga4_sessions.empty else []
+    ga4_pages    = [{'path':str(r['path']),'views':int(r['views']),'users':int(r['users']),'avg_eng_secs':int(r['avg_eng_secs']) if pd.notna(r['avg_eng_secs']) else 0} for _,r in df_ga4_pages.iterrows()] if not df_ga4_pages.empty else []
+
+    marketing = {'totals':{'spend':tot_sp,'leads':tot_ld,'clicks':tot_cl,'cpl':round(tot_sp/tot_ld,2) if tot_ld else 0,'total_leads':tot_all},'prev_totals':prev_marketing_totals,'platforms':platforms,'daily':daily,'lead_sources':sources,'regions':regions,'ga4_sessions':ga4_sessions,'ga4_pages':ga4_pages}
 
     agents = []
     if not df_ts.empty:

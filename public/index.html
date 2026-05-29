@@ -1922,12 +1922,92 @@ function RegionBarCard({ title, rows, valueKey, formatVal, color, icon, sub, war
   );
 }
 
+/* ── GA4 Traffic by Channel ──────────────────────────────── */
+const CH_COLOR = { 'Google Paid':'#5B6CFF','Google Organic':'#3DD0A4','Meta':'#8B5CF6','Bing':'#F59E0B','Direct':'#94A3B8','Organic Search':'#10B981','Referral':'#F97316','Other':'#CBD5E1' };
+
+function GA4SessionsCard({ sessions }) {
+  const m = useMounted(150);
+  if (!sessions || !sessions.length) return null;
+  const total = sessions.reduce((s, r) => s + r.sessions, 0) || 1;
+  return (
+    <div className="card">
+      <div className="card-head" style={{marginBottom:14}}>
+        <div>
+          <div className="card-label">Website traffic by channel</div>
+          <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>GA4 sessions · {fmt(total)} total</div>
+        </div>
+        <div className="card-icon" style={{background:'var(--sky-soft)'}}>
+          <svg viewBox="0 0 16 16" fill="none" stroke="var(--sky)" strokeWidth="1.5"><path d="M2 12 L5 8 L8 10 L11 5 L14 7"/><circle cx="14" cy="7" r="1.2" fill="var(--sky)" stroke="none"/></svg>
+        </div>
+      </div>
+      {sessions.slice(0,7).map((r,i) => {
+        const pct = r.sessions / total * 100;
+        const col = CH_COLOR[r.channel] || '#CBD5E1';
+        return (
+          <div key={r.channel} style={{marginBottom:9}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+              <div style={{display:'flex',alignItems:'center',gap:7}}>
+                <div style={{width:7,height:7,borderRadius:'50%',background:col,flexShrink:0}}/>
+                <span style={{fontSize:11.5,fontWeight:500,color:'var(--ink2)'}}>{r.channel}</span>
+              </div>
+              <div style={{display:'flex',gap:10,alignItems:'center'}}>
+                <span style={{fontSize:10.5,color:'var(--muted)'}}>{pct.toFixed(1)}%</span>
+                <span style={{fontSize:11.5,fontWeight:700,color:'var(--ink)',minWidth:35,textAlign:'right'}}>{fmt(r.sessions)}</span>
+              </div>
+            </div>
+            <div style={{height:4,background:'var(--line)',borderRadius:3,overflow:'hidden'}}>
+              <div style={{height:'100%',width:(m?pct:0)+'%',background:col,borderRadius:3,transition:'width .9s cubic-bezier(.22,1,.36,1) '+(i*0.06)+'s'}}/>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── GA4 Top Landing Pages ───────────────────────────────── */
+function GA4PagesCard({ pages }) {
+  if (!pages || !pages.length) return null;
+  const maxViews = Math.max(...pages.map(p => p.views), 1);
+  const fmtPath = p => p.replace(/^\/lp\/[0-9]-[0-9]\//, '/').replace(/\/$/, '').replace(/-/g,' ').replace(/^\//,'') || p;
+  const fmtSecs = s => s >= 60 ? `${Math.floor(s/60)}m ${s%60}s` : `${s}s`;
+  return (
+    <div className="card">
+      <div className="card-head" style={{marginBottom:14}}>
+        <div>
+          <div className="card-label">Top landing pages</div>
+          <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>By page views · GA4</div>
+        </div>
+        <div className="card-icon" style={{background:'var(--mint-soft)'}}>
+          <svg viewBox="0 0 16 16" fill="none" stroke="#1FA77F" strokeWidth="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 6h6M5 9h4"/></svg>
+        </div>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:7}}>
+        {pages.slice(0,7).map((p,i) => (
+          <div key={p.path} style={{display:'grid',gridTemplateColumns:'1fr auto',gap:8,alignItems:'center'}}>
+            <div>
+              <div style={{fontSize:11,fontWeight:500,color:'var(--ink)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',textTransform:'capitalize'}}>{fmtPath(p.path)}</div>
+              <div style={{height:3,background:'var(--line)',borderRadius:2,marginTop:3,overflow:'hidden'}}>
+                <div style={{height:'100%',width:`${p.views/maxViews*100}%`,background:'var(--mint)',borderRadius:2,transition:'width .8s cubic-bezier(.22,1,.36,1) '+(i*0.07)+'s'}}/>
+              </div>
+            </div>
+            <div style={{textAlign:'right',flexShrink:0}}>
+              <div style={{fontSize:11.5,fontWeight:700,color:'var(--ink)'}}>{fmt(p.views)}</div>
+              <div style={{fontSize:10,color:'var(--muted)',marginTop:1}}>{fmtSecs(p.avg_eng_secs)}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════════
    views.jsx — MarketingView, TelesalesView, SalesView, App
    ═══════════════════════════════════════════════════════════════ */
 
 function MarketingView({ data }) {
-  const { totals: T, prev_totals: PT, platforms, daily, lead_sources, regions = [] } = data;
+  const { totals: T, prev_totals: PT, platforms, daily, lead_sources, regions = [], ga4_sessions = [], ga4_pages = [] } = data;
   const pt = PT || {};
   const totalLeads     = T.total_leads || T.leads;
   const prevTotalLeads = pt.total_leads != null ? pt.total_leads : pt.leads;
@@ -1954,6 +2034,12 @@ function MarketingView({ data }) {
         <LeadSourcesCard sources={lead_sources}/>
         <ActivityChart daily={daily}/>
       </div>
+      {(ga4_sessions.length > 0 || ga4_pages.length > 0) && (
+        <div className="g2">
+          <GA4SessionsCard sessions={ga4_sessions}/>
+          <GA4PagesCard pages={ga4_pages}/>
+        </div>
+      )}
       {regions.filter(r => r.leads > 0).length > 0 && (
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
           <RegionBarCard

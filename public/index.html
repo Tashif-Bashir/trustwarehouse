@@ -2398,14 +2398,9 @@ function App() {
         {!loading && error && <div className="err-box">Error: {error}</div>}
         {!loading && !error && data && (
           <div key={viewKey} className="view-fade">
-            {activeTab === 'Marketing' && <MarketingView data={data.marketing}/>}
-            {(activeTab === 'Sales' || activeTab === 'Telesales') && (
-              <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'60vh',gap:'16px'}}>
-                <div style={{fontSize:'48px'}}>🚧</div>
-                <div style={{fontSize:'28px',fontWeight:'700',color:'#E5003B',letterSpacing:'-0.5px'}}>{activeTab} Dashboard</div>
-                <div style={{fontSize:'16px',color:'#888',fontWeight:'500'}}>Coming soon — we're working on it.</div>
-              </div>
-            )}
+            {activeTab === 'Marketing'  && <MarketingView  data={data.marketing}/>}
+            {activeTab === 'Telesales' && <TelesalesView  data={data.telesales}/>}
+            {activeTab === 'Sales'     && <SalesView      data={data.sales}/>}
           </div>
         )}
       </main>

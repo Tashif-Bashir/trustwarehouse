@@ -107,6 +107,38 @@ def _ts_daily(d0, d1):
     except Exception:
         return pd.DataFrame()
 
+def _lead_funnel(d0, d1):
+    try:
+        row = _q(f"""
+            SELECT
+                COUNT(*)                                                                    AS total_leads,
+                COUNTIF(phone IS NOT NULL OR mobile IS NOT NULL)                            AS callable_leads,
+                COUNTIF(has_been_called = true)                                             AS leads_called,
+                ROUND(AVG(CASE WHEN mins_to_first_call BETWEEN 0 AND 240
+                               THEN mins_to_first_call END), 1)                             AS avg_mins,
+                COUNTIF(mins_to_first_call IS NOT NULL AND mins_to_first_call <= 5)         AS called_lte5min,
+                COALESCE(SUM(qualified_conversations), 0)                                   AS total_qual_convos,
+                COUNTIF(appointment_booked = 'Yes')                                         AS appointments,
+                COUNTIF(is_sold = true)                                                     AS sales
+            FROM `{PROJECT}.gold.gold_lead_activity`
+            WHERE created_date BETWEEN '{d0}' AND '{d1}'
+        """)
+        if row.empty:
+            return {}
+        r = row.iloc[0]
+        return {
+            'total_leads':       int(r['total_leads']),
+            'callable_leads':    int(r['callable_leads']),
+            'leads_called':      int(r['leads_called']),
+            'avg_mins':          float(r['avg_mins']) if pd.notna(r['avg_mins']) else None,
+            'called_lte5min':    int(r['called_lte5min']),
+            'total_qual_convos': int(r['total_qual_convos']),
+            'appointments':      int(r['appointments']),
+            'sales':             int(r['sales']),
+        }
+    except Exception:
+        return {}
+
 def _ga4_sessions(d0, d1):
     d0g = d0.replace('-',''); d1g = d1.replace('-','')
     try:
@@ -208,14 +240,16 @@ def _load_all(d0s, d1s):
     p0s, p1s = _prev_period(d0s, d1s)
 
     tasks = {
-        'attr':       (f'attr:{d0s}:{d1s}',  lambda: _attr(d0s, d1s)),
-        'attr_prev':  (f'attr:{p0s}:{p1s}',  lambda: _attr(p0s, p1s)),
-        'src':        (f'src:{d0s}:{d1s}',   lambda: _sources(d0s, d1s)),
-        'src_prev':   (f'src:{p0s}:{p1s}',   lambda: _sources(p0s, p1s)),
-        'ts':         (f'ts:{d0s}:{d1s}',    lambda: _telesales(d0s, d1s)),
-        'ts_prev':    (f'ts:{p0s}:{p1s}',    lambda: _telesales(p0s, p1s)),
-        'ts_day':     (f'tsd:{d0s}:{d1s}',   lambda: _ts_daily(d0s, d1s)),
-        'pipeline':   ('pipeline',            _pipeline),
+        'attr':        (f'attr:{d0s}:{d1s}',  lambda: _attr(d0s, d1s)),
+        'attr_prev':   (f'attr:{p0s}:{p1s}',  lambda: _attr(p0s, p1s)),
+        'src':         (f'src:{d0s}:{d1s}',   lambda: _sources(d0s, d1s)),
+        'src_prev':    (f'src:{p0s}:{p1s}',   lambda: _sources(p0s, p1s)),
+        'ts':          (f'ts:{d0s}:{d1s}',    lambda: _telesales(d0s, d1s)),
+        'ts_prev':     (f'ts:{p0s}:{p1s}',    lambda: _telesales(p0s, p1s)),
+        'ts_day':      (f'tsd:{d0s}:{d1s}',   lambda: _ts_daily(d0s, d1s)),
+        'funnel':      (f'funnel:{d0s}:{d1s}', lambda: _lead_funnel(d0s, d1s)),
+        'funnel_prev': (f'funnel:{p0s}:{p1s}', lambda: _lead_funnel(p0s, p1s)),
+        'pipeline':    ('pipeline',            _pipeline),
         'reg_leads':   (f'regl:{d0s}:{d1s}',   lambda: _regional_leads(d0s, d1s)),
         'reg_spend':   (f'regs:{d0s}:{d1s}',   lambda: _regional_spend(d0s, d1s)),
         'ga4_sessions':(f'ga4s:{d0s}:{d1s}',   lambda: _ga4_sessions(d0s, d1s)),
@@ -235,11 +269,17 @@ def _load_all(d0s, d1s):
     df_ts        = results['ts']
     df_ts_prev   = results['ts_prev']
     df_ts_day    = results['ts_day']
+    funnel       = results.get('funnel') or {}
+    funnel_prev  = results.get('funnel_prev') or {}
     df_stg, df_rec   = results['pipeline']
     df_reg_leads     = results['reg_leads']
     df_reg_spend     = results['reg_spend']
     df_ga4_sessions  = results['ga4_sessions']
     df_ga4_pages     = results['ga4_pages']
+
+    d0_dt = date.fromisoformat(d0s)
+    d1_dt = date.fromisoformat(d1s)
+    days_in_period = (d1_dt - d0_dt).days + 1
 
     pa = df_attr.groupby("platform").agg(spend=("spend_gbp","sum"),clicks=("clicks","sum"),impr=("impressions","sum"),leads=("leads","sum")).reset_index()
     pa["cpl"] = (pa["spend"] / pa["leads"].replace(0, float("nan"))).round(2)
@@ -287,7 +327,13 @@ def _load_all(d0s, d1s):
     prev_telesales_totals = None
     if not df_ts_prev.empty:
         prev_telesales_totals = {'outbound':int(df_ts_prev['outbound_calls'].sum()),'appts':int(df_ts_prev['appts'].sum()),'sales':int(df_ts_prev['sales'].sum()),'on_target_count':int((df_ts_prev['appts']>0).sum())}
-    telesales = {'agents':agents,'daily':ts_daily_list,'totals':{'outbound':ts_out,'appts':ts_ap,'sales':ts_sa,'on_target_count':ts_on,'on_target_pct':round(ts_on/len(agents)*100) if agents else 0,'l2a':round(ts_ap/ts_out*100,1) if ts_out else 0,'a2s':round(ts_sa/ts_ap*100,1) if ts_ap else 0},'prev_totals':prev_telesales_totals}
+    telesales = {
+        'agents': agents, 'daily': ts_daily_list,
+        'funnel': funnel, 'prev_funnel': funnel_prev if funnel_prev else None,
+        'days': days_in_period,
+        'totals': {'outbound':ts_out,'appts':ts_ap,'sales':ts_sa,'on_target_count':ts_on,'on_target_pct':round(ts_on/len(agents)*100) if agents else 0,'l2a':round(ts_ap/ts_out*100,1) if ts_out else 0,'a2s':round(ts_sa/ts_ap*100,1) if ts_ap else 0},
+        'prev_totals': prev_telesales_totals,
+    }
 
     stages = [{'stage':str(r['stage']),'count':int(r['count']),'total_value':float(r['total_value']) if pd.notna(r['total_value']) else 0,'weighted_value':float(r['weighted_value']) if pd.notna(r['weighted_value']) else 0,'won_count':int(r['won_count']) if pd.notna(r['won_count']) else 0,'won_value':float(r['won_value']) if pd.notna(r['won_value']) else 0,'avg_age_days':int(r['avg_age_days']) if pd.notna(r.get('avg_age_days')) else None} for _,r in df_stg.iterrows()]
     recent = []
@@ -298,7 +344,7 @@ def _load_all(d0s, d1s):
     sales_pipe=sum(s['total_value'] for s in stages); sales_weight=sum(s['weighted_value'] for s in stages); sales_won_v=sum(s['won_value'] for s in stages)
     sales = {'stages':stages,'recent':recent,'win_rate_by_stage':[],'totals':{'count':sales_count,'won':sales_won,'pipeline_value':sales_pipe,'weighted_value':sales_weight,'won_value':sales_won_v},'prev_totals':None}
 
-    period = f"{date.fromisoformat(d0s).strftime('%d %b')} – {date.fromisoformat(d1s).strftime('%d %b %Y')}"
+    period = f"{d0_dt.strftime('%d %b')} – {d1_dt.strftime('%d %b %Y')}"
     return {'period':period,'refreshed_at':datetime.now(timezone.utc).isoformat(),'marketing':marketing,'telesales':telesales,'sales':sales}
 
 

@@ -367,36 +367,6 @@
   .agent-bar-target{ position:absolute; top:-5px; bottom:-5px; width:2px; background:rgba(0,0,0,0.25); border-radius:2px; pointer-events:none; }
   .agent-bar-nums{ width:150px; flex-shrink:0; display:flex; gap:10px; font-size:11px; color:var(--muted); }
   .agent-bar-nums b{ color:var(--ink); font-weight:600; }
-  .agent-bar-badges{ display:flex; gap:5px; flex-wrap:wrap; flex-shrink:0; }
-
-  /* Volume badge */
-  .vol-badge{ display:inline-flex; align-items:center; gap:2px; font-size:10.5px; font-weight:600; padding:2px 7px; border-radius:6px; }
-  .vol-good{ background:var(--mint-soft); color:#1FA77F; }
-  .vol-warn{ background:var(--amber-soft); color:#A87B0A; }
-  .vol-low{ background:var(--rose-soft); color:var(--rose); }
-
-  /* Funnel strip */
-  .funnel-strip{ display:flex; align-items:center; gap:0; }
-  .funnel-node{ flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; padding:14px 8px; background:var(--bg); border-radius:10px; text-align:center; min-width:0; }
-  .funnel-node-icon{ width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-  .funnel-node-icon svg{ width:15px; height:15px; }
-  .funnel-node-val{ font-size:20px; font-weight:700; letter-spacing:-.4px; line-height:1.1; }
-  .funnel-node-lbl{ font-size:11px; color:var(--muted); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
-  .funnel-conn{ display:flex; flex-direction:column; align-items:center; justify-content:center; flex-shrink:0; gap:3px; padding:0 7px; }
-  .funnel-conn-rate{ font-size:10px; font-weight:700; white-space:nowrap; }
-  .rate-good{ color:#1FA77F; }
-  .rate-warn{ color:var(--amber); }
-  .rate-bad{ color:var(--rose); }
-  .rate-neutral{ color:var(--muted); }
-
-  /* Agent conversion bars */
-  .conv-bars-wrap{ display:flex; flex-direction:column; gap:10px; padding:4px 0; }
-  .conv-bar-row{ display:grid; grid-template-columns:76px 1fr 38px; align-items:center; gap:8px; }
-  .conv-bar-name{ font-size:12px; font-weight:500; color:var(--ink2); text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .conv-bar-track{ background:var(--bg); border-radius:4px; height:9px; position:relative; overflow:visible; }
-  .conv-bar-fill{ height:9px; border-radius:4px; transition:width .6s cubic-bezier(.22,1,.36,1); }
-  .conv-bar-target-line{ position:absolute; top:-4px; bottom:-4px; width:2px; background:#9AA0B4; border-radius:1px; pointer-events:none; }
-  .conv-bar-pct{ font-size:11px; font-weight:600; }
 
   /* SVG line draw */
   @keyframes drawLine{ from{ stroke-dashoffset:3000; } to{ stroke-dashoffset:0; } }
@@ -1306,30 +1276,27 @@ function OpportunitiesTable({ recent }) {
 }
 
 /* ── Agent bars ──────────────────────────────────────── */
-function AgentBars({ agents, days }) {
+function AgentBars({ agents }) {
   const m = useMounted(100);
   if (!agents.length) return <EmptyCard title="Agent performance" />;
   const maxOut = Math.max(...agents.map(a => a.outbound), 1);
-  const d = days || 1;
   return (
     <div className="card">
       <div className="sec-head">
         <div>
           <div className="sec-title">Agent performance</div>
-          <div className="sec-sub">Outbound calls · efficiency ≤3:1 · volume ≥{TS_DAILY_TARGET}/day</div>
+          <div className="sec-sub">Outbound calls · target = 3 calls per appointment</div>
         </div>
         <div className="legend-bar">
-          <span className="lg"><span className="target-line"/> 3:1 line</span>
-          <span className="lg"><span className="lg-dot" style={{ background: 'var(--mint)' }}/>Efficient</span>
-          <span className="lg"><span className="lg-dot" style={{ background: 'var(--rose)' }}/>Inefficient</span>
+          <span className="lg"><span className="target-line"/> Target</span>
+          <span className="lg"><span className="lg-dot" style={{ background: 'var(--mint)' }}/>On target</span>
+          <span className="lg"><span className="lg-dot" style={{ background: 'var(--rose)' }}/>Off target</span>
         </div>
       </div>
       {agents.map(a => {
         const color = a.on_target ? '#3DD0A4' : '#FF6B7A';
         const barPct = a.outbound / maxOut;
         const targetPct = a.appts > 0 ? Math.min((a.appts * 3) / maxOut, 1) : null;
-        const cpd = a.outbound / d;
-        const volClass = cpd >= TS_DAILY_TARGET ? 'vol-good' : cpd >= TS_DAILY_TARGET * 0.6 ? 'vol-warn' : 'vol-low';
         return (
           <div className="agent-bar-wrap" key={a.name}>
             <div className="agent-bar-name">{a.name}</div>
@@ -1339,19 +1306,18 @@ function AgentBars({ agents, days }) {
                 background: `linear-gradient(90deg, ${color}cc, ${color}88)`,
                 minWidth: m && a.outbound > 0 ? '4px' : '0',
               }}/>
-              {targetPct && m && <div className="agent-bar-target" style={{ left: Math.round(targetPct * 100) + '%' }} title={`3:1 target: ${a.appts * 3} calls`}/>}
+              {targetPct && m && <div className="agent-bar-target" style={{ left: Math.round(targetPct * 100) + '%' }} title={`Target: ${a.appts * 3} calls`}/>}
             </div>
             <div className="agent-bar-nums">
               <span>{a.outbound} out</span>
               <span style={{ color: '#1FA77F', fontWeight: 600 }}>{a.appts} appt</span>
               <span style={{ color: 'var(--indigo)', fontWeight: 600 }}>{a.sales} sale</span>
             </div>
-            <div className="agent-bar-badges">
+            <div>
               <span className={a.on_target ? 'status-pill pill-target' : 'status-pill pill-miss'}>
                 <span className="pill-glyph">{a.on_target ? Ic.check : Ic.x}</span>
-                {a.on_target ? '≤3:1' : '>3:1'}
+                {a.on_target ? 'On target' : 'Off target'}
               </span>
-              <span className={`vol-badge ${volClass}`}>{cpd.toFixed(1)}/day</span>
             </div>
           </div>
         );
@@ -1474,9 +1440,8 @@ function ScatterPlot({ agents }) {
 }
 
 /* ── Agent summary table ─────────────────────────────── */
-function AgentTable({ agents, days }) {
+function AgentTable({ agents }) {
   if (!agents.length) return <EmptyCard title="Agent summary" />;
-  const d = days || 1;
   return (
     <div className="card">
       <div className="sec-head"><div className="sec-title">Agent summary</div></div>
@@ -1485,41 +1450,33 @@ function AgentTable({ agents, days }) {
           <thead><tr>
             <th>Agent</th>
             <th style={{ textAlign: 'right' }}>Outbound</th>
-            <th style={{ textAlign: 'right' }}>Calls/Day</th>
             <th style={{ textAlign: 'right' }}>Qual.Conv</th>
             <th style={{ textAlign: 'right' }}>Appts</th>
-            <th style={{ textAlign: 'right' }}>Appt Rate</th>
             <th style={{ textAlign: 'right' }}>Sales</th>
             <th style={{ textAlign: 'right' }}>Deal Value</th>
+            <th style={{ textAlign: 'right' }}>Calls/Appt</th>
             <th style={{ textAlign: 'right' }}>Avg Talk</th>
-            <th>Efficiency</th>
+            <th>Status</th>
           </tr></thead>
           <tbody>
-            {agents.map(a => {
-              const cpd = (a.outbound / d).toFixed(1);
-              const apptRate = a.outbound > 0 ? Math.round(a.appts / a.outbound * 100) : null;
-              return (
-                <tr key={a.name}>
-                  <td style={{ color: 'var(--ink)', fontWeight: 600 }}>{a.name}</td>
-                  <td style={{ textAlign: 'right' }}>{fmt(a.outbound)}</td>
-                  <td style={{ textAlign: 'right' }}>{cpd}</td>
-                  <td style={{ textAlign: 'right' }}>{fmt(a.qual_convos)}</td>
-                  <td style={{ textAlign: 'right', color: 'var(--ink)', fontWeight: 600 }}>{fmt(a.appts)}</td>
-                  <td style={{ textAlign: 'right', color: apptRate != null && apptRate >= 33 ? '#1FA77F' : apptRate != null && apptRate >= 20 ? '#A87B0A' : 'var(--rose)' }}>
-                    {apptRate != null ? apptRate + '%' : '—'}
-                  </td>
-                  <td style={{ textAlign: 'right', color: '#1FA77F', fontWeight: 600 }}>{fmt(a.sales)}</td>
-                  <td style={{ textAlign: 'right' }}>{a.deal_value > 0 ? gbp(a.deal_value) : '—'}</td>
-                  <td style={{ textAlign: 'right' }}>{fmtSec(a.avg_talk)}</td>
-                  <td>
-                    <span className={a.on_target ? 'status-pill pill-target' : 'status-pill pill-miss'}>
-                      <span className="pill-glyph">{a.on_target ? Ic.check : Ic.x}</span>
-                      {a.on_target ? '≤3:1' : '>3:1'}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
+            {agents.map(a => (
+              <tr key={a.name}>
+                <td style={{ color: 'var(--ink)', fontWeight: 600 }}>{a.name}</td>
+                <td style={{ textAlign: 'right' }}>{fmt(a.outbound)}</td>
+                <td style={{ textAlign: 'right' }}>{fmt(a.qual_convos)}</td>
+                <td style={{ textAlign: 'right', color: 'var(--ink)', fontWeight: 600 }}>{fmt(a.appts)}</td>
+                <td style={{ textAlign: 'right', color: '#1FA77F', fontWeight: 600 }}>{fmt(a.sales)}</td>
+                <td style={{ textAlign: 'right' }}>{a.deal_value > 0 ? gbp(a.deal_value) : '—'}</td>
+                <td style={{ textAlign: 'right' }}>{a.calls_per_appt != null ? a.calls_per_appt + 'x' : '—'}</td>
+                <td style={{ textAlign: 'right' }}>{fmtSec(a.avg_talk)}</td>
+                <td>
+                  <span className={a.on_target ? 'status-pill pill-target' : 'status-pill pill-miss'}>
+                    <span className="pill-glyph">{a.on_target ? Ic.check : Ic.x}</span>
+                    {a.on_target ? 'On' : 'Off'}
+                  </span>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -2110,155 +2067,29 @@ function MarketingView({ data }) {
   );
 }
 
-/* ── Conversion funnel strip ─────────────────────────── */
-function FunnelStrip({ funnel, days }) {
-  if (!funnel || !funnel.total_leads) return null;
-  const callable = funnel.callable_leads || funnel.total_leads;
-  const steps = [
-    { label: 'Total Leads',  value: funnel.total_leads,        color: 'var(--indigo)', bg: 'var(--indigo-soft)', icon: Ic.leads },
-    { label: 'Called',       value: funnel.leads_called,       color: 'var(--violet)', bg: 'var(--violet-soft)', icon: Ic.phone },
-    { label: 'Qual. Convos', value: funnel.total_qual_convos,  color: '#A87B0A',        bg: 'var(--amber-soft)',  icon: Ic.chart },
-    { label: 'Appointments', value: funnel.appointments,       color: '#1FA77F',        bg: 'var(--mint-soft)',   icon: Ic.appt  },
-    { label: 'Sales',        value: funnel.sales,              color: 'var(--indigo)', bg: 'var(--indigo-soft)', icon: Ic.sale  },
-  ];
-  const convs = [
-    { rate: callable > 0 ? funnel.leads_called / callable : null, target: 0.8 },
-    { rate: funnel.leads_called > 0 ? funnel.total_qual_convos / funnel.leads_called : null, target: null },
-    { rate: funnel.total_qual_convos > 0 ? funnel.appointments / funnel.total_qual_convos : null, target: 0.33 },
-    { rate: funnel.appointments > 0 ? funnel.sales / funnel.appointments : null, target: null },
-  ];
-  const cls = (rate, target) => {
-    if (rate == null || target == null) return 'rate-neutral';
-    return rate >= target ? 'rate-good' : rate >= target * 0.7 ? 'rate-warn' : 'rate-bad';
-  };
-  return (
-    <div className="card">
-      <div className="sec-head">
-        <div className="sec-title">Conversion funnel</div>
-        <div className="sec-sub">Lead to sale · {days} {days === 1 ? 'day' : 'days'} · green = at or above target</div>
-      </div>
-      <div className="funnel-strip">
-        {steps.map((s, i) => (
-          <React.Fragment key={s.label}>
-            <div className="funnel-node">
-              <div className="funnel-node-icon" style={{ background: s.bg, color: s.color }}>{s.icon}</div>
-              <div className="funnel-node-val" style={{ color: s.color }}>{fmt(s.value)}</div>
-              <div className="funnel-node-lbl">{s.label}</div>
-            </div>
-            {i < steps.length - 1 && (() => {
-              const cv = convs[i];
-              return (
-                <div className="funnel-conn">
-                  {cv.rate != null && (
-                    <span className={`funnel-conn-rate ${cls(cv.rate, cv.target)}`}>{Math.round(cv.rate * 100)}%</span>
-                  )}
-                  <svg viewBox="0 0 22 10" width="22" height="10" fill="none">
-                    <path d="M0 5 L15 5 M11 1 L15 5 L11 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{color:'var(--muted2)'}}/>
-                  </svg>
-                </div>
-              );
-            })()}
-          </React.Fragment>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ── Agent appointment-rate bars ─────────────────────── */
-function AgentConversionBars({ agents }) {
-  const m = useMounted(200);
-  const rows = [...agents]
-    .filter(a => a.outbound > 0)
-    .map(a => ({ ...a, rate: a.appts / a.outbound }))
-    .sort((a, b) => b.rate - a.rate);
-  if (!rows.length) return <EmptyCard title="Appointment rate by agent" />;
-  const target = 1 / 3;
-  const barColor = (r) => r >= target ? '#3DD0A4' : r >= 0.2 ? '#F5B544' : '#FF6B7A';
-  return (
-    <div className="card">
-      <div className="sec-head">
-        <div>
-          <div className="sec-title">Appointment rate by agent</div>
-          <div className="sec-sub">Appts ÷ outbound calls · dashed line = 33% target</div>
-        </div>
-      </div>
-      <div className="conv-bars-wrap">
-        {rows.map(a => {
-          const color = barColor(a.rate);
-          return (
-            <div className="conv-bar-row" key={a.name}>
-              <div className="conv-bar-name">{a.name.split(' ')[0]}</div>
-              <div className="conv-bar-track">
-                <div className="conv-bar-fill" style={{ width: m ? Math.min(Math.round(a.rate * 100), 100) + '%' : '0%', background: color, opacity: .8 }}/>
-                <div className="conv-bar-target-line" style={{ left: Math.round(target * 100) + '%' }} title="33% target"/>
-              </div>
-              <div className="conv-bar-pct" style={{ color }}>{Math.round(a.rate * 100)}%</div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* ── Telesales view ───────────────────────────────────── */
-const TS_DAILY_TARGET = 15; // outbound calls/day per agent — adjust to match team quota
-
 function TelesalesView({ data }) {
-  const { agents, daily, totals: T, prev_totals: PT, funnel, prev_funnel, days } = data;
-  const pt  = PT || {};
-  const f   = funnel      || {};
-  const pf  = prev_funnel || {};
-  const d   = days || 1;
-
-  if (!agents.length && !f.total_leads)
-    return <EmptyCard title="" message="No telesales data for this period."/>;
-
-  const callable      = f.callable_leads || f.total_leads || 0;
-  const coverage      = callable > 0 ? f.leads_called / callable : null;
-  const qc2a          = f.total_qual_convos > 0 ? f.appointments / f.total_qual_convos : null;
-  const callsPerDay   = T.outbound > 0 ? Math.round(T.outbound / d) : null;
-
-  const prevCallable  = pf.callable_leads || pf.total_leads || 0;
-  const prevCoverage  = prevCallable > 0 ? pf.leads_called / prevCallable : null;
-  const prevQc2a      = pf.total_qual_convos > 0 ? pf.appointments / pf.total_qual_convos : null;
-  const prevCallsDay  = pt.outbound > 0 ? Math.round(pt.outbound / d) : null;
-
-  const speedBg    = f.avg_mins == null ? 'var(--indigo-soft)' : f.avg_mins <= 5 ? 'var(--mint-soft)'  : f.avg_mins <= 10 ? 'var(--amber-soft)' : 'var(--rose-soft)';
-  const speedColor = f.avg_mins == null ? 'var(--indigo)'      : f.avg_mins <= 5 ? '#1FA77F'            : f.avg_mins <= 10 ? '#A87B0A'           : 'var(--rose)';
-  const covBg      = coverage  == null ? 'var(--indigo-soft)' : coverage  >= 0.8 ? 'var(--mint-soft)'  : coverage  >= 0.6 ? 'var(--amber-soft)' : 'var(--rose-soft)';
-  const covColor   = coverage  == null ? 'var(--indigo)'      : coverage  >= 0.8 ? '#1FA77F'            : coverage  >= 0.6 ? '#A87B0A'           : 'var(--rose)';
-  const qcBg       = qc2a      == null ? 'var(--violet-soft)' : qc2a      >= 0.33? 'var(--mint-soft)'  : qc2a      >= 0.2  ? 'var(--amber-soft)' : 'var(--rose-soft)';
-  const qcColor    = qc2a      == null ? 'var(--violet)'      : qc2a      >= 0.33? '#1FA77F'            : qc2a      >= 0.2  ? '#A87B0A'           : 'var(--rose)';
-
+  const { agents, daily, totals: T, prev_totals: PT } = data;
+  const pt = PT || {};
+  if (!agents.length) return <EmptyCard title="" message="No telesales data for this period."/>;
   return (
     <>
-      <FunnelStrip funnel={f} days={d}/>
       <div className="g4">
-        <Kpi label="Speed to first call"
-             value={f.avg_mins != null ? f.avg_mins.toFixed(1) + ' min' : '—'}
-             icon={Ic.phone} iconBg={speedBg} iconColor={speedColor}
-             delta={delta(f.avg_mins, pf.avg_mins, 'down')} delay={0}/>
-        <Kpi label="Lead coverage"
-             value={coverage != null ? Math.round(coverage * 100) + '%' : '—'}
-             icon={Ic.leads} iconBg={covBg} iconColor={covColor}
-             delta={delta(coverage, prevCoverage, 'up')} delay={60}/>
-        <Kpi label="Qual conv → Appt"
-             value={qc2a != null ? Math.round(qc2a * 100) + '%' : '—'}
-             icon={Ic.appt} iconBg={qcBg} iconColor={qcColor}
-             delta={delta(qc2a, prevQc2a, 'up')} delay={120}/>
-        <Kpi label="Avg calls / day"
-             value={callsPerDay != null ? fmt(callsPerDay) : '—'}
-             icon={Ic.chart} iconBg="var(--sky-soft)" iconColor="var(--sky)"
-             delta={delta(callsPerDay, prevCallsDay, 'up')} delay={180}/>
+        <Kpi label="Outbound calls"    value={fmt(T.outbound)}                icon={Ic.phone}  iconBg="var(--indigo-soft)" iconColor="var(--indigo)" delta={delta(T.outbound, pt.outbound, 'up')} delay={0}/>
+        <Kpi label="Appointments"      value={fmt(T.appts)}                   icon={Ic.appt}   iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(T.appts, pt.appts, 'up')}       delay={60}/>
+        <Kpi label="Sales"             value={fmt(T.sales)}                   icon={Ic.sale}   iconBg="var(--mint-soft)"   iconColor="#1FA77F"       delta={delta(T.sales, pt.sales, 'up')}       delay={120}/>
+        <Kpi label="Agents on target"  value={`${T.on_target_count} / ${agents.length}`}
+             icon={Ic.target}
+             iconBg={T.on_target_pct >= 75 ? 'var(--mint-soft)' : 'var(--rose-soft)'}
+             iconColor={T.on_target_pct >= 75 ? '#1FA77F' : 'var(--rose)'}
+             delta={delta(T.on_target_count, pt.on_target_count, 'up')}
+             delay={180}/>
       </div>
-      <AgentBars agents={agents} days={d}/>
+      <AgentBars agents={agents}/>
       <div className="g2">
         <TsTrendChart daily={daily}/>
-        <AgentConversionBars agents={agents}/>
+        <ScatterPlot agents={agents}/>
       </div>
-      <AgentTable agents={agents} days={d}/>
+      <AgentTable agents={agents}/>
     </>
   );
 }

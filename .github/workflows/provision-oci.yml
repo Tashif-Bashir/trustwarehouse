@@ -2,8 +2,9 @@ name: provision-oci-instance
 
 on:
   schedule:
-    # Every 15 minutes — Always Free ARM capacity comes and goes fast
-    - cron: '*/15 * * * *'
+    # Every 5 minutes — GitHub Actions cron minimum. Always Free ARM
+    # capacity opens for seconds, so poll as often as Actions allows.
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 # Needed so the script can disable this workflow once an instance exists.

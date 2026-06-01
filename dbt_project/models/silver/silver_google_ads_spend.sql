@@ -14,6 +14,32 @@ deduped as (
     ) = 1
 ),
 
+-- Performance Max campaigns are reported by Google Ads API in one of two ways
+-- depending on segmentation state at extraction time:
+--   (a) a single `MIXED` rollup row containing the PMax daily total, OR
+--   (b) multiple sub-network rows (DISCOVER, YOUTUBE, CONTENT, GMAIL, MAPS,
+--       SEARCH_PARTNERS) that together sum to the PMax daily total.
+-- Sometimes both representations end up in bronze for the same (campaign, date)
+-- because Airbyte syncs at different times capture different states. Summing
+-- them all double-counts. Search campaigns only ever emit SEARCH rows so they
+-- are not affected.
+--
+-- Smart rule per (campaign, date):
+--   - If a MIXED row exists, keep MIXED only (the rollup)
+--   - Otherwise, keep the sub-network rows (which ARE the spend)
+flagged as (
+    select *,
+        max(case when segments_ad_network_type = 'MIXED' then 1 else 0 end)
+            over (partition by campaign_id, segments_date) as has_mixed
+    from deduped
+),
+
+primary_network as (
+    select * from flagged
+    where (has_mixed = 1 and segments_ad_network_type = 'MIXED')
+       or (has_mixed = 0 and segments_ad_network_type != 'MIXED')
+),
+
 daily as (
     select
         segments_date                                               as date,
@@ -30,7 +56,7 @@ daily as (
         round(sum(metrics_cost_micros) / 1000000.0, 4)             as spend_gbp,
         round(sum(metrics_conversions), 2)                          as conversions
 
-    from deduped
+    from primary_network
     group by segments_date, campaign_id
 ),
 

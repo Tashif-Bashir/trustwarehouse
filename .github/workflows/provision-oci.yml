@@ -1,0 +1,38 @@
+name: provision-oci-instance
+
+on:
+  schedule:
+    # Every 15 minutes — Always Free ARM capacity comes and goes fast
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: provision-oci
+  cancel-in-progress: false
+
+jobs:
+  try-provision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - run: pip install oci
+
+      - name: Attempt provisioning
+        env:
+          OCI_USER_OCID:        ${{ secrets.OCI_USER_OCID }}
+          OCI_TENANCY_OCID:     ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_FINGERPRINT:      ${{ secrets.OCI_FINGERPRINT }}
+          OCI_REGION:           ${{ secrets.OCI_REGION }}
+          OCI_PRIVATE_KEY:      ${{ secrets.OCI_PRIVATE_KEY }}
+          OCI_COMPARTMENT_OCID: ${{ secrets.OCI_COMPARTMENT_OCID }}
+          OCI_SUBNET_OCID:      ${{ secrets.OCI_SUBNET_OCID }}
+          OCI_IMAGE_OCID:       ${{ secrets.OCI_IMAGE_OCID }}
+          OCI_SSH_PUBLIC_KEY:   ${{ secrets.OCI_SSH_PUBLIC_KEY }}
+        run: python scripts/provision_oci.py

@@ -20,11 +20,15 @@ Optional:
     OCI_MEMORY_GB              (default: 24)
     OCI_BOOT_VOLUME_GB         (default: 200)
 """
+import json
 import os
 import sys
 import tempfile
+import urllib.request
 
 import oci
+
+WORKFLOW_FILE = "provision-oci.yml"
 
 
 CAPACITY_ERROR_HINTS = ("capacity", "out of host capacity", "outofcapacity")
@@ -42,6 +46,33 @@ def _build_config():
         "region": os.environ["OCI_REGION"],
         "key_file": fp.name,
     }
+
+
+def _disable_workflow():
+    """Once an instance exists, switch off this workflow's cron so we stop
+    burning GitHub Actions minutes. Silent no-op outside Actions."""
+    token = os.environ.get("GITHUB_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    if not token or not repo:
+        return  # not running in GitHub Actions
+    url = f"https://api.github.com/repos/{repo}/actions/workflows/{WORKFLOW_FILE}/disable"
+    req = urllib.request.Request(
+        url,
+        method="PUT",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            if resp.status == 204:
+                print(f"Workflow '{WORKFLOW_FILE}' disabled — no further scheduled runs.")
+            else:
+                print(f"Workflow disable returned status {resp.status}")
+    except Exception as e:
+        print(f"Failed to disable workflow: {e}")
 
 
 def _existing_instance(compute, compartment_id, name):
@@ -71,7 +102,7 @@ def main():
     existing = _existing_instance(compute, compartment, name)
     if existing:
         print(f"Instance '{name}' already exists: state={existing.lifecycle_state} id={existing.id}")
-        print("Nothing to do.")
+        _disable_workflow()
         return 0
 
     ads = identity.list_availability_domains(compartment).data
@@ -102,6 +133,7 @@ def main():
             inst = compute.launch_instance(details).data
             print(f"SUCCESS in {ad.name}: instance OCID = {inst.id}")
             print(f"State: {inst.lifecycle_state}")
+            _disable_workflow()
             return 0
         except oci.exceptions.ServiceError as e:
             msg = (e.message or "").lower()

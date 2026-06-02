@@ -311,10 +311,9 @@
   .insight-detail{ font-size:12px; color:#525252; line-height:1.5; }
   .insight-action{ font-size:11.5px; color:var(--muted); margin-top:4px; font-style:italic; }
 
-  /* Top / Coach pills on AgentBars + AgentTable */
+  /* Top pill on AgentBars + AgentTable */
   .agent-pill{ display:inline-flex; align-items:center; gap:3px; font-size:10px; font-weight:700; padding:2px 7px; border-radius:99px; margin-left:6px; letter-spacing:0.03em; text-transform:uppercase; }
   .agent-pill-top{   background:#E9F8F1; color:#1FA77F; }
-  .agent-pill-coach{ background:#FFF1F4; color:var(--rose); }
 
   .kpi-target{ margin-top:10px; }
   .kpi-target-bar{ width:100%; height:6px; background:var(--bg-2); border-radius:99px; overflow:hidden; }
@@ -1343,11 +1342,10 @@ function OpportunitiesTable({ recent }) {
 }
 
 /* ── Agent bars ──────────────────────────────────────── */
-function AgentBars({ agents, topAgentName = null, coachAgentNames = [] }) {
+function AgentBars({ agents, topAgentName = null }) {
   const m = useMounted(100);
   if (!agents.length) return <EmptyCard title="Agent performance" />;
   const maxOut = Math.max(...agents.map(a => a.outbound), 1);
-  const coachSet = new Set(coachAgentNames);
   return (
     <div className="card">
       <div className="sec-head">
@@ -1366,13 +1364,11 @@ function AgentBars({ agents, topAgentName = null, coachAgentNames = [] }) {
         const barPct = a.outbound / maxOut;
         const targetPct = a.appts > 0 ? Math.min((a.appts * 3) / maxOut, 1) : null;
         const isTop   = a.name === topAgentName;
-        const isCoach = coachSet.has(a.name);
         return (
           <div className="agent-bar-wrap" key={a.name}>
             <div className="agent-bar-name">
               {a.name}
-              {isTop   && <span className="agent-pill agent-pill-top">⭐ Top</span>}
-              {isCoach && <span className="agent-pill agent-pill-coach">Coach</span>}
+              {isTop && <span className="agent-pill agent-pill-top">⭐ Top</span>}
             </div>
             <div className="agent-bar-track">
               <div className="agent-bar-fill" style={{
@@ -1691,9 +1687,8 @@ function DurationSweetSpotCard({ rows }) {
 }
 
 /* ── Agent summary table ─────────────────────────────── */
-function AgentTable({ agents, topAgentName = null, coachAgentNames = [] }) {
+function AgentTable({ agents, topAgentName = null }) {
   if (!agents.length) return <EmptyCard title="Agent summary" />;
-  const coachSet = new Set(coachAgentNames);
   return (
     <div className="card">
       <div className="sec-head"><div className="sec-title">Agent summary</div></div>
@@ -1714,7 +1709,6 @@ function AgentTable({ agents, topAgentName = null, coachAgentNames = [] }) {
                 <td style={{ color: 'var(--ink)', fontWeight: 600 }}>
                   {a.name}
                   {a.name === topAgentName && <span className="agent-pill agent-pill-top">⭐ Top</span>}
-                  {coachSet.has(a.name) && <span className="agent-pill agent-pill-coach">Coach</span>}
                 </td>
                 <td style={{ textAlign: 'right' }}>{fmt(a.outbound)}</td>
                 <td style={{ textAlign: 'right' }}>{fmt(a.qual_convos)}</td>
@@ -2163,21 +2157,8 @@ function computeInsights({ agents, T, pt, sourceCpa }) {
   const teamAvgCpA = validAgents.length
     ? validAgents.reduce((s, a) => s + (a.outbound / a.appts), 0) / validAgents.length
     : 0;
-  const coachThreshold = teamAvgCpA * 1.5;
 
-  // Rule 1 — agents to coach
-  const coachAgents = validAgents.filter(a => (a.outbound / a.appts) > coachThreshold && a.outbound >= 5);
-  if (coachAgents.length > 0) {
-    insights.push({
-      severity: 'red',
-      icon: '🎯',
-      title: `${coachAgents.length} agent${coachAgents.length > 1 ? 's' : ''} need${coachAgents.length === 1 ? 's' : ''} coaching`,
-      body: `Calls per appointment above team avg (${teamAvgCpA.toFixed(1)}) × 1.5: ${coachAgents.map(a => a.name).join(', ')}`,
-      action: 'Pair them with a top performer this week.',
-    });
-  }
-
-  // Rule 2 — Lead → Appt rate dropping
+  // Rule 1 — Lead → Appt rate dropping
   if (pt && pt.l2a != null && T.l2a != null) {
     const drop = T.l2a - pt.l2a;
     if (drop <= -2) {
@@ -2191,7 +2172,7 @@ function computeInsights({ agents, T, pt, sourceCpa }) {
     }
   }
 
-  // Rule 3 — Top performer (highest appt/outbound ratio, min 5 calls)
+  // Rule 2 — Top performer (highest appt/outbound ratio, min 5 calls)
   const performersByRate = validAgents
     .filter(a => a.outbound >= 5)
     .map(a => ({ ...a, rate: a.appts / a.outbound }))
@@ -2207,7 +2188,7 @@ function computeInsights({ agents, T, pt, sourceCpa }) {
     });
   }
 
-  // Rule 4 — Source with CPA > pause threshold
+  // Rule 3 — Source with CPA > pause threshold
   const expensiveSource = sourceCpa
     .filter(s => s.cost_per_appt != null && s.cost_per_appt > TS_CPA_PAUSE_GBP && s.spend >= 100)
     .sort((a, b) => b.cost_per_appt - a.cost_per_appt)[0];
@@ -2224,7 +2205,6 @@ function computeInsights({ agents, T, pt, sourceCpa }) {
   return {
     insights: insights.slice(0, 4),
     topAgentName: topPerformer ? topPerformer.name : null,
-    coachAgentNames: coachAgents.map(a => a.name),
     teamAvgCpA,
   };
 }
@@ -2269,7 +2249,7 @@ function TelesalesView({ data, marketingData }) {
 
   // Insights — computed rules-based, severity-coded
   const insights = computeInsights({ agents, T, pt, sourceCpa });
-  const { topAgentName, coachAgentNames } = insights;
+  const { topAgentName } = insights;
 
   return (
     <>
@@ -2296,9 +2276,9 @@ function TelesalesView({ data, marketingData }) {
         <DurationSweetSpotCard rows={duration_buckets}/>
       </div>
       <CallHeatmap cells={heatmap}/>
-      {!noAgents && <AgentBars agents={agents} topAgentName={topAgentName} coachAgentNames={coachAgentNames}/>}
+      {!noAgents && <AgentBars agents={agents} topAgentName={topAgentName}/>}
       {!noAgents && <TsTrendChart daily={daily}/>}
-      {!noAgents && <AgentTable agents={agents} topAgentName={topAgentName} coachAgentNames={coachAgentNames}/>}
+      {!noAgents && <AgentTable agents={agents} topAgentName={topAgentName}/>}
     </>
   );
 }

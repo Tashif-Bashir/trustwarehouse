@@ -55,18 +55,24 @@ with leads as (
     qualify row_number() over (partition by lead_id order by updated_at desc) = 1
 ),
 
--- outbound completed calls only
+-- outbound completed calls — one row per call_id.
+-- silver_wildix_calls stores one row per *participant* in a call (transfer
+-- chains create 2-3 rows per logical call), so we aggregate first to avoid
+-- inflating total_call_attempts and qualified_conversations downstream.
+--   talk_time = sum across participants (full conversation length)
+--   agent_name = whoever spoke the longest
 outbound_calls as (
     select
-        remote_phone,
-        TIMESTAMP_MILLIS(start_time)                                        as call_at,
-        DATE(TIMESTAMP_MILLIS(start_time), 'Europe/London')                 as call_date,
-        talk_time_seconds,
-        colleague_name as agent_name
+        any_value(remote_phone)                                              as remote_phone,
+        TIMESTAMP_MILLIS(min(start_time))                                    as call_at,
+        DATE(TIMESTAMP_MILLIS(min(start_time)), 'Europe/London')             as call_date,
+        sum(talk_time_seconds)                                               as talk_time_seconds,
+        array_agg(colleague_name order by talk_time_seconds desc limit 1)[offset(0)] as agent_name
     from {{ ref('silver_wildix_calls') }}
     where direction = 'OUTBOUND'
-    and call_status = 'COMPLETED'
-    and remote_phone is not null
+      and call_status = 'COMPLETED'
+      and remote_phone is not null
+    group by call_id
 ),
 
 -- match calls to leads via any normalised phone field

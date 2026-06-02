@@ -78,6 +78,23 @@ def _sources(d0, d1):
         GROUP BY 1 ORDER BY 2 DESC
     """)
 
+def _water_leads(d0, d1):
+    try:
+        return _q(f"""
+            SELECT
+                service_type,
+                COUNT(*) as leads,
+                COUNTIF(is_sold) as sales
+            FROM `{PROJECT}.silver.silver_sharpspring_leads`
+            WHERE is_active = true
+              AND is_water_lead = true
+              AND DATE(created_at, 'Europe/London') BETWEEN '{d0}' AND '{d1}'
+            GROUP BY service_type
+            ORDER BY leads DESC
+        """)
+    except Exception:
+        return pd.DataFrame()
+
 def _telesales(d0, d1):
     try:
         return _q(f"""
@@ -220,6 +237,8 @@ def _load_all(d0s, d1s):
         'reg_spend':   (f'regs:{d0s}:{d1s}',   lambda: _regional_spend(d0s, d1s)),
         'ga4_sessions':(f'ga4s:{d0s}:{d1s}',   lambda: _ga4_sessions(d0s, d1s)),
         'ga4_pages':   (f'ga4p:{d0s}:{d1s}',   lambda: _ga4_pages(d0s, d1s)),
+        'water':       (f'water:{d0s}:{d1s}',  lambda: _water_leads(d0s, d1s)),
+        'water_prev':  (f'water:{p0s}:{p1s}',  lambda: _water_leads(p0s, p1s)),
     }
 
     results = {}
@@ -240,6 +259,8 @@ def _load_all(d0s, d1s):
     df_reg_spend     = results['reg_spend']
     df_ga4_sessions  = results['ga4_sessions']
     df_ga4_pages     = results['ga4_pages']
+    df_water         = results['water']
+    df_water_prev    = results['water_prev']
 
     pa = df_attr.groupby("platform").agg(spend=("spend_gbp","sum"),clicks=("clicks","sum"),impr=("impressions","sum"),leads=("leads","sum")).reset_index()
     pa["cpl"] = (pa["spend"] / pa["leads"].replace(0, float("nan"))).round(2)
@@ -271,7 +292,15 @@ def _load_all(d0s, d1s):
     ga4_sessions = [{'channel':str(r['channel']),'sessions':int(r['sessions']),'new_users':int(r['new_users']),'total_users':int(r['total_users'])} for _,r in df_ga4_sessions.iterrows()] if not df_ga4_sessions.empty else []
     ga4_pages    = [{'path':str(r['path']),'views':int(r['views']),'users':int(r['users']),'avg_eng_secs':int(r['avg_eng_secs']) if pd.notna(r['avg_eng_secs']) else 0} for _,r in df_ga4_pages.iterrows()] if not df_ga4_pages.empty else []
 
-    marketing = {'totals':{'spend':tot_sp,'leads':tot_ld,'clicks':tot_cl,'cpl':round(tot_sp/tot_ld,2) if tot_ld else 0,'total_leads':tot_all},'prev_totals':prev_marketing_totals,'platforms':platforms,'daily':daily,'lead_sources':sources,'regions':regions,'ga4_sessions':ga4_sessions,'ga4_pages':ga4_pages}
+    water_total   = int(df_water['leads'].sum()) if not df_water.empty else 0
+    water_split   = [{'type':str(r['service_type']),'leads':int(r['leads']),'sales':int(r['sales'])} for _,r in df_water.iterrows()] if not df_water.empty else []
+    water_prev    = int(df_water_prev['leads'].sum()) if not df_water_prev.empty else 0
+
+    if prev_marketing_totals is None:
+        prev_marketing_totals = {'spend':0,'leads':0,'cpl':0,'total_leads':0}
+    prev_marketing_totals['water_leads'] = water_prev
+
+    marketing = {'totals':{'spend':tot_sp,'leads':tot_ld,'clicks':tot_cl,'cpl':round(tot_sp/tot_ld,2) if tot_ld else 0,'total_leads':tot_all,'water_leads':water_total},'prev_totals':prev_marketing_totals,'platforms':platforms,'daily':daily,'lead_sources':sources,'regions':regions,'ga4_sessions':ga4_sessions,'ga4_pages':ga4_pages,'water_split':water_split}
 
     agents = []
     if not df_ts.empty:

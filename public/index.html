@@ -205,6 +205,7 @@
   .cal-cancel{ padding:6px 10px; border-radius:8px; background:var(--bg); color:var(--ink2); font-size:12px; font-weight:600; white-space:nowrap; }
 
   /* ─── Grids ─── */
+  .g5{ display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:14px; }
   .g4{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:14px; }
   .g3{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:14px; }
   .g2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
@@ -410,6 +411,7 @@
     .main{ padding:16px 16px 48px; }
     .g3{ grid-template-columns:1fr 1fr; }
     .g4{ grid-template-columns:1fr 1fr; }
+    .g5{ grid-template-columns:1fr 1fr; }
     .g2{ grid-template-columns:1fr; }
     .row-mix{ grid-template-columns:1fr 1fr; }
     .topbar{ flex-direction:column; align-items:stretch; }
@@ -440,6 +442,7 @@
     .kpi-delta{ padding:3px 8px 3px 6px; }
     .g3{ grid-template-columns:1fr; }
     .g4{ grid-template-columns:1fr 1fr; }
+    .g5{ grid-template-columns:1fr; }
     .row-mix{ grid-template-columns:1fr; }
     .tabs{ display:none; }
     .topbar{ flex-direction:row; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
@@ -552,6 +555,7 @@ const Ic = {
   arrowUp:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 14 12 8 18 14"/></svg>,
   arrowDown: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 10 12 16 18 10"/></svg>,
   settings:  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+  droplet:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>,
 };
 
 /* ── Hooks ──────────────────────────────────────────────── */
@@ -2007,18 +2011,25 @@ function GA4PagesCard({ pages }) {
    ═══════════════════════════════════════════════════════════════ */
 
 function MarketingView({ data }) {
-  const { totals: T, prev_totals: PT, platforms, daily, lead_sources, regions = [], ga4_sessions = [], ga4_pages = [] } = data;
+  const { totals: T, prev_totals: PT, platforms, daily, lead_sources, regions = [], ga4_sessions = [], ga4_pages = [], water_split = [] } = data;
   const pt = PT || {};
   const totalLeads     = T.total_leads || T.leads;
   const prevTotalLeads = pt.total_leads != null ? pt.total_leads : pt.leads;
   const spendSegs      = platforms.map(p => ({ label: p.platform, value: p.spend, color: PC[p.platform] }));
+  const waterCount     = T.water_leads || 0;
+  const waterPrev      = pt.water_leads || 0;
+  const waterOnly      = (water_split.find(w => w.type === 'Water') || {}).leads || 0;
+  const waterAndHeat   = (water_split.find(w => w.type === 'Heating and Water') || {}).leads || 0;
   return (
     <>
-      <div className="g4">
-        <Kpi label="Total spend"  value={gbp(T.spend)}    icon={Ic.spend}  iconBg="var(--rose-soft)"   iconColor="var(--rose)"   delta={delta(T.spend, pt.spend, 'down')}       delay={0}/>
-        <Kpi label="Total leads"  value={fmt(totalLeads)} icon={Ic.leads}  iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(totalLeads, prevTotalLeads, 'up')} delay={60}/>
-        <Kpi label="Paid CPL"     value={gbp(T.cpl)}      icon={Ic.target} iconBg="var(--amber-soft)"  iconColor="#A87B0A"       delta={delta(T.cpl, pt.cpl, 'down')}           delay={120}/>
-        <Kpi label="Clicks"       value={fmt(T.clicks)}   icon={Ic.chart}  iconBg="var(--sky-soft)"    iconColor="var(--sky)"    delay={180}/>
+      <div className="g5">
+        <Kpi label="Total spend"  value={gbp(T.spend)}    icon={Ic.spend}   iconBg="var(--rose-soft)"   iconColor="var(--rose)"   delta={delta(T.spend, pt.spend, 'down')}       delay={0}/>
+        <Kpi label="Total leads"  value={fmt(totalLeads)} icon={Ic.leads}   iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(totalLeads, prevTotalLeads, 'up')} delay={60}/>
+        <Kpi label="Paid CPL"     value={gbp(T.cpl)}      icon={Ic.target}  iconBg="var(--amber-soft)"  iconColor="#A87B0A"       delta={delta(T.cpl, pt.cpl, 'down')}           delay={120}/>
+        <Kpi label="Clicks"       value={fmt(T.clicks)}   icon={Ic.chart}   iconBg="var(--sky-soft)"    iconColor="var(--sky)"    delay={180}/>
+        <Kpi label="Water leads"  value={fmt(waterCount)} icon={Ic.droplet} iconBg="#E6F2FB"            iconColor="#1E7CC4"       delta={delta(waterCount, waterPrev, 'up')}
+             sub={waterCount > 0 ? `${waterAndHeat} Heat+Water · ${waterOnly} Water` : null}
+             delay={240}/>
       </div>
       <div className="g2">
         <DonutCard title="Spend split" segments={spendSegs} total={gbp(T.spend/1000,1)+'k'} totalLabel="SPEND"

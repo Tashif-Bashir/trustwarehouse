@@ -100,7 +100,17 @@ cleaned as (
         nullif(trim(type_of_heating___6317101eeda5b), '')                  as heating_type,
         nullif(trim("lead_warmth___1___69ea236712886"), '')                as enquiry_type,
         nullif(trim(page_submitted_5af30a9090796), '')                     as form_page,
-        nullif(trim(appointment_made_by_65e1a90253305), '')               as appointment_made_by
+        nullif(trim(appointment_made_by_65e1a90253305), '')                as appointment_made_by,
+
+        -- Service classification — the SharpSpring "what service do you need" field.
+        -- Note: the column name `lead_warmth___1___69ea236712886` looks misleading
+        -- but the actual values are: 'Heating' | 'Water' | 'Heating and Water' | NULL.
+        -- The `enquiry_type` column above mis-quotes this identifier (BigQuery treats
+        -- "..." as a string literal), so it always returns the literal name. We add
+        -- correctly-quoted columns here without touching the legacy one.
+        nullif(trim(`lead_warmth___1___69ea236712886`), '')                 as service_type,
+        coalesce(`lead_warmth___1___69ea236712886` in ('Water', 'Heating and Water'), false)
+                                                                            as is_water_lead
 
     from source
 ),

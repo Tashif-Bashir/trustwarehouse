@@ -1633,6 +1633,74 @@ function SpeedToCallCard({ rows }) {
   );
 }
 
+/* ── Duration sweet spot ───────────────────────────────
+   Talk-time bucket vs honest appt-within-24h rate. Answers "how long
+   should a productive call be?" The 5-10 min bucket consistently wins
+   in this data; <2 min is mostly voicemails / brush-offs (1-3% rate). */
+function DurationSweetSpotCard({ rows }) {
+  const m = useMounted(120);
+  if (!rows || !rows.length) return null;
+  const totalCalls = rows.reduce((s, r) => s + r.calls, 0);
+  // Sweet spot = highest rate among buckets with >= 20 calls (volume floor for trust)
+  const eligible = rows.filter(r => r.calls >= 20);
+  const sweet = eligible.length ? eligible.reduce((a, b) => (b.rate || 0) > (a.rate || 0) ? b : a) : null;
+  const maxRate = Math.max(...rows.map(r => r.rate || 0), 1);
+
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Duration sweet spot</div>
+          <div className="sec-sub">Appt-within-24h rate by talk-time bucket · outbound calls only</div>
+        </div>
+        {sweet && (
+          <span style={{fontSize:11, fontWeight:600, padding:'4px 9px', borderRadius:99, background:'rgba(61,208,164,0.14)', color:'#0F8A60'}}>
+            ★ sweet spot · {sweet.bucket}
+          </span>
+        )}
+      </div>
+      {rows.map(r => {
+        const isSweet = sweet && r.bucket === sweet.bucket;
+        const rate = r.rate || 0;
+        const widthPct = rate / maxRate;
+        const sharePct = totalCalls > 0 ? Math.round(r.calls / totalCalls * 100) : 0;
+        // Mint for sweet spot; rose for the noise floor (<2 min); neutral indigo otherwise
+        let color = 'var(--indigo)';
+        if (isSweet)                                                 color = '#3DD0A4';
+        else if (r.bucket === '<30s' || r.bucket === '30-60s' || r.bucket === '1-2 min') color = '#FF6B7A';
+        return (
+          <div key={r.bucket} style={{display:'grid', gridTemplateColumns:'120px 1fr 200px', alignItems:'center', gap:12, padding:'7px 0', borderBottom:'1px solid var(--line)'}}>
+            <div style={{fontSize:12.5, fontWeight:600, color: isSweet ? '#0F8A60' : 'var(--ink)'}}>
+              {isSweet && <span style={{marginRight:5}}>★</span>}
+              {r.bucket}
+            </div>
+            <div style={{height:9, background:'var(--bg)', borderRadius:5, overflow:'hidden', position:'relative'}}>
+              <div style={{
+                height:'100%',
+                width: m ? Math.round(widthPct * 100) + '%' : '0%',
+                background: `linear-gradient(90deg, ${color}, ${color}aa)`,
+                borderRadius: 5,
+                transition: 'width 1.2s cubic-bezier(.22,1,.36,1)',
+                minWidth: m && rate > 0 ? '4px' : '0'
+              }}/>
+            </div>
+            <div style={{display:'flex', gap:10, justifyContent:'flex-end', fontSize:11.5, color:'var(--muted)'}}>
+              <span><b style={{color:'var(--ink)'}}>{fmt(r.calls)}</b> calls <span style={{opacity:0.65}}>({sharePct}%)</span></span>
+              <span style={{color: isSweet ? '#0F8A60' : 'var(--ink)', fontWeight: 600, minWidth:50, textAlign:'right'}}>
+                {rate.toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        );
+      })}
+      <div style={{fontSize:10.5, color:'var(--muted)', marginTop:10, lineHeight:1.5}}>
+        Rate counts only appts booked in the 24h after the call (honest per-call attribution).
+        <i> &lt;2 min</i> is dominated by voicemails and quick brush-offs.
+      </div>
+    </div>
+  );
+}
+
 /* ── Scatter plot (initials in dots, hover tooltip) ──── */
 function ScatterPlot({ agents }) {
   if (!agents.length) return <EmptyCard title="Calls vs appointments" />;
@@ -2503,7 +2571,7 @@ function InsightsPanel({ insights }) {
 }
 
 function TelesalesView({ data, marketingData }) {
-  const { agents, daily, totals: T, prev_totals: PT, speed_to_call = [], heatmap = [] } = data;
+  const { agents, daily, totals: T, prev_totals: PT, speed_to_call = [], heatmap = [], duration_buckets = [] } = data;
   const pt = PT || {};
   const sourceCpa = (marketingData && marketingData.source_cpa) || [];
   const noAgents = !agents.length;
@@ -2542,8 +2610,9 @@ function TelesalesView({ data, marketingData }) {
       {!noAgents && <InsightsPanel insights={insights}/>}
       <div className="g2">
         <SpeedToCallCard rows={speed_to_call}/>
-        <CallHeatmap cells={heatmap}/>
+        <DurationSweetSpotCard rows={duration_buckets}/>
       </div>
+      <CallHeatmap cells={heatmap}/>
       {!noAgents && <AgentBars agents={agents} topAgentName={topAgentName} coachAgentNames={coachAgentNames}/>}
       {!noAgents && (
         <div className="g2">

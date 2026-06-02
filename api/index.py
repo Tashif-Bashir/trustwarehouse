@@ -159,6 +159,45 @@ def _water_leads(d0, d1):
     except Exception:
         return pd.DataFrame()
 
+def _duration_sweet_spot(d0, d1):
+    """Talk-time buckets vs honest appt-within-24h rate.
+    Source: gold_lead_calls outbound. Answers 'how long should a productive call be?'"""
+    try:
+        return _q(f"""
+            WITH bucketed AS (
+              SELECT
+                CASE
+                  WHEN talk_time_seconds <  30  THEN '<30s'
+                  WHEN talk_time_seconds <  60  THEN '30-60s'
+                  WHEN talk_time_seconds < 120  THEN '1-2 min'
+                  WHEN talk_time_seconds < 300  THEN '2-5 min'
+                  WHEN talk_time_seconds < 600  THEN '5-10 min'
+                  ELSE '10 min+'
+                END AS bucket,
+                CASE
+                  WHEN talk_time_seconds <  30  THEN 1
+                  WHEN talk_time_seconds <  60  THEN 2
+                  WHEN talk_time_seconds < 120  THEN 3
+                  WHEN talk_time_seconds < 300  THEN 4
+                  WHEN talk_time_seconds < 600  THEN 5
+                  ELSE 6
+                END AS sort_order,
+                appt_within_24h AS is_appt
+              FROM `{PROJECT}.gold.gold_lead_calls`
+              WHERE call_date BETWEEN '{d0}' AND '{d1}'
+                AND direction = 'OUTBOUND'
+            )
+            SELECT bucket, sort_order,
+                   COUNT(*) AS calls,
+                   COUNTIF(is_appt) AS appts,
+                   ROUND(SAFE_DIVIDE(COUNTIF(is_appt), COUNT(*)) * 100, 1) AS rate
+            FROM bucketed
+            GROUP BY bucket, sort_order
+            ORDER BY sort_order
+        """)
+    except Exception:
+        return pd.DataFrame()
+
 def _call_heatmap(d0, d1):
     """Best-time-to-call heatmap data — calls and honest appt-within-24h per (day, hour) cell.
     Source: gold_lead_calls outbound only, weekday hours 8-17. Returns one row per cell.
@@ -371,6 +410,7 @@ def _load_all(d0s, d1s):
         'source_cpa':  (f'cpa:{d0s}:{d1s}',    lambda: _source_cpa(d0s, d1s)),
         'speed':       (f'spd:{d0s}:{d1s}',    lambda: _speed_to_call(d0s, d1s)),
         'heatmap':     (f'hm:{d0s}:{d1s}',     lambda: _call_heatmap(d0s, d1s)),
+        'duration':    (f'dur:{d0s}:{d1s}',    lambda: _duration_sweet_spot(d0s, d1s)),
     }
 
     results = {}
@@ -398,6 +438,7 @@ def _load_all(d0s, d1s):
     df_source_cpa    = results['source_cpa']
     df_speed         = results['speed']
     df_heatmap       = results['heatmap']
+    df_duration      = results['duration']
 
     pa = df_attr.groupby("platform").agg(spend=("spend_gbp","sum"),clicks=("clicks","sum"),impr=("impressions","sum"),leads=("leads","sum")).reset_index()
     pa["cpl"] = (pa["spend"] / pa["leads"].replace(0, float("nan"))).round(2)
@@ -496,7 +537,12 @@ def _load_all(d0s, d1s):
          'calls': int(r['calls']), 'appts': int(r['appts']), 'rate': _safe(r['rate'])}
         for _, r in df_heatmap.iterrows()
     ] if not df_heatmap.empty else []
-    telesales = {'agents':agents,'daily':ts_daily_list,'totals':{'outbound':ts_out,'appts':ts_ap,'sales':ts_sa,'on_target_count':ts_on,'on_target_pct':round(ts_on/len(agents)*100) if agents else 0,'l2a':round(ts_ap/ts_out*100,1) if ts_out else 0,'a2s':round(ts_sa/ts_ap*100,1) if ts_ap else 0,'cpa':cpa},'prev_totals':prev_telesales_totals,'speed_to_call':speed_to_call,'heatmap':heatmap}
+    duration_buckets = [
+        {'bucket': str(r['bucket']), 'calls': int(r['calls']), 'appts': int(r['appts']),
+         'rate': _safe(r['rate'])}
+        for _, r in df_duration.iterrows()
+    ] if not df_duration.empty else []
+    telesales = {'agents':agents,'daily':ts_daily_list,'totals':{'outbound':ts_out,'appts':ts_ap,'sales':ts_sa,'on_target_count':ts_on,'on_target_pct':round(ts_on/len(agents)*100) if agents else 0,'l2a':round(ts_ap/ts_out*100,1) if ts_out else 0,'a2s':round(ts_sa/ts_ap*100,1) if ts_ap else 0,'cpa':cpa},'prev_totals':prev_telesales_totals,'speed_to_call':speed_to_call,'heatmap':heatmap,'duration_buckets':duration_buckets}
 
     stages = [{'stage':str(r['stage']),'count':int(r['count']),'total_value':float(r['total_value']) if pd.notna(r['total_value']) else 0,'weighted_value':float(r['weighted_value']) if pd.notna(r['weighted_value']) else 0,'won_count':int(r['won_count']) if pd.notna(r['won_count']) else 0,'won_value':float(r['won_value']) if pd.notna(r['won_value']) else 0,'avg_age_days':int(r['avg_age_days']) if pd.notna(r.get('avg_age_days')) else None} for _,r in df_stg.iterrows()]
     recent = []

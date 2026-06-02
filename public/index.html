@@ -1464,6 +1464,114 @@ function TsTrendChart({ daily }) {
   );
 }
 
+/* ── Best-time-to-call heatmap ─────────────────────────
+   Rows = day of week (Mon-Fri/weekends), columns = hours 8-17.
+   Cell hue = appt rate (honest per-call: appt_within_24h).
+   Low-volume cells (<10 calls) are visually de-emphasised to suppress
+   single-call noise (where 1/1 = 100% would otherwise dominate). */
+function CallHeatmap({ cells }) {
+  const m = useMounted(140);
+  const [hover, setHover] = useStateC(null);
+  if (!cells || !cells.length) return null;
+
+  // BigQuery DOW: 1=Sun, 2=Mon, ... 7=Sat. We order: Mon, Tue, Wed, Thu, Fri, Sat, Sun.
+  const ROW_ORDER = [2, 3, 4, 5, 6, 7, 1];
+  const ROW_LABEL = {1:'Sun', 2:'Mon', 3:'Tue', 4:'Wed', 5:'Thu', 6:'Fri', 7:'Sat'};
+  const HOURS     = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+  const MIN_CALLS = 10;  // floor for "trustable" rate
+
+  // Index cells by "dow-hour" for O(1) lookup
+  const map = {};
+  for (const c of cells) map[`${c.dow}-${c.hour}`] = c;
+
+  // Compute color scale across cells that pass the volume floor
+  const eligible = cells.filter(c => c.calls >= MIN_CALLS);
+  const maxRate  = Math.max(...eligible.map(c => c.rate || 0), 1);
+
+  // Find the best cell (>= MIN_CALLS) to highlight
+  const best = eligible.length ? eligible.reduce((a,b) => (b.rate || 0) > (a.rate || 0) ? b : a) : null;
+
+  const cellColor = (c) => {
+    if (!c || c.calls === 0) return 'transparent';
+    if (c.calls < MIN_CALLS)  return 'rgba(154,160,180,0.10)'; // low-vol grey
+    const intensity = Math.min((c.rate || 0) / maxRate, 1);     // 0..1
+    // Mint gradient — strong = greener
+    const alpha = 0.15 + intensity * 0.75;
+    return `rgba(61, 208, 164, ${alpha})`;
+  };
+  const cellText = (c) => {
+    if (!c || c.calls === 0)    return { txt: '·', col: 'var(--muted)' };
+    if (c.calls < MIN_CALLS)    return { txt: c.rate != null ? c.rate.toFixed(0)+'%' : '–', col: '#C7CADA' };
+    const intensity = Math.min((c.rate || 0) / maxRate, 1);
+    return { txt: c.rate.toFixed(0)+'%', col: intensity > 0.55 ? '#0F4A35' : 'var(--ink)' };
+  };
+
+  return (
+    <div className="card" style={{position:'relative'}}>
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Best time to call</div>
+          <div className="sec-sub">Appt-within-24h rate by day &amp; hour · cells with &lt; {MIN_CALLS} calls are de-emphasised</div>
+        </div>
+        {best && (
+          <span style={{fontSize:11, fontWeight:600, padding:'4px 9px', borderRadius:99, background:'rgba(61,208,164,0.14)', color:'#0F8A60'}}>
+            ★ best slot · {ROW_LABEL[best.dow]} {String(best.hour).padStart(2,'0')}:00 · {best.rate.toFixed(1)}%
+          </span>
+        )}
+      </div>
+      <div style={{overflowX:'auto'}}>
+        <div style={{display:'inline-grid', gridTemplateColumns:`44px repeat(${HOURS.length}, 1fr)`, gap:3, minWidth: 480, opacity: m ? 1 : 0, transition: 'opacity 600ms ease'}}>
+          {/* header row */}
+          <div/>
+          {HOURS.map(h => (
+            <div key={'h'+h} style={{textAlign:'center', fontSize:10.5, color:'var(--muted)', fontWeight:600, padding:'4px 0'}}>{String(h).padStart(2,'0')}</div>
+          ))}
+          {/* body */}
+          {ROW_ORDER.map(dow => (
+            <React.Fragment key={'r'+dow}>
+              <div style={{display:'flex', alignItems:'center', fontSize:11, color:'var(--muted)', fontWeight:600}}>{ROW_LABEL[dow]}</div>
+              {HOURS.map(h => {
+                const c = map[`${dow}-${h}`];
+                const isBest = best && c && c.dow === best.dow && c.hour === best.hour;
+                const { txt, col } = cellText(c);
+                return (
+                  <div
+                    key={`${dow}-${h}`}
+                    onMouseEnter={() => c && setHover({...c, dow_label: ROW_LABEL[dow]})}
+                    onMouseLeave={() => setHover(null)}
+                    style={{
+                      height: 30, borderRadius: 6, background: cellColor(c),
+                      border: isBest ? '1.5px solid #0F8A60' : '1px solid var(--line)',
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      fontSize: 10.5, fontWeight: 600, color: col,
+                      cursor: c && c.calls > 0 ? 'default' : 'default',
+                    }}
+                  >{txt}</div>
+                );
+              })}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+      {hover && (
+        <div style={{
+          position:'absolute', bottom: 14, right: 14,
+          padding:'8px 12px', background:'rgba(23,26,43,0.95)', color:'#fff',
+          borderRadius:8, fontSize:11.5, lineHeight:1.5, boxShadow:'0 8px 22px rgba(0,0,0,0.25)',
+          pointerEvents:'none', zIndex: 5,
+        }}>
+          <div style={{fontWeight:700, marginBottom:3}}>{hover.dow_label} {String(hover.hour).padStart(2,'0')}:00</div>
+          <div>{fmt(hover.calls)} calls · {fmt(hover.appts)} appts</div>
+          <div style={{color: hover.calls >= MIN_CALLS ? '#3DD0A4' : '#C7CADA', fontWeight:600}}>
+            {hover.rate != null ? hover.rate.toFixed(1) + '% appt rate' : 'no data'}
+            {hover.calls < MIN_CALLS && hover.calls > 0 && ' · low volume'}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Speed to first call ───────────────────────────────
    Tests the CLAUDE.md "respond within 5 min" target directly.
    Buckets leads by minutes-from-create-to-first-outbound-call and shows
@@ -2395,7 +2503,7 @@ function InsightsPanel({ insights }) {
 }
 
 function TelesalesView({ data, marketingData }) {
-  const { agents, daily, totals: T, prev_totals: PT, speed_to_call = [] } = data;
+  const { agents, daily, totals: T, prev_totals: PT, speed_to_call = [], heatmap = [] } = data;
   const pt = PT || {};
   const sourceCpa = (marketingData && marketingData.source_cpa) || [];
   const noAgents = !agents.length;
@@ -2432,7 +2540,10 @@ function TelesalesView({ data, marketingData }) {
         </div>
       )}
       {!noAgents && <InsightsPanel insights={insights}/>}
-      <SpeedToCallCard rows={speed_to_call}/>
+      <div className="g2">
+        <SpeedToCallCard rows={speed_to_call}/>
+        <CallHeatmap cells={heatmap}/>
+      </div>
       {!noAgents && <AgentBars agents={agents} topAgentName={topAgentName} coachAgentNames={coachAgentNames}/>}
       {!noAgents && (
         <div className="g2">

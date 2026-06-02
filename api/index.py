@@ -159,6 +159,29 @@ def _water_leads(d0, d1):
     except Exception:
         return pd.DataFrame()
 
+def _call_heatmap(d0, d1):
+    """Best-time-to-call heatmap data — calls and honest appt-within-24h per (day, hour) cell.
+    Source: gold_lead_calls outbound only, weekday hours 8-17. Returns one row per cell.
+    Uses appt_within_24h (per-call) not the lead-level flag for honest per-call rates."""
+    try:
+        return _q(f"""
+            SELECT
+              call_dow_num  AS dow,        -- 1=Sun, 2=Mon, ..., 7=Sat (BigQuery convention)
+              call_dow_name AS dow_name,
+              call_hour     AS hour,
+              COUNT(*)              AS calls,
+              COUNTIF(appt_within_24h) AS appts,
+              ROUND(SAFE_DIVIDE(COUNTIF(appt_within_24h), COUNT(*)) * 100, 1) AS rate
+            FROM `{PROJECT}.gold.gold_lead_calls`
+            WHERE call_date BETWEEN '{d0}' AND '{d1}'
+              AND direction = 'OUTBOUND'
+              AND call_hour BETWEEN 8 AND 17
+            GROUP BY dow, dow_name, hour
+            ORDER BY dow, hour
+        """)
+    except Exception:
+        return pd.DataFrame()
+
 def _speed_to_call(d0, d1):
     """Distribution of leads by minutes-to-first-call, plus appointment rate per bucket.
     mins_to_first_call is NULL when the first call happened on a different calendar day
@@ -347,6 +370,7 @@ def _load_all(d0s, d1s):
         'qc_leads':    (f'qcL:{d0s}:{d1s}',    lambda: _qc_lead_details(d0s, d1s)),
         'source_cpa':  (f'cpa:{d0s}:{d1s}',    lambda: _source_cpa(d0s, d1s)),
         'speed':       (f'spd:{d0s}:{d1s}',    lambda: _speed_to_call(d0s, d1s)),
+        'heatmap':     (f'hm:{d0s}:{d1s}',     lambda: _call_heatmap(d0s, d1s)),
     }
 
     results = {}
@@ -373,6 +397,7 @@ def _load_all(d0s, d1s):
     df_qc_leads      = results['qc_leads']
     df_source_cpa    = results['source_cpa']
     df_speed         = results['speed']
+    df_heatmap       = results['heatmap']
 
     pa = df_attr.groupby("platform").agg(spend=("spend_gbp","sum"),clicks=("clicks","sum"),impr=("impressions","sum"),leads=("leads","sum")).reset_index()
     pa["cpl"] = (pa["spend"] / pa["leads"].replace(0, float("nan"))).round(2)
@@ -466,7 +491,12 @@ def _load_all(d0s, d1s):
          'appt_rate': _safe(r['appt_rate'])}
         for _, r in df_speed.iterrows()
     ] if not df_speed.empty else []
-    telesales = {'agents':agents,'daily':ts_daily_list,'totals':{'outbound':ts_out,'appts':ts_ap,'sales':ts_sa,'on_target_count':ts_on,'on_target_pct':round(ts_on/len(agents)*100) if agents else 0,'l2a':round(ts_ap/ts_out*100,1) if ts_out else 0,'a2s':round(ts_sa/ts_ap*100,1) if ts_ap else 0,'cpa':cpa},'prev_totals':prev_telesales_totals,'speed_to_call':speed_to_call}
+    heatmap = [
+        {'dow': int(r['dow']), 'dow_name': str(r['dow_name']), 'hour': int(r['hour']),
+         'calls': int(r['calls']), 'appts': int(r['appts']), 'rate': _safe(r['rate'])}
+        for _, r in df_heatmap.iterrows()
+    ] if not df_heatmap.empty else []
+    telesales = {'agents':agents,'daily':ts_daily_list,'totals':{'outbound':ts_out,'appts':ts_ap,'sales':ts_sa,'on_target_count':ts_on,'on_target_pct':round(ts_on/len(agents)*100) if agents else 0,'l2a':round(ts_ap/ts_out*100,1) if ts_out else 0,'a2s':round(ts_sa/ts_ap*100,1) if ts_ap else 0,'cpa':cpa},'prev_totals':prev_telesales_totals,'speed_to_call':speed_to_call,'heatmap':heatmap}
 
     stages = [{'stage':str(r['stage']),'count':int(r['count']),'total_value':float(r['total_value']) if pd.notna(r['total_value']) else 0,'weighted_value':float(r['weighted_value']) if pd.notna(r['weighted_value']) else 0,'won_count':int(r['won_count']) if pd.notna(r['won_count']) else 0,'won_value':float(r['won_value']) if pd.notna(r['won_value']) else 0,'avg_age_days':int(r['avg_age_days']) if pd.notna(r.get('avg_age_days')) else None} for _,r in df_stg.iterrows()]
     recent = []

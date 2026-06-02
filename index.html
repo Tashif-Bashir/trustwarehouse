@@ -1395,7 +1395,6 @@ function AgentBars({ agents, topAgentName = null, coachAgentNames = [] }) {
             <div className="agent-bar-nums">
               <span>{a.outbound} out</span>
               <span style={{ color: '#1FA77F', fontWeight: 600 }}>{a.appts} appt</span>
-              <span style={{ color: 'var(--indigo)', fontWeight: 600 }}>{a.sales} sale</span>
             </div>
             <div>
               <span className={a.on_target ? 'status-pill pill-target' : 'status-pill pill-miss'}>
@@ -1774,8 +1773,6 @@ function AgentTable({ agents, topAgentName = null, coachAgentNames = [] }) {
             <th style={{ textAlign: 'right' }}>Outbound</th>
             <th style={{ textAlign: 'right' }}>Qual.Conv</th>
             <th style={{ textAlign: 'right' }}>Appts</th>
-            <th style={{ textAlign: 'right' }}>Sales</th>
-            <th style={{ textAlign: 'right' }}>Deal Value</th>
             <th style={{ textAlign: 'right' }}>Calls/Appt</th>
             <th style={{ textAlign: 'right' }}>Avg Talk</th>
             <th>Status</th>
@@ -1791,8 +1788,6 @@ function AgentTable({ agents, topAgentName = null, coachAgentNames = [] }) {
                 <td style={{ textAlign: 'right' }}>{fmt(a.outbound)}</td>
                 <td style={{ textAlign: 'right' }}>{fmt(a.qual_convos)}</td>
                 <td style={{ textAlign: 'right', color: 'var(--ink)', fontWeight: 600 }}>{fmt(a.appts)}</td>
-                <td style={{ textAlign: 'right', color: '#1FA77F', fontWeight: 600 }}>{fmt(a.sales)}</td>
-                <td style={{ textAlign: 'right' }}>{a.deal_value > 0 ? gbp(a.deal_value) : '—'}</td>
                 <td style={{ textAlign: 'right' }}>{a.calls_per_appt != null ? a.calls_per_appt + 'x' : '—'}</td>
                 <td style={{ textAlign: 'right' }}>{fmtSec(a.avg_talk)}</td>
                 <td>
@@ -2589,18 +2584,17 @@ function TelesalesView({ data, marketingData }) {
 
   return (
     <>
-      <div className="g5">
+      <div className="g4">
         <Kpi label="Outbound calls"    value={fmt(T.outbound)} icon={Ic.phone}  iconBg="var(--indigo-soft)" iconColor="var(--indigo)" delta={delta(T.outbound, pt.outbound, 'up')} delay={0}/>
         <Kpi label="Appointments"      value={fmt(T.appts)}    icon={Ic.appt}   iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(T.appts, pt.appts, 'up')}       delay={60}/>
-        <Kpi label="Sales"             value={fmt(T.sales)}    icon={Ic.sale}   iconBg="var(--mint-soft)"   iconColor="#1FA77F"       delta={delta(T.sales, pt.sales, 'up')}       delay={120}/>
         <Kpi label="Call → Appt rate"  value={l2aVal + '%'}    icon={Ic.target} iconBg="var(--amber-soft)"  iconColor="#A87B0A"
              target={TS_TARGET_L2A + '%'} targetRaw={TS_TARGET_L2A} valueRaw={l2aVal} targetDir="up"
              delta={l2aDeltaPP != null ? { up: l2aDeltaPP >= 0, good: l2aDeltaPP >= 0, pct: (l2aDeltaPP >= 0 ? '+' : '') + l2aDeltaPP + 'pp' } : null}
-             delay={180}/>
+             delay={120}/>
         <Kpi label="Cost per appt"     value={gbp(cpaVal)}     icon={Ic.spend}  iconBg="var(--rose-soft)"   iconColor="var(--rose)"
              target={'£' + TS_TARGET_CPA_GBP} targetRaw={TS_TARGET_CPA_GBP} valueRaw={cpaVal} targetDir="down"
              delta={delta(cpaVal, pt.cpa, 'down')}
-             delay={240}/>
+             delay={180}/>
       </div>
       {noAgents && (
         <div className="card" style={{textAlign:'center',padding:'24px',color:'var(--muted)',fontSize:13}}>

@@ -197,3 +197,55 @@ models:
         description: Total impressions
         tests:
           - not_null
+
+  - name: gold_lead_calls
+    description: >
+      One row per (call, lead) match. Wildix call data joined to SharpSpring leads
+      via phone. Multi-participant silver rows (transfers, parallel pickups) collapsed
+      to one row per logical call before joining. Powers heatmap, speed-to-call,
+      duration-vs-conversion, and source CPA analyses.
+    columns:
+      - name: call_id
+        description: Wildix logical call/conversation ID
+        tests:
+          - not_null
+      - name: lead_id
+        description: SharpSpring lead ID
+        tests:
+          - not_null
+      - name: call_at
+        description: Call start time (TIMESTAMP, UTC)
+        tests:
+          - not_null
+      - name: direction
+        description: OUTBOUND or INBOUND (INTERNAL filtered out)
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['OUTBOUND', 'INBOUND']
+      - name: call_status
+        description: COMPLETED (answered) or MISSED (dial attempt without connection)
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['COMPLETED', 'MISSED']
+      - name: talk_time_seconds
+        description: Total conversation time across all participants of this call
+        tests:
+          - not_null
+      - name: lead_platform
+        description: Hybrid platform from gold_lead_activity (CRM-first + UTM fallback)
+      - name: lead_age_bucket
+        description: How fresh the lead was when this call happened
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['<5m','5-15m','15-60m','1-4h','4-24h','1-3d','3-7d','>7d']
+      - name: is_first_call
+        description: True if this is the first call placed to this lead
+        tests:
+          - not_null
+      - name: is_qualified_call
+        description: True if talk_time_seconds >= 120 (real conversation)
+        tests:
+          - not_null

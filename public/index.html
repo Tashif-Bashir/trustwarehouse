@@ -2337,7 +2337,7 @@ function TelesalesView({ data, marketingData }) {
   const { agents, daily, totals: T, prev_totals: PT } = data;
   const pt = PT || {};
   const sourceCpa = (marketingData && marketingData.source_cpa) || [];
-  if (!agents.length) return <EmptyCard title="" message="No telesales data for this period."/>;
+  const noAgents = !agents.length;
 
   // L2A target progress
   const l2aVal = T.l2a || 0;
@@ -2365,13 +2365,20 @@ function TelesalesView({ data, marketingData }) {
              delta={delta(cpaVal, pt.cpa, 'down')}
              delay={240}/>
       </div>
-      <InsightsPanel insights={insights}/>
-      <AgentBars agents={agents} topAgentName={topAgentName} coachAgentNames={coachAgentNames}/>
-      <div className="g2">
-        <TsTrendChart daily={daily}/>
-        <ScatterPlot agents={agents}/>
-      </div>
-      <AgentTable agents={agents} topAgentName={topAgentName} coachAgentNames={coachAgentNames}/>
+      {noAgents && (
+        <div className="card" style={{textAlign:'center',padding:'24px',color:'var(--muted)',fontSize:13}}>
+          No calls have been logged in this period yet. KPI tiles above show 0; agent breakdown will appear as calls come in.
+        </div>
+      )}
+      {!noAgents && <InsightsPanel insights={insights}/>}
+      {!noAgents && <AgentBars agents={agents} topAgentName={topAgentName} coachAgentNames={coachAgentNames}/>}
+      {!noAgents && (
+        <div className="g2">
+          <TsTrendChart daily={daily}/>
+          <ScatterPlot agents={agents}/>
+        </div>
+      )}
+      {!noAgents && <AgentTable agents={agents} topAgentName={topAgentName} coachAgentNames={coachAgentNames}/>}
     </>
   );
 }

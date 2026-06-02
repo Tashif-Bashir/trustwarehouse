@@ -249,3 +249,19 @@ models:
         description: True if talk_time_seconds >= 120 (real conversation)
         tests:
           - not_null
+      - name: lead_appointment_booked_at
+        description: When the appointment was booked (TIMESTAMP, parsed from SharpSpring's UK-local string). Same value on every call row for a given lead.
+      - name: appt_within_1h
+        description: True if an appointment was booked in the hour after this call. Honest per-call attribution (lead-level flag credits every call regardless of timing).
+        tests:
+          - not_null
+      - name: appt_within_24h
+        description: True if an appointment was booked in the 24 hours after this call.
+        tests:
+          - not_null
+      - name: appt_within_48h
+        description: True if an appointment was booked in the 48 hours after this call.
+        tests:
+          - not_null
+      - name: mins_to_appt_after_call
+        description: Minutes from this call to the appointment booking. NULL if no appointment or appointment preceded the call.

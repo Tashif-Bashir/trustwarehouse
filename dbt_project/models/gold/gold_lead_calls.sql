@@ -74,6 +74,7 @@ leads as (
 ),
 
 -- Lead's attribution + outcome (reuses the hybrid CRM/UTM platform already in gold_lead_activity).
+-- appointment_booked_at arrives as a string from SharpSpring with no timezone — treat as UK local.
 lead_outcomes as (
     select
         lead_id,
@@ -85,6 +86,10 @@ lead_outcomes as (
         customer_type   as lead_customer_type,
         appointment_booked  as lead_appointment_booked,
         appointment_date    as lead_appointment_date,
+        case
+            when appointment_booked_at is null or appointment_booked_at = '' then null
+            else safe.timestamp(appointment_booked_at, 'Europe/London')
+        end                 as lead_appointment_booked_at,
         is_sold             as lead_is_sold,
         deal_amount         as lead_deal_amount,
         quote_amount        as lead_quote_amount
@@ -162,9 +167,40 @@ select
     -- lead-level outcomes (same on every call row for a lead — denormalised for query speed)
     o.lead_appointment_booked,
     o.lead_appointment_date,
+    o.lead_appointment_booked_at,
     o.lead_is_sold,
     o.lead_deal_amount,
     o.lead_quote_amount,
+
+    -- Per-call outcome attribution.
+    -- The lead-level appt flag credits every call to a lead with an eventual appt — even
+    -- calls that happened *after* the appt was already booked. These columns fix that by
+    -- crediting a call only if the appt was booked in a window *after* this call.
+    -- Used for honest heatmap / sweet-spot / speed-to-call rates.
+    case
+        when o.lead_appointment_booked_at is null then false
+        when o.lead_appointment_booked_at <  TIMESTAMP_MILLIS(s.start_time) then false
+        when o.lead_appointment_booked_at <= TIMESTAMP_ADD(TIMESTAMP_MILLIS(s.start_time), interval 1 hour) then true
+        else false
+    end                                                                                         as appt_within_1h,
+    case
+        when o.lead_appointment_booked_at is null then false
+        when o.lead_appointment_booked_at <  TIMESTAMP_MILLIS(s.start_time) then false
+        when o.lead_appointment_booked_at <= TIMESTAMP_ADD(TIMESTAMP_MILLIS(s.start_time), interval 24 hour) then true
+        else false
+    end                                                                                         as appt_within_24h,
+    case
+        when o.lead_appointment_booked_at is null then false
+        when o.lead_appointment_booked_at <  TIMESTAMP_MILLIS(s.start_time) then false
+        when o.lead_appointment_booked_at <= TIMESTAMP_ADD(TIMESTAMP_MILLIS(s.start_time), interval 48 hour) then true
+        else false
+    end                                                                                         as appt_within_48h,
+    -- Minutes from this call to the appointment booking. NULL if no appt or appt was before the call.
+    case
+        when o.lead_appointment_booked_at is null then null
+        when o.lead_appointment_booked_at <  TIMESTAMP_MILLIS(s.start_time) then null
+        else round(TIMESTAMP_DIFF(o.lead_appointment_booked_at, TIMESTAMP_MILLIS(s.start_time), SECOND) / 60.0, 2)
+    end                                                                                         as mins_to_appt_after_call,
 
     -- speed-to-call (per-call)
     TIMESTAMP_DIFF(TIMESTAMP_MILLIS(s.start_time), SAFE_CAST(s.lead_created_at as TIMESTAMP), SECOND) as lead_age_at_call_seconds,

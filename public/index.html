@@ -296,6 +296,36 @@
   .kpi-delta.good{ background:var(--mint-soft); color:#1FA77F; }
   .kpi-delta.bad{ background:var(--rose-soft); color:var(--rose); }
   .kpi-sub{ font-size:11px; color:var(--muted); margin-top:10px; }
+  /* Insights panel (Telesales) */
+  .insights-card{ margin-bottom:14px; }
+  .insights-count{ font-size:11px; color:var(--muted); font-weight:600; padding:3px 10px; background:var(--bg-2); border-radius:99px; }
+  .insights-list{ display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:12px 4px 4px; }
+  @media (max-width: 900px){ .insights-list{ grid-template-columns:1fr; } }
+  .insight{ display:flex; gap:12px; padding:12px 14px; border-radius:10px; border-left:3px solid; }
+  .insight-red   { background:#FFF1F4; border-color:var(--rose);   }
+  .insight-amber { background:#FFF7E6; border-color:#D4A017;       }
+  .insight-green { background:#E9F8F1; border-color:#1FA77F;       }
+  .insight-icon{ font-size:18px; line-height:1.4; flex-shrink:0; }
+  .insight-body{ flex:1; min-width:0; }
+  .insight-title{ font-size:13.5px; font-weight:600; color:var(--ink); margin-bottom:3px; }
+  .insight-detail{ font-size:12px; color:#525252; line-height:1.5; }
+  .insight-action{ font-size:11.5px; color:var(--muted); margin-top:4px; font-style:italic; }
+
+  /* Top / Coach pills on AgentBars + AgentTable */
+  .agent-pill{ display:inline-flex; align-items:center; gap:3px; font-size:10px; font-weight:700; padding:2px 7px; border-radius:99px; margin-left:6px; letter-spacing:0.03em; text-transform:uppercase; }
+  .agent-pill-top{   background:#E9F8F1; color:#1FA77F; }
+  .agent-pill-coach{ background:#FFF1F4; color:var(--rose); }
+
+  .kpi-target{ margin-top:10px; }
+  .kpi-target-bar{ width:100%; height:6px; background:var(--bg-2); border-radius:99px; overflow:hidden; }
+  .kpi-target-fill{ height:100%; transition:width .4s cubic-bezier(.22,1,.36,1); }
+  .kpi-target-fill.good{ background:linear-gradient(90deg, #1FA77F, #41C29F); }
+  .kpi-target-fill.bad{  background:linear-gradient(90deg, #E5003B, #FF4D6D); }
+  .kpi-target-caption{ display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--muted); margin-top:6px; gap:6px; }
+  .kpi-delta-inline{ display:inline-flex; align-items:center; gap:2px; font-weight:600; }
+  .kpi-delta-inline.good{ color:#1FA77F; }
+  .kpi-delta-inline.bad{  color:var(--rose); }
+  .kpi-delta-inline svg{ width:11px; height:11px; }
 
   /* Donut card */
   .donut-card{ display:flex; align-items:center; gap:12px; padding:16px 18px; }
@@ -809,9 +839,31 @@ function Topbar({ title, activeTab, setActiveTab, period, setPeriod, refreshedAt
 }
 
 /* ── KPI Card ────────────────────────────────────────── */
-function Kpi({ label, value, sub, delta: d, icon, iconBg, iconColor, delay = 0 }) {
+function Kpi({ label, value, sub, delta: d, icon, iconBg, iconColor, delay = 0, target = null, targetRaw = null, valueRaw = null, targetDir = 'up' }) {
   let footer;
-  if (d) {
+  // If a target is provided, show a progress bar + "X / Y target" caption underneath the value.
+  // targetDir: 'up' means higher is better (e.g. l2a%, calls/day); 'down' means lower is better (e.g. CPA, mins to first call)
+  if (target != null && targetRaw != null && valueRaw != null) {
+    const pct = targetDir === 'down'
+      ? Math.max(0, Math.min(100, (targetRaw / Math.max(valueRaw, targetRaw)) * 100))
+      : Math.max(0, Math.min(100, (valueRaw / targetRaw) * 100));
+    const hit = targetDir === 'down' ? valueRaw <= targetRaw : valueRaw >= targetRaw;
+    footer = (
+      <div className="kpi-target">
+        <div className="kpi-target-bar">
+          <div className={`kpi-target-fill ${hit ? 'good' : 'bad'}`} style={{ width: pct + '%' }}/>
+        </div>
+        <div className="kpi-target-caption">
+          <span>{value} / {target} target</span>
+          {d && (
+            <span className={`kpi-delta-inline ${d.good ? 'good' : 'bad'}`}>
+              {d.up ? Ic.arrowUp : Ic.arrowDown}{d.pct}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  } else if (d) {
     footer = (
       <div className={`kpi-delta ${d.good ? 'good' : 'bad'}`}>
         {d.up ? Ic.arrowUp : Ic.arrowDown}
@@ -1301,10 +1353,11 @@ function OpportunitiesTable({ recent }) {
 }
 
 /* ── Agent bars ──────────────────────────────────────── */
-function AgentBars({ agents }) {
+function AgentBars({ agents, topAgentName = null, coachAgentNames = [] }) {
   const m = useMounted(100);
   if (!agents.length) return <EmptyCard title="Agent performance" />;
   const maxOut = Math.max(...agents.map(a => a.outbound), 1);
+  const coachSet = new Set(coachAgentNames);
   return (
     <div className="card">
       <div className="sec-head">
@@ -1322,9 +1375,15 @@ function AgentBars({ agents }) {
         const color = a.on_target ? '#3DD0A4' : '#FF6B7A';
         const barPct = a.outbound / maxOut;
         const targetPct = a.appts > 0 ? Math.min((a.appts * 3) / maxOut, 1) : null;
+        const isTop   = a.name === topAgentName;
+        const isCoach = coachSet.has(a.name);
         return (
           <div className="agent-bar-wrap" key={a.name}>
-            <div className="agent-bar-name">{a.name}</div>
+            <div className="agent-bar-name">
+              {a.name}
+              {isTop   && <span className="agent-pill agent-pill-top">⭐ Top</span>}
+              {isCoach && <span className="agent-pill agent-pill-coach">Coach</span>}
+            </div>
             <div className="agent-bar-track">
               <div className="agent-bar-fill" style={{
                 width: m ? Math.round(barPct * 100) + '%' : '0%',
@@ -1465,8 +1524,9 @@ function ScatterPlot({ agents }) {
 }
 
 /* ── Agent summary table ─────────────────────────────── */
-function AgentTable({ agents }) {
+function AgentTable({ agents, topAgentName = null, coachAgentNames = [] }) {
   if (!agents.length) return <EmptyCard title="Agent summary" />;
+  const coachSet = new Set(coachAgentNames);
   return (
     <div className="card">
       <div className="sec-head"><div className="sec-title">Agent summary</div></div>
@@ -1486,7 +1546,11 @@ function AgentTable({ agents }) {
           <tbody>
             {agents.map(a => (
               <tr key={a.name}>
-                <td style={{ color: 'var(--ink)', fontWeight: 600 }}>{a.name}</td>
+                <td style={{ color: 'var(--ink)', fontWeight: 600 }}>
+                  {a.name}
+                  {a.name === topAgentName && <span className="agent-pill agent-pill-top">⭐ Top</span>}
+                  {coachSet.has(a.name) && <span className="agent-pill agent-pill-coach">Coach</span>}
+                </td>
                 <td style={{ textAlign: 'right' }}>{fmt(a.outbound)}</td>
                 <td style={{ textAlign: 'right' }}>{fmt(a.qual_convos)}</td>
                 <td style={{ textAlign: 'right', color: 'var(--ink)', fontWeight: 600 }}>{fmt(a.appts)}</td>
@@ -2162,29 +2226,152 @@ function MarketingView({ data }) {
   );
 }
 
-function TelesalesView({ data }) {
+// Telesales targets — see CLAUDE.md
+const TS_TARGET_L2A     = 33;   // 33% appointments per call target
+const TS_TARGET_CPA_GBP = 150;  // £150 max cost-per-appointment (paid spend ÷ appts)
+const TS_CPA_PAUSE_GBP  = 200;  // any source with CPA above this is flagged "pause"
+
+/* ── Insights computation ─────────────────────────────────
+   Rules-based insights — each returns null if not triggered.
+   Severity: 'red' (action now), 'amber' (watch), 'green' (positive).      */
+function computeInsights({ agents, T, pt, sourceCpa }) {
+  const insights = [];
+
+  // Team-average calls-per-appt (only for agents with >=1 appt to avoid Infinity)
+  const validAgents = agents.filter(a => a.appts > 0 && a.outbound > 0);
+  const teamAvgCpA = validAgents.length
+    ? validAgents.reduce((s, a) => s + (a.outbound / a.appts), 0) / validAgents.length
+    : 0;
+  const coachThreshold = teamAvgCpA * 1.5;
+
+  // Rule 1 — agents to coach
+  const coachAgents = validAgents.filter(a => (a.outbound / a.appts) > coachThreshold && a.outbound >= 5);
+  if (coachAgents.length > 0) {
+    insights.push({
+      severity: 'red',
+      icon: '🎯',
+      title: `${coachAgents.length} agent${coachAgents.length > 1 ? 's' : ''} need${coachAgents.length === 1 ? 's' : ''} coaching`,
+      body: `Calls per appointment above team avg (${teamAvgCpA.toFixed(1)}) × 1.5: ${coachAgents.map(a => a.name).join(', ')}`,
+      action: 'Pair them with a top performer this week.',
+    });
+  }
+
+  // Rule 2 — Lead → Appt rate dropping
+  if (pt && pt.l2a != null && T.l2a != null) {
+    const drop = T.l2a - pt.l2a;
+    if (drop <= -2) {
+      insights.push({
+        severity: 'amber',
+        icon: '📉',
+        title: `Conversion declining`,
+        body: `Call → appt rate dropped ${Math.abs(drop).toFixed(1)} percentage points vs last period (now ${T.l2a}%, was ${pt.l2a}%).`,
+        action: 'Check if call quality has slipped or new lead source is converting worse.',
+      });
+    }
+  }
+
+  // Rule 3 — Top performer (highest appt/outbound ratio, min 5 calls)
+  const performersByRate = validAgents
+    .filter(a => a.outbound >= 5)
+    .map(a => ({ ...a, rate: a.appts / a.outbound }))
+    .sort((a, b) => b.rate - a.rate);
+  const topPerformer = performersByRate[0];
+  if (topPerformer && topPerformer.rate >= 0.20) {
+    insights.push({
+      severity: 'green',
+      icon: '⭐',
+      title: `${topPerformer.name} is the top performer`,
+      body: `Booking ${topPerformer.appts} appts off ${topPerformer.outbound} calls — ${(topPerformer.rate * 100).toFixed(1)}% conversion.`,
+      action: 'Capture their approach — script, tone, time-of-day patterns.',
+    });
+  }
+
+  // Rule 4 — Source with CPA > pause threshold
+  const expensiveSource = sourceCpa
+    .filter(s => s.cost_per_appt != null && s.cost_per_appt > TS_CPA_PAUSE_GBP && s.spend >= 100)
+    .sort((a, b) => b.cost_per_appt - a.cost_per_appt)[0];
+  if (expensiveSource) {
+    insights.push({
+      severity: 'red',
+      icon: '💸',
+      title: `${expensiveSource.platform} cost per appt is £${expensiveSource.cost_per_appt}`,
+      body: `Spent £${expensiveSource.spend.toFixed(0)} for ${expensiveSource.appts} appointment${expensiveSource.appts === 1 ? '' : 's'} — above the £${TS_CPA_PAUSE_GBP} pause threshold.`,
+      action: 'Pause or rebid this source.',
+    });
+  }
+
+  return {
+    insights: insights.slice(0, 4),
+    topAgentName: topPerformer ? topPerformer.name : null,
+    coachAgentNames: coachAgents.map(a => a.name),
+    teamAvgCpA,
+  };
+}
+
+function InsightsPanel({ insights }) {
+  const list = insights.insights || [];
+  if (list.length === 0) return null;
+  return (
+    <div className="card insights-card">
+      <div className="card-head">
+        <div className="card-label">Insights — what to act on today</div>
+        <div className="insights-count">{list.length} flag{list.length === 1 ? '' : 's'}</div>
+      </div>
+      <div className="insights-list">
+        {list.map((ins, i) => (
+          <div key={i} className={`insight insight-${ins.severity}`}>
+            <div className="insight-icon">{ins.icon}</div>
+            <div className="insight-body">
+              <div className="insight-title">{ins.title}</div>
+              <div className="insight-detail">{ins.body}</div>
+              {ins.action && <div className="insight-action">{ins.action}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TelesalesView({ data, marketingData }) {
   const { agents, daily, totals: T, prev_totals: PT } = data;
   const pt = PT || {};
+  const sourceCpa = (marketingData && marketingData.source_cpa) || [];
   if (!agents.length) return <EmptyCard title="" message="No telesales data for this period."/>;
+
+  // L2A target progress
+  const l2aVal = T.l2a || 0;
+  const l2aDeltaPP = pt.l2a != null ? +(l2aVal - pt.l2a).toFixed(1) : null;
+
+  // CPA target progress (lower is better)
+  const cpaVal = T.cpa || 0;
+
+  // Insights — computed rules-based, severity-coded
+  const insights = computeInsights({ agents, T, pt, sourceCpa });
+  const { topAgentName, coachAgentNames } = insights;
+
   return (
     <>
-      <div className="g4">
-        <Kpi label="Outbound calls"    value={fmt(T.outbound)}                icon={Ic.phone}  iconBg="var(--indigo-soft)" iconColor="var(--indigo)" delta={delta(T.outbound, pt.outbound, 'up')} delay={0}/>
-        <Kpi label="Appointments"      value={fmt(T.appts)}                   icon={Ic.appt}   iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(T.appts, pt.appts, 'up')}       delay={60}/>
-        <Kpi label="Sales"             value={fmt(T.sales)}                   icon={Ic.sale}   iconBg="var(--mint-soft)"   iconColor="#1FA77F"       delta={delta(T.sales, pt.sales, 'up')}       delay={120}/>
-        <Kpi label="Agents on target"  value={`${T.on_target_count} / ${agents.length}`}
-             icon={Ic.target}
-             iconBg={T.on_target_pct >= 75 ? 'var(--mint-soft)' : 'var(--rose-soft)'}
-             iconColor={T.on_target_pct >= 75 ? '#1FA77F' : 'var(--rose)'}
-             delta={delta(T.on_target_count, pt.on_target_count, 'up')}
+      <div className="g5">
+        <Kpi label="Outbound calls"    value={fmt(T.outbound)} icon={Ic.phone}  iconBg="var(--indigo-soft)" iconColor="var(--indigo)" delta={delta(T.outbound, pt.outbound, 'up')} delay={0}/>
+        <Kpi label="Appointments"      value={fmt(T.appts)}    icon={Ic.appt}   iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(T.appts, pt.appts, 'up')}       delay={60}/>
+        <Kpi label="Sales"             value={fmt(T.sales)}    icon={Ic.sale}   iconBg="var(--mint-soft)"   iconColor="#1FA77F"       delta={delta(T.sales, pt.sales, 'up')}       delay={120}/>
+        <Kpi label="Call → Appt rate"  value={l2aVal + '%'}    icon={Ic.target} iconBg="var(--amber-soft)"  iconColor="#A87B0A"
+             target={TS_TARGET_L2A + '%'} targetRaw={TS_TARGET_L2A} valueRaw={l2aVal} targetDir="up"
+             delta={l2aDeltaPP != null ? { up: l2aDeltaPP >= 0, good: l2aDeltaPP >= 0, pct: (l2aDeltaPP >= 0 ? '+' : '') + l2aDeltaPP + 'pp' } : null}
              delay={180}/>
+        <Kpi label="Cost per appt"     value={gbp(cpaVal)}     icon={Ic.spend}  iconBg="var(--rose-soft)"   iconColor="var(--rose)"
+             target={'£' + TS_TARGET_CPA_GBP} targetRaw={TS_TARGET_CPA_GBP} valueRaw={cpaVal} targetDir="down"
+             delta={delta(cpaVal, pt.cpa, 'down')}
+             delay={240}/>
       </div>
-      <AgentBars agents={agents}/>
+      <InsightsPanel insights={insights}/>
+      <AgentBars agents={agents} topAgentName={topAgentName} coachAgentNames={coachAgentNames}/>
       <div className="g2">
         <TsTrendChart daily={daily}/>
         <ScatterPlot agents={agents}/>
       </div>
-      <AgentTable agents={agents}/>
+      <AgentTable agents={agents} topAgentName={topAgentName} coachAgentNames={coachAgentNames}/>
     </>
   );
 }
@@ -2325,7 +2512,7 @@ function App() {
         {!loading && !error && data && (
           <div key={viewKey} className="view-fade">
             {activeTab === 'Marketing'  && <MarketingView  data={data.marketing}/>}
-            {activeTab === 'Telesales' && <TelesalesView  data={data.telesales}/>}
+            {activeTab === 'Telesales' && <TelesalesView  data={data.telesales} marketingData={data.marketing}/>}
             {activeTab === 'Sales' && (
               <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'60vh',gap:'16px'}}>
                 <div style={{fontSize:'48px'}}>🚧</div>

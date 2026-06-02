@@ -78,6 +78,38 @@ def _sources(d0, d1):
         GROUP BY 1 ORDER BY 2 DESC
     """)
 
+def _source_cpa(d0, d1):
+    """Cost per appointment by lead source.
+    Joins paid spend (gold_campaign_attribution) with appointments per platform
+    from gold_lead_calls. Only paid platforms have spend, so only paid lead-platforms
+    show a meaningful CPA."""
+    try:
+        return _q(f"""
+            WITH source_appts AS (
+              SELECT lead_platform AS platform,
+                     COUNT(DISTINCT IF(lead_appointment_booked='Yes', lead_id, NULL)) AS appts
+              FROM `{PROJECT}.gold.gold_lead_calls`
+              WHERE call_date BETWEEN '{d0}' AND '{d1}'
+                AND lead_platform IS NOT NULL
+              GROUP BY platform
+            ),
+            source_spend AS (
+              SELECT platform, ROUND(SUM(spend_gbp), 2) AS spend
+              FROM `{PROJECT}.gold.gold_campaign_attribution`
+              WHERE date BETWEEN '{d0}' AND '{d1}'
+              GROUP BY platform
+            )
+            SELECT s.platform,
+                   s.spend,
+                   COALESCE(a.appts, 0) AS appts,
+                   ROUND(SAFE_DIVIDE(s.spend, a.appts), 2) AS cost_per_appt_gbp
+            FROM source_spend s
+            LEFT JOIN source_appts a USING(platform)
+            ORDER BY s.spend DESC
+        """)
+    except Exception:
+        return pd.DataFrame()
+
 def _qc_flags(d0, d1):
     """Count of attribution data-quality flags from gold_lead_activity for the period.
     Returns one row per qc_flag category."""
@@ -273,6 +305,7 @@ def _load_all(d0s, d1s):
         'water_prev':  (f'water:{p0s}:{p1s}',  lambda: _water_leads(p0s, p1s)),
         'qc':          (f'qc:{d0s}:{d1s}',     lambda: _qc_flags(d0s, d1s)),
         'qc_leads':    (f'qcL:{d0s}:{d1s}',    lambda: _qc_lead_details(d0s, d1s)),
+        'source_cpa':  (f'cpa:{d0s}:{d1s}',    lambda: _source_cpa(d0s, d1s)),
     }
 
     results = {}
@@ -297,6 +330,7 @@ def _load_all(d0s, d1s):
     df_water_prev    = results['water_prev']
     df_qc            = results['qc']
     df_qc_leads      = results['qc_leads']
+    df_source_cpa    = results['source_cpa']
 
     pa = df_attr.groupby("platform").agg(spend=("spend_gbp","sum"),clicks=("clicks","sum"),impr=("impressions","sum"),leads=("leads","sum")).reset_index()
     pa["cpl"] = (pa["spend"] / pa["leads"].replace(0, float("nan"))).round(2)
@@ -360,7 +394,8 @@ def _load_all(d0s, d1s):
         prev_marketing_totals = {'spend':0,'leads':0,'cpl':0,'total_leads':0}
     prev_marketing_totals['water_leads'] = water_prev
 
-    marketing = {'totals':{'spend':tot_sp,'leads':tot_ld,'clicks':tot_cl,'cpl':round(tot_sp/tot_ld,2) if tot_ld else 0,'total_leads':tot_all,'water_leads':water_total},'prev_totals':prev_marketing_totals,'platforms':platforms,'daily':daily,'lead_sources':sources,'regions':regions,'ga4_sessions':ga4_sessions,'ga4_pages':ga4_pages,'water_split':water_split,'qc':qc}
+    source_cpa = [{'platform':str(r['platform']),'spend':float(r['spend']),'appts':int(r['appts']),'cost_per_appt':float(r['cost_per_appt_gbp']) if pd.notna(r.get('cost_per_appt_gbp')) else None} for _, r in df_source_cpa.iterrows()] if not df_source_cpa.empty else []
+    marketing = {'totals':{'spend':tot_sp,'leads':tot_ld,'clicks':tot_cl,'cpl':round(tot_sp/tot_ld,2) if tot_ld else 0,'total_leads':tot_all,'water_leads':water_total},'prev_totals':prev_marketing_totals,'platforms':platforms,'daily':daily,'lead_sources':sources,'regions':regions,'ga4_sessions':ga4_sessions,'ga4_pages':ga4_pages,'water_split':water_split,'qc':qc,'source_cpa':source_cpa}
 
     agents = []
     if not df_ts.empty:
@@ -375,8 +410,16 @@ def _load_all(d0s, d1s):
     ts_daily_list = [{'date':str(r['date']),'calls':int(r['calls']) if pd.notna(r['calls']) else 0,'outbound':int(r['outbound']) if pd.notna(r['outbound']) else 0,'appts':int(r['appts']) if pd.notna(r['appts']) else 0,'sales':int(r['sales']) if pd.notna(r['sales']) else 0} for _,r in df_ts_day.iterrows()]
     prev_telesales_totals = None
     if not df_ts_prev.empty:
-        prev_telesales_totals = {'outbound':int(df_ts_prev['outbound_calls'].sum()),'appts':int(df_ts_prev['appts'].sum()),'sales':int(df_ts_prev['sales'].sum()),'on_target_count':int((df_ts_prev['appts']>0).sum())}
-    telesales = {'agents':agents,'daily':ts_daily_list,'totals':{'outbound':ts_out,'appts':ts_ap,'sales':ts_sa,'on_target_count':ts_on,'on_target_pct':round(ts_on/len(agents)*100) if agents else 0,'l2a':round(ts_ap/ts_out*100,1) if ts_out else 0,'a2s':round(ts_sa/ts_ap*100,1) if ts_ap else 0},'prev_totals':prev_telesales_totals}
+        p_out  = int(df_ts_prev['outbound_calls'].sum())
+        p_ap   = int(df_ts_prev['appts'].sum())
+        p_l2a  = round(p_ap / p_out * 100, 1) if p_out else 0
+        prev_telesales_totals = {'outbound':p_out,'appts':p_ap,'sales':int(df_ts_prev['sales'].sum()),'on_target_count':int((df_ts_prev['appts']>0).sum()),'l2a':p_l2a}
+    # Cost per appt — uses paid spend from the same date range / telesales appts
+    cpa = round(tot_sp / ts_ap, 2) if ts_ap else 0
+    prev_cpa = round((prev_marketing_totals.get('spend', 0) / prev_telesales_totals['appts']), 2) if prev_telesales_totals and prev_telesales_totals.get('appts') else 0
+    if prev_telesales_totals:
+        prev_telesales_totals['cpa'] = prev_cpa
+    telesales = {'agents':agents,'daily':ts_daily_list,'totals':{'outbound':ts_out,'appts':ts_ap,'sales':ts_sa,'on_target_count':ts_on,'on_target_pct':round(ts_on/len(agents)*100) if agents else 0,'l2a':round(ts_ap/ts_out*100,1) if ts_out else 0,'a2s':round(ts_sa/ts_ap*100,1) if ts_ap else 0,'cpa':cpa},'prev_totals':prev_telesales_totals}
 
     stages = [{'stage':str(r['stage']),'count':int(r['count']),'total_value':float(r['total_value']) if pd.notna(r['total_value']) else 0,'weighted_value':float(r['weighted_value']) if pd.notna(r['weighted_value']) else 0,'won_count':int(r['won_count']) if pd.notna(r['won_count']) else 0,'won_value':float(r['won_value']) if pd.notna(r['won_value']) else 0,'avg_age_days':int(r['avg_age_days']) if pd.notna(r.get('avg_age_days')) else None} for _,r in df_stg.iterrows()]
     recent = []

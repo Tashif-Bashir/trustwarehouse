@@ -2,7 +2,7 @@ name: Sync Wildix
 
 on:
   schedule:
-    - cron: "*/15 * * * *"  # every 15 minutes
+    - cron: "*/5 * * * *"   # every 5 minutes (GitHub Actions cron minimum)
   workflow_dispatch:
 
 jobs:

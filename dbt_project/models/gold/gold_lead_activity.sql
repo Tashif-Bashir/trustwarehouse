@@ -123,7 +123,23 @@ final as (
         l.customer_type,
         l.pipeline_category,
         l.campaign_id,
-        m.platform                                                                               as platform,
+
+        -- Attribution: CRM mapping first, UTM/gclid fallback when campaign is unmapped.
+        -- CRM mapping wins because the sales team trusts SharpSpring's manual assignment;
+        -- UTM is the safety net that catches leads SharpSpring auto-bucketed by default.
+        m.platform                                                                               as crm_platform,
+        l.inferred_platform                                                                      as utm_platform,
+        coalesce(m.platform, l.inferred_platform)                                                as platform,
+
+        -- Data-quality flag — surface attribution conflicts for the team to review.
+        case
+            when m.platform is null and l.inferred_platform is null                                then 'clean'
+            when m.platform is not null and l.inferred_platform is null                            then 'crm_no_utm'        -- CRM tagged paid, no UTM trail
+            when m.platform is null and l.inferred_platform is not null                            then 'utm_only'         -- Unmapped CRM, UTM identified paid
+            when m.platform = l.inferred_platform                                                  then 'agree'
+            else 'disagree'                                                                                                 -- Both paid, different platforms
+        end                                                                                       as qc_flag,
+
 
         -- call activity
         coalesce(cm.total_call_attempts, 0)                                         as total_call_attempts,

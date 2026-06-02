@@ -78,6 +78,38 @@ def _sources(d0, d1):
         GROUP BY 1 ORDER BY 2 DESC
     """)
 
+def _qc_flags(d0, d1):
+    """Count of attribution data-quality flags from gold_lead_activity for the period.
+    Returns one row per qc_flag category."""
+    try:
+        return _q(f"""
+            SELECT
+                qc_flag,
+                COUNT(*) AS leads
+            FROM `{PROJECT}.gold.gold_lead_activity`
+            WHERE created_date BETWEEN '{d0}' AND '{d1}'
+              AND qc_flag IS NOT NULL
+            GROUP BY qc_flag
+        """)
+    except Exception:
+        return pd.DataFrame()
+
+def _qc_lead_details(d0, d1):
+    """Per-lead drill-down for the qc card — only flagged leads."""
+    try:
+        return _q(f"""
+            SELECT
+                lead_id, first_name, last_name, campaign_id,
+                crm_platform, utm_platform, platform, qc_flag, created_date
+            FROM `{PROJECT}.gold.gold_lead_activity`
+            WHERE created_date BETWEEN '{d0}' AND '{d1}'
+              AND qc_flag IN ('crm_no_utm','utm_only','disagree')
+            ORDER BY created_date DESC, qc_flag
+            LIMIT 50
+        """)
+    except Exception:
+        return pd.DataFrame()
+
 def _water_leads(d0, d1):
     try:
         return _q(f"""
@@ -239,6 +271,8 @@ def _load_all(d0s, d1s):
         'ga4_pages':   (f'ga4p:{d0s}:{d1s}',   lambda: _ga4_pages(d0s, d1s)),
         'water':       (f'water:{d0s}:{d1s}',  lambda: _water_leads(d0s, d1s)),
         'water_prev':  (f'water:{p0s}:{p1s}',  lambda: _water_leads(p0s, p1s)),
+        'qc':          (f'qc:{d0s}:{d1s}',     lambda: _qc_flags(d0s, d1s)),
+        'qc_leads':    (f'qcL:{d0s}:{d1s}',    lambda: _qc_lead_details(d0s, d1s)),
     }
 
     results = {}
@@ -261,6 +295,8 @@ def _load_all(d0s, d1s):
     df_ga4_pages     = results['ga4_pages']
     df_water         = results['water']
     df_water_prev    = results['water_prev']
+    df_qc            = results['qc']
+    df_qc_leads      = results['qc_leads']
 
     pa = df_attr.groupby("platform").agg(spend=("spend_gbp","sum"),clicks=("clicks","sum"),impr=("impressions","sum"),leads=("leads","sum")).reset_index()
     pa["cpl"] = (pa["spend"] / pa["leads"].replace(0, float("nan"))).round(2)
@@ -296,11 +332,35 @@ def _load_all(d0s, d1s):
     water_split   = [{'type':str(r['service_type']),'leads':int(r['leads']),'sales':int(r['sales'])} for _,r in df_water.iterrows()] if not df_water.empty else []
     water_prev    = int(df_water_prev['leads'].sum()) if not df_water_prev.empty else 0
 
+    # QC flags — leads where CRM and UTM attribution disagree
+    qc_counts = {str(r['qc_flag']): int(r['leads']) for _, r in df_qc.iterrows()} if not df_qc.empty else {}
+    qc_flagged = sum(v for k, v in qc_counts.items() if k in ('crm_no_utm', 'utm_only', 'disagree'))
+    qc = {
+        'flagged_total': qc_flagged,
+        'agree':       qc_counts.get('agree', 0),
+        'clean':       qc_counts.get('clean', 0),
+        'crm_no_utm':  qc_counts.get('crm_no_utm', 0),
+        'utm_only':    qc_counts.get('utm_only', 0),
+        'disagree':    qc_counts.get('disagree', 0),
+        'leads': [
+            {
+                'lead_id':       str(r['lead_id']),
+                'name':          (str(r['first_name'] or '') + ' ' + str(r['last_name'] or '')).strip() or '(no name)',
+                'campaign_id':   str(r['campaign_id']) if pd.notna(r.get('campaign_id')) else '',
+                'crm_platform':  str(r['crm_platform']) if pd.notna(r.get('crm_platform')) else None,
+                'utm_platform':  str(r['utm_platform']) if pd.notna(r.get('utm_platform')) else None,
+                'attributed':    str(r['platform']) if pd.notna(r.get('platform')) else None,
+                'qc_flag':       str(r['qc_flag']),
+                'created_date':  str(r['created_date']),
+            } for _, r in df_qc_leads.iterrows()
+        ] if not df_qc_leads.empty else [],
+    }
+
     if prev_marketing_totals is None:
         prev_marketing_totals = {'spend':0,'leads':0,'cpl':0,'total_leads':0}
     prev_marketing_totals['water_leads'] = water_prev
 
-    marketing = {'totals':{'spend':tot_sp,'leads':tot_ld,'clicks':tot_cl,'cpl':round(tot_sp/tot_ld,2) if tot_ld else 0,'total_leads':tot_all,'water_leads':water_total},'prev_totals':prev_marketing_totals,'platforms':platforms,'daily':daily,'lead_sources':sources,'regions':regions,'ga4_sessions':ga4_sessions,'ga4_pages':ga4_pages,'water_split':water_split}
+    marketing = {'totals':{'spend':tot_sp,'leads':tot_ld,'clicks':tot_cl,'cpl':round(tot_sp/tot_ld,2) if tot_ld else 0,'total_leads':tot_all,'water_leads':water_total},'prev_totals':prev_marketing_totals,'platforms':platforms,'daily':daily,'lead_sources':sources,'regions':regions,'ga4_sessions':ga4_sessions,'ga4_pages':ga4_pages,'water_split':water_split,'qc':qc}
 
     agents = []
     if not df_ts.empty:

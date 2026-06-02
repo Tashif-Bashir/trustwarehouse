@@ -205,6 +205,27 @@
   .cal-cancel{ padding:6px 10px; border-radius:8px; background:var(--bg); color:var(--ink2); font-size:12px; font-weight:600; white-space:nowrap; }
 
   /* ─── Grids ─── */
+  /* QC card — attribution data-quality */
+  .qc-card{ margin-bottom:14px; }
+  .qc-card .card-label{ display:flex; align-items:center; gap:10px; }
+  .qc-pill{ background:var(--amber-soft); color:#A87B0A; padding:2px 10px; border-radius:99px; font-size:11px; font-weight:600; letter-spacing:0.02em; }
+  .qc-toggle{ background:transparent; border:1px solid var(--border); color:var(--ink); padding:4px 10px; border-radius:6px; font-size:12px; cursor:pointer; }
+  .qc-toggle:hover{ background:var(--bg-2); }
+  .qc-summary{ display:flex; flex-wrap:wrap; gap:18px; padding:14px 4px 6px; }
+  .qc-row{ display:flex; align-items:baseline; gap:8px; }
+  .qc-row .qc-count{ font-size:22px; font-weight:700; color:#A87B0A; }
+  .qc-row .qc-label{ font-size:12.5px; color:var(--muted); }
+  .qc-row.qc-clean .qc-count{ color:#1FA77F; }
+  .qc-leads{ margin-top:10px; max-height:320px; overflow-y:auto; border-top:1px solid var(--border); padding-top:10px; }
+  .qc-leads table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+  .qc-leads th{ text-align:left; padding:6px 8px; color:var(--muted); font-weight:600; border-bottom:1px solid var(--border); }
+  .qc-leads td{ padding:6px 8px; border-bottom:1px solid var(--border); }
+  .qc-leads td.pf-google{ color:#1A73E8; font-weight:600; }
+  .qc-leads td.pf-meta{ color:#0866FF; font-weight:600; }
+  .qc-leads td.pf-bing{ color:#008373; font-weight:600; }
+  .qc-leads td.pf-none{ color:var(--muted); }
+  .qc-leads td.qc-flag-cell{ font-size:11.5px; color:var(--muted); }
+
   .g5{ display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:14px; }
   .g4{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:14px; }
   .g3{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:14px; }
@@ -2007,11 +2028,73 @@ function GA4PagesCard({ pages }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   QC Card — surfaces attribution conflicts (CRM vs UTM)
+   ═══════════════════════════════════════════════════════════════ */
+
+const QC_LABEL = {
+  crm_no_utm: 'CRM tagged paid, no UTM trail',
+  utm_only:   'UTM identified paid, CRM unmapped',
+  disagree:   'CRM/UTM disagree on platform',
+};
+
+function QcCard({ qc }) {
+  const [open, setOpen] = React.useState(false);
+  if (!qc || !qc.flagged_total) return null;
+  const cats = ['crm_no_utm', 'utm_only', 'disagree'].filter(k => qc[k] > 0);
+  return (
+    <div className="card qc-card">
+      <div className="card-head">
+        <div className="card-label">
+          Attribution data quality
+          <span className="qc-pill">{qc.flagged_total} flagged</span>
+        </div>
+        <button className="qc-toggle" onClick={() => setOpen(o => !o)}>
+          {open ? 'Hide' : 'Show'} leads
+        </button>
+      </div>
+      <div className="qc-summary">
+        {cats.map(k => (
+          <div key={k} className="qc-row">
+            <span className="qc-count">{qc[k]}</span>
+            <span className="qc-label">{QC_LABEL[k]}</span>
+          </div>
+        ))}
+        <div className="qc-row qc-clean">
+          <span className="qc-count">{qc.agree || 0}</span>
+          <span className="qc-label">CRM and UTM agree</span>
+        </div>
+      </div>
+      {open && qc.leads && qc.leads.length > 0 && (
+        <div className="qc-leads">
+          <table>
+            <thead>
+              <tr><th>Lead</th><th>Date</th><th>CRM</th><th>UTM</th><th>→ Attributed</th><th>Flag</th></tr>
+            </thead>
+            <tbody>
+              {qc.leads.map(l => (
+                <tr key={l.lead_id}>
+                  <td>{l.name}</td>
+                  <td>{l.created_date}</td>
+                  <td className={l.crm_platform ? 'pf-' + l.crm_platform.toLowerCase() : 'pf-none'}>{l.crm_platform || '—'}</td>
+                  <td className={l.utm_platform ? 'pf-' + l.utm_platform.toLowerCase() : 'pf-none'}>{l.utm_platform || '—'}</td>
+                  <td className={l.attributed ? 'pf-' + l.attributed.toLowerCase() : 'pf-none'}>{l.attributed || 'organic'}</td>
+                  <td className="qc-flag-cell">{QC_LABEL[l.qc_flag] || l.qc_flag}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
    views.jsx — MarketingView, TelesalesView, SalesView, App
    ═══════════════════════════════════════════════════════════════ */
 
 function MarketingView({ data }) {
-  const { totals: T, prev_totals: PT, platforms, daily, lead_sources, regions = [], ga4_sessions = [], ga4_pages = [], water_split = [] } = data;
+  const { totals: T, prev_totals: PT, platforms, daily, lead_sources, regions = [], ga4_sessions = [], ga4_pages = [], water_split = [], qc = null } = data;
   const pt = PT || {};
   const totalLeads     = T.total_leads || T.leads;
   const prevTotalLeads = pt.total_leads != null ? pt.total_leads : pt.leads;
@@ -2036,6 +2119,7 @@ function MarketingView({ data }) {
           sub={fmt(T.clicks) + ' clicks'}/>
         <LeadSplitCard sources={lead_sources} totalLeads={totalLeads}/>
       </div>
+      <QcCard qc={qc}/>
       <div style={{display:'grid',gridTemplateColumns:'1.6fr 1fr 1fr',gap:14,marginBottom:14}}>
         <SpendChart daily={daily}/>
         <PlatformBreakdown platforms={platforms} totalSpend={T.spend}/>

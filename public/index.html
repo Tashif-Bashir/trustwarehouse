@@ -1464,6 +1464,67 @@ function TsTrendChart({ daily }) {
   );
 }
 
+/* ── Speed to first call ───────────────────────────────
+   Tests the CLAUDE.md "respond within 5 min" target directly.
+   Buckets leads by minutes-from-create-to-first-outbound-call and shows
+   appt rate per bucket. Makes the speed→conversion cliff visible. */
+function SpeedToCallCard({ rows }) {
+  const m = useMounted(120);
+  if (!rows || !rows.length) return null;
+  // For bar scaling, use the max rate across all buckets (so the best bucket = 100%)
+  const maxRate = Math.max(...rows.map(r => r.appt_rate || 0), 1);
+  const totalLeads = rows.reduce((s, r) => s + r.leads, 0);
+
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Speed to first call</div>
+          <div className="sec-sub">Time from lead → first outbound call · target ≤5 min</div>
+        </div>
+        <div style={{fontSize:11, color:'var(--muted)'}}>{fmt(totalLeads)} leads</div>
+      </div>
+      {rows.map(r => {
+        const isTarget = r.bucket === '≤5 min';
+        const rate = r.appt_rate || 0;
+        const widthPct = rate / maxRate;
+        const sharePct = totalLeads > 0 ? Math.round(r.leads / totalLeads * 100) : 0;
+        // Mint for target bucket; rose for late buckets; neutral for the rest
+        let color = 'var(--indigo)';
+        if (isTarget)                                    color = '#3DD0A4';
+        else if (r.bucket === '1-4 hr' || r.bucket === '>4 hr' || r.bucket === 'next day+') color = '#FF6B7A';
+        return (
+          <div key={r.bucket} style={{display:'grid', gridTemplateColumns:'120px 1fr 200px', alignItems:'center', gap:12, padding:'7px 0', borderBottom:'1px solid var(--line)'}}>
+            <div style={{fontSize:12.5, fontWeight:600, color: isTarget ? '#0F8A60' : 'var(--ink)'}}>
+              {isTarget && <span style={{marginRight:5}}>★</span>}
+              {r.bucket}
+            </div>
+            <div style={{height:9, background:'var(--bg)', borderRadius:5, overflow:'hidden', position:'relative'}}>
+              <div style={{
+                height:'100%',
+                width: m ? Math.round(widthPct * 100) + '%' : '0%',
+                background: `linear-gradient(90deg, ${color}, ${color}aa)`,
+                borderRadius: 5,
+                transition: 'width 1.2s cubic-bezier(.22,1,.36,1)',
+                minWidth: m && rate > 0 ? '4px' : '0'
+              }}/>
+            </div>
+            <div style={{display:'flex', gap:10, justifyContent:'flex-end', fontSize:11.5, color:'var(--muted)'}}>
+              <span><b style={{color:'var(--ink)'}}>{fmt(r.leads)}</b> leads <span style={{opacity:0.65}}>({sharePct}%)</span></span>
+              <span style={{color: isTarget ? '#0F8A60' : 'var(--ink)', fontWeight: 600, minWidth:50, textAlign:'right'}}>
+                {rate.toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        );
+      })}
+      <div style={{fontSize:10.5, color:'var(--muted)', marginTop:10, lineHeight:1.5}}>
+        Appt rate shown per bucket — lead must convert to appointment to count. <i>“next day+”</i> = first call landed on a calendar day after lead creation.
+      </div>
+    </div>
+  );
+}
+
 /* ── Scatter plot (initials in dots, hover tooltip) ──── */
 function ScatterPlot({ agents }) {
   if (!agents.length) return <EmptyCard title="Calls vs appointments" />;
@@ -2334,7 +2395,7 @@ function InsightsPanel({ insights }) {
 }
 
 function TelesalesView({ data, marketingData }) {
-  const { agents, daily, totals: T, prev_totals: PT } = data;
+  const { agents, daily, totals: T, prev_totals: PT, speed_to_call = [] } = data;
   const pt = PT || {};
   const sourceCpa = (marketingData && marketingData.source_cpa) || [];
   const noAgents = !agents.length;
@@ -2371,6 +2432,7 @@ function TelesalesView({ data, marketingData }) {
         </div>
       )}
       {!noAgents && <InsightsPanel insights={insights}/>}
+      <SpeedToCallCard rows={speed_to_call}/>
       {!noAgents && <AgentBars agents={agents} topAgentName={topAgentName} coachAgentNames={coachAgentNames}/>}
       {!noAgents && (
         <div className="g2">

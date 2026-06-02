@@ -159,6 +159,46 @@ def _water_leads(d0, d1):
     except Exception:
         return pd.DataFrame()
 
+def _speed_to_call(d0, d1):
+    """Distribution of leads by minutes-to-first-call, plus appointment rate per bucket.
+    mins_to_first_call is NULL when the first call happened on a different calendar day
+    than the lead's creation date — these leads land in the 'next day+' bucket.
+    Tests the CLAUDE.md "respond within 5 minutes" target directly."""
+    try:
+        return _q(f"""
+            WITH bucketed AS (
+              SELECT
+                CASE
+                  WHEN mins_to_first_call IS NULL                       THEN 'next day+'
+                  WHEN mins_to_first_call <= 5                          THEN '≤5 min'
+                  WHEN mins_to_first_call <= 15                         THEN '5-15 min'
+                  WHEN mins_to_first_call <= 60                         THEN '15-60 min'
+                  WHEN mins_to_first_call <= 240                        THEN '1-4 hr'
+                  ELSE '>4 hr'
+                END AS bucket,
+                CASE
+                  WHEN mins_to_first_call IS NULL                       THEN 6
+                  WHEN mins_to_first_call <= 5                          THEN 1
+                  WHEN mins_to_first_call <= 15                         THEN 2
+                  WHEN mins_to_first_call <= 60                         THEN 3
+                  WHEN mins_to_first_call <= 240                        THEN 4
+                  ELSE 5
+                END AS sort_order,
+                appointment_booked = 'Yes' AS is_appt
+              FROM `{PROJECT}.gold.gold_lead_activity`
+              WHERE created_date BETWEEN '{d0}' AND '{d1}'
+            )
+            SELECT bucket, sort_order,
+                   COUNT(*) AS leads,
+                   COUNTIF(is_appt) AS appts,
+                   ROUND(SAFE_DIVIDE(COUNTIF(is_appt), COUNT(*)) * 100, 1) AS appt_rate
+            FROM bucketed
+            GROUP BY bucket, sort_order
+            ORDER BY sort_order
+        """)
+    except Exception:
+        return pd.DataFrame()
+
 def _telesales(d0, d1):
     try:
         return _q(f"""
@@ -306,6 +346,7 @@ def _load_all(d0s, d1s):
         'qc':          (f'qc:{d0s}:{d1s}',     lambda: _qc_flags(d0s, d1s)),
         'qc_leads':    (f'qcL:{d0s}:{d1s}',    lambda: _qc_lead_details(d0s, d1s)),
         'source_cpa':  (f'cpa:{d0s}:{d1s}',    lambda: _source_cpa(d0s, d1s)),
+        'speed':       (f'spd:{d0s}:{d1s}',    lambda: _speed_to_call(d0s, d1s)),
     }
 
     results = {}
@@ -331,6 +372,7 @@ def _load_all(d0s, d1s):
     df_qc            = results['qc']
     df_qc_leads      = results['qc_leads']
     df_source_cpa    = results['source_cpa']
+    df_speed         = results['speed']
 
     pa = df_attr.groupby("platform").agg(spend=("spend_gbp","sum"),clicks=("clicks","sum"),impr=("impressions","sum"),leads=("leads","sum")).reset_index()
     pa["cpl"] = (pa["spend"] / pa["leads"].replace(0, float("nan"))).round(2)
@@ -419,7 +461,12 @@ def _load_all(d0s, d1s):
     prev_cpa = round((prev_marketing_totals.get('spend', 0) / prev_telesales_totals['appts']), 2) if prev_telesales_totals and prev_telesales_totals.get('appts') else 0
     if prev_telesales_totals:
         prev_telesales_totals['cpa'] = prev_cpa
-    telesales = {'agents':agents,'daily':ts_daily_list,'totals':{'outbound':ts_out,'appts':ts_ap,'sales':ts_sa,'on_target_count':ts_on,'on_target_pct':round(ts_on/len(agents)*100) if agents else 0,'l2a':round(ts_ap/ts_out*100,1) if ts_out else 0,'a2s':round(ts_sa/ts_ap*100,1) if ts_ap else 0,'cpa':cpa},'prev_totals':prev_telesales_totals}
+    speed_to_call = [
+        {'bucket': str(r['bucket']), 'leads': int(r['leads']), 'appts': int(r['appts']),
+         'appt_rate': _safe(r['appt_rate'])}
+        for _, r in df_speed.iterrows()
+    ] if not df_speed.empty else []
+    telesales = {'agents':agents,'daily':ts_daily_list,'totals':{'outbound':ts_out,'appts':ts_ap,'sales':ts_sa,'on_target_count':ts_on,'on_target_pct':round(ts_on/len(agents)*100) if agents else 0,'l2a':round(ts_ap/ts_out*100,1) if ts_out else 0,'a2s':round(ts_sa/ts_ap*100,1) if ts_ap else 0,'cpa':cpa},'prev_totals':prev_telesales_totals,'speed_to_call':speed_to_call}
 
     stages = [{'stage':str(r['stage']),'count':int(r['count']),'total_value':float(r['total_value']) if pd.notna(r['total_value']) else 0,'weighted_value':float(r['weighted_value']) if pd.notna(r['weighted_value']) else 0,'won_count':int(r['won_count']) if pd.notna(r['won_count']) else 0,'won_value':float(r['won_value']) if pd.notna(r['won_value']) else 0,'avg_age_days':int(r['avg_age_days']) if pd.notna(r.get('avg_age_days')) else None} for _,r in df_stg.iterrows()]
     recent = []

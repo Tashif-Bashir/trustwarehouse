@@ -6,7 +6,7 @@ on:
     types:
       - completed
   schedule:
-    - cron: "0 * * * *"  # hourly fallback — picks up Airbyte (Google/Meta/Bing) syncs
+    - cron: "*/5 * * * *"  # every 5 minutes (GitHub Actions cron minimum) — keeps Airbyte (Google/Meta/Bing) data fresh
   workflow_dispatch:
 
 concurrency:

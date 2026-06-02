@@ -364,9 +364,12 @@ def get_data():
     except Exception as ex:
         return jsonify({'error': str(ex)}), 500
 
-@app.route('/api/refresh')
+@app.route('/api/refresh', methods=['GET', 'POST'])
 def refresh():
-    return jsonify({'ok': True})
+    with _cache_lock:
+        cleared = len(_cache)
+        _cache.clear()
+    return jsonify({'ok': True, 'cache_cleared': cleared})
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')

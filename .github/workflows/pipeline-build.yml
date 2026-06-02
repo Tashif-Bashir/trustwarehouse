@@ -63,3 +63,12 @@ jobs:
           else
             uv run dbt build --project-dir dbt_project --profiles-dir dbt_project --target prod --threads 8 --select $SELECTOR
           fi
+
+      - name: Bust dashboard cache
+        # After a successful warehouse rebuild, tell the dashboard API to drop
+        # its in-function query cache so the next page load shows fresh numbers.
+        run: |
+          curl -sf -X POST https://trustwarehouse.vercel.app/api/refresh \
+            -H 'Accept: application/json' \
+            --max-time 10 \
+            -o /tmp/refresh.json && cat /tmp/refresh.json || echo "refresh endpoint failed (non-fatal)"

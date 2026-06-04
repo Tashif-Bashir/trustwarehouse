@@ -1381,6 +1381,12 @@ function AgentBars({ agents, topAgentName = null }) {
             <div className="agent-bar-nums">
               <span>{a.outbound} out</span>
               <span style={{ color: '#1FA77F', fontWeight: 600 }}>{a.appts} appt</span>
+              <span style={{
+                color: a.calls_per_appt == null ? 'var(--muted)' : a.calls_per_appt <= 3 ? '#1FA77F' : 'var(--rose)',
+                fontWeight: 600,
+              }} title="Calls per appointment · lower is better · target ≤ 3">
+                {a.calls_per_appt != null ? a.calls_per_appt + 'x' : '—'}
+              </span>
             </div>
             <div>
               <span className={a.on_target ? 'status-pill pill-target' : 'status-pill pill-miss'}>

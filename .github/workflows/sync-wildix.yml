@@ -2,7 +2,7 @@ name: Sync Wildix
 
 on:
   schedule:
-    - cron: "*/5 * * * *"   # every 5 minutes (GitHub Actions cron minimum)
+    - cron: "*/15 * * * *"   # every 15 minutes — GH schedule throttling makes */5 unreliable
   workflow_dispatch:
 
 jobs:

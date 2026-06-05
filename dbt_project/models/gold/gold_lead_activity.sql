@@ -52,6 +52,12 @@ with leads as (
 
     from {{ ref('silver_sharpspring_leads') }}
     where is_active = true
+      -- Exclude responseIQ click-to-call widget events. These are not lead
+      -- acquisitions — they're tracking metadata that fires when someone
+      -- interacts with the call-button widget on the website. The real lead
+      -- (if a call happened) is in Wildix CDR. See is_tracking_artifact in
+      -- silver_sharpspring_leads for the full definition.
+      and is_tracking_artifact = false
     qualify row_number() over (partition by lead_id order by updated_at desc) = 1
 ),
 

@@ -55,6 +55,10 @@ lead_platform as (
     left join {{ ref('campaign_platform_mapping') }} m
         on l.campaign_id = m.campaign_id
     where l.is_active = true
+      -- Exclude responseIQ click-to-call widget events — they're not new
+      -- lead acquisitions, just tracking metadata. See is_tracking_artifact
+      -- in silver_sharpspring_leads for the full definition.
+      and l.is_tracking_artifact = false
 ),
 
 -- Leads created per day per platform (organic leads have NULL platform — excluded here)

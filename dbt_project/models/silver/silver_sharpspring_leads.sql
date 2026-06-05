@@ -110,7 +110,17 @@ cleaned as (
         -- correctly-quoted columns here without touching the legacy one.
         nullif(trim(`lead_warmth___1___69ea236712886`), '')                 as service_type,
         coalesce(`lead_warmth___1___69ea236712886` in ('Water', 'Heating and Water'), false)
-                                                                            as is_water_lead
+                                                                            as is_water_lead,
+
+        -- Tracking-artifact flag — SharpSpring creates these records when
+        -- third-party widgets fire on the website, not when a real lead is acquired:
+        --   * `responseIQ: ...` — click-to-call widget click events. The genuine
+        --     lead (if a call happens) is logged separately in Wildix CDR.
+        -- These are NOT lead-acquisition events and must be excluded from all
+        -- paid-lead counts on the dashboard. Retargeting pixel records DO count
+        -- as real leads (a retargeted ad click is a real engagement event).
+        coalesce(REGEXP_CONTAINS(LOWER(COALESCE(description, '')),
+                                 r'^responseiq:'), false)                   as is_tracking_artifact
 
     from source
 ),

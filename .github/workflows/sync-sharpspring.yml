@@ -2,7 +2,7 @@ name: Sync SharpSpring
 
 on:
   schedule:
-    - cron: "*/30 * * * *"  # every 30 minutes
+    - cron: "0 */2 * * *"  # every 2 hours — backup only. Primary sync runs on OCI VM via systemd timer (every 90s).
   workflow_dispatch:
 
 jobs:

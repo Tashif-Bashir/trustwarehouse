@@ -118,6 +118,20 @@
   }
   .topbar-right{ display:flex; align-items:center; gap:10px; }
   .refreshed{ font-size:11.5px; color:var(--muted); font-weight:500; }
+  .live-pulse{ display:inline-flex; align-items:center; gap:6px;
+    font-size:11.5px; color:var(--muted); font-weight:600;
+    padding:4px 9px; border-radius:99px; background:var(--bg);
+    user-select:none; }
+  .live-dot{ width:7px; height:7px; border-radius:50%; display:inline-block;
+    box-shadow:0 0 0 0 currentColor; }
+  .live-dot.is-fresh{ background:#3DD0A4; color:#3DD0A4;
+    animation: live-pulse-fresh 2s ease-out infinite; }
+  .live-dot.is-stale{ background:#F5B544; color:#F5B544; }
+  @keyframes live-pulse-fresh {
+    0%   { box-shadow: 0 0 0 0   rgba(61,208,164,0.55); }
+    70%  { box-shadow: 0 0 0 7px rgba(61,208,164,0);    }
+    100% { box-shadow: 0 0 0 0   rgba(61,208,164,0);    }
+  }
 
   /* Period picker */
   .period-wrap{ position:relative; }
@@ -811,17 +825,25 @@ function DateRangePicker({ onApply }) {
 }
 
 /* ── Topbar ──────────────────────────────────────────── */
-function Topbar({ title, period, setPeriod, refreshedAt, onRefresh, onCustomDate }) {
-  const minsAgo = Math.max(1, Math.round((Date.now() - new Date(refreshedAt).getTime()) / 60000));
+function Topbar({ title, period, setPeriod, refreshedAt, onRefresh, onCustomDate, lastPoll }) {
+  // "Live" pulse — show seconds since the last successful poll. Updates every 5s.
+  const [, force] = React.useState(0);
+  React.useEffect(() => { const id = setInterval(() => force(x => x + 1), 5000); return () => clearInterval(id); }, []);
+  const sec = Math.max(0, Math.round((Date.now() - (lastPoll || Date.now())) / 1000));
+  const fresh = sec < 90;
+  const label = sec < 60 ? `${sec}s ago` : `${Math.round(sec/60)}m ago`;
   return (
     <div className="topbar">
       <div className="topbar-left">
         <div className="page-title">{title}</div>
       </div>
       <div className="topbar-right">
+        <span className="live-pulse" title={`Auto-refreshing every 30s · last update ${label}`}>
+          <span className={`live-dot ${fresh ? 'is-fresh' : 'is-stale'}`}/> Live · {label}
+        </span>
         <PeriodPicker value={period} onChange={setPeriod} />
         <DateRangePicker onApply={onCustomDate} />
-        <button className="icon-btn" onClick={onRefresh} title={`Refresh · updated ${minsAgo}m ago`}>{Ic.refresh}</button>
+        <button className="icon-btn" onClick={onRefresh} title="Force refresh">{Ic.refresh}</button>
       </div>
     </div>
   );
@@ -2371,19 +2393,41 @@ function App() {
   React.useEffect(() => {
     if (!d0 || !d1) return;
     setLoading(true); setError(null);
-    const doFetch = () =>
+    const doFetch = (silent = false) =>
       fetch(`/api/data?d0=${d0}&d1=${d1}`)
         .then(r => { if (!r.ok) throw new Error(`Server error ${r.status}`); return r.json(); })
         .then(d => { if (d.error) throw new Error(d.error); setData(d); })
-        .catch(e => setError(e.message))
-        .finally(() => setLoading(false));
+        .catch(e => { if (!silent) setError(e.message); })
+        .finally(() => { if (!silent) setLoading(false); });
     if (bustCache) {
       setBustCache(false);
-      fetch('/api/refresh').then(doFetch).catch(doFetch);
+      fetch('/api/refresh').then(() => doFetch()).catch(() => doFetch());
     } else {
       doFetch();
     }
   }, [d0, d1, refreshKey]);
+
+  /* Live polling — every 30s silently refetch the period's data so KPIs and
+     agent bars tick over as the day progresses without the user clicking
+     refresh. Only polls while the browser tab is visible (saves bandwidth
+     when nobody's looking). Backed by VM-side cron syncing every 60s and
+     busting the API cache after each dbt rebuild — so "live" here means
+     "within 90s of the actual event". */
+  const [lastPoll, setLastPoll] = React.useState(Date.now());
+  React.useEffect(() => {
+    if (!d0 || !d1) return;
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      if (document.hidden) return;  // skip if tab not visible
+      fetch(`/api/data?d0=${d0}&d1=${d1}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d && !d.error && !cancelled) { setData(d); setLastPoll(Date.now()); } })
+        .catch(() => {});
+    };
+    const id = setInterval(tick, 30000);   // poll every 30 seconds
+    return () => { cancelled = true; clearInterval(id); };
+  }, [d0, d1]);
 
   /* Apply motion settings to <body> */
   React.useEffect(() => {
@@ -2406,6 +2450,7 @@ function App() {
           title={activeTab}
           period={period} setPeriod={(p) => { setPeriod(p); setRefreshKey(k => k + 1); }}
           refreshedAt={refreshedAt}
+          lastPoll={lastPoll}
           onRefresh={() => { setBustCache(true); setRefreshKey(k => k + 1); }}
           onCustomDate={(d0, d1) => {
             setPeriod({ id: 'custom', label: fmtRangeLabel(d0, d1), d0, d1 });

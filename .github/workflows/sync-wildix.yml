@@ -2,7 +2,7 @@ name: Sync Wildix
 
 on:
   schedule:
-    - cron: "*/15 * * * *"   # every 15 minutes — GH schedule throttling makes */5 unreliable
+    - cron: "0 */2 * * *"   # every 2 hours — backup only. Primary sync runs on OCI VM via systemd timer (every 60s).
   workflow_dispatch:
 
 jobs:

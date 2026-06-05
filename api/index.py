@@ -8,7 +8,11 @@ from google.cloud import bigquery
 from flask import Flask, jsonify, request
 
 PROJECT   = os.getenv('GCP_PROJECT_ID', 'trustwarehouse')
-CACHE_TTL = 1800
+# Dashboard is now live — VM-side cron syncs every 60-90s and busts this cache
+# via /api/refresh after each rebuild. Keep TTL low so the frontend poll picks up
+# fresh numbers within the next poll cycle. 60s is a safe ceiling if the cache
+# bust ever fails (e.g. Vercel cold start).
+CACHE_TTL = 60
 
 _bq      = None
 _bq_lock = threading.Lock()

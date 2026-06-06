@@ -44,21 +44,21 @@ platform_spend as (
     select * from bing_spend
 ),
 
--- Map SharpSpring campaign_id to the three paid platforms via seed file.
--- Falls back to UTM/gclid inference for leads the CRM misattributed to organic.
+-- Read the canonical paid-platform attribution from gold_lead_activity, which
+-- already applies the hybrid CRM-first + UTM-fallback rule and excludes
+-- tracking artifacts. This keeps the dashboard's CPL formula in sync with
+-- the Leads Breakdown donut (both now use identical lead-counting logic).
+--
+-- Previously this CTE did its own CRM-only join against campaign_platform_mapping,
+-- which under-counted paid leads when SharpSpring assigned a paid click to an
+-- organic campaign_id (a common CRM data-quality issue). The UTM fallback in
+-- gold_lead_activity catches those cases.
 lead_platform as (
     select
-        l.lead_id,
-        DATE(SAFE_CAST(l.created_at AS TIMESTAMP), 'Europe/London')         as created_date,
-        m.platform                                                          as platform
-    from {{ ref('silver_sharpspring_leads') }} l
-    left join {{ ref('campaign_platform_mapping') }} m
-        on l.campaign_id = m.campaign_id
-    where l.is_active = true
-      -- Exclude responseIQ click-to-call widget events — they're not new
-      -- lead acquisitions, just tracking metadata. See is_tracking_artifact
-      -- in silver_sharpspring_leads for the full definition.
-      and l.is_tracking_artifact = false
+        la.lead_id,
+        la.created_date,
+        la.platform
+    from {{ ref('gold_lead_activity') }} la
 ),
 
 -- Leads created per day per platform (organic leads have NULL platform — excluded here)

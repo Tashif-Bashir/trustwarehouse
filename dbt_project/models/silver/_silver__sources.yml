@@ -15,6 +15,7 @@ sources:
       - name: google_adscampaign_budget
       - name: google_ads_api_campaign_daily
       - name: facebook_adsads_insights
+      - name: meta_api_campaign_daily
       - name: bing_adscampaign_performance_report_daily
       - name: bing_adsaccount_performance_report_daily
       - name: unleashed_sales_orders

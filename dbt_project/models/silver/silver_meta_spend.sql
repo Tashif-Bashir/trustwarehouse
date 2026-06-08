@@ -1,67 +1,45 @@
+-- Daily Meta spend, one row per (date, campaign).
+--
+-- Reads from `bronze.meta_api_campaign_daily`, populated by our direct-API
+-- ingestion (ingestion.meta). The previous Airbyte-based version needed
+-- dedup because Airbyte's connector re-pulled rows on every sync as Meta's
+-- attribution windows updated. The direct API uses replace disposition per
+-- run, so there is only ever one row per (date, campaign) — no dedup needed.
+
 with source as (
-    select * from {{ source('bronze', 'facebook_adsads_insights') }}
-),
-
--- Airbyte re-pulls historical rows on each sync (Facebook attribution window updates).
--- Keep only the most recently extracted row per date+ad — Facebook updates spend
--- retroactively as attribution windows close, so latest extraction = correct value.
-deduped as (
-    select *
-    from source
-    qualify row_number() over (
-        partition by date_start, ad_id
-        order by _airbyte_extracted_at desc
-    ) = 1
-),
-
--- Aggregate ad-level rows up to campaign level daily
-campaign_daily as (
-    select
-        date_start                          as date,
-        campaign_id,
-        any_value(campaign_name)            as campaign_name,
-        any_value(objective)                as objective,
-        any_value(account_currency)         as currency,
-
-        sum(impressions)                    as impressions,
-        sum(clicks)                         as clicks,
-        sum(unique_clicks)                  as unique_clicks,
-        round(sum(spend), 4)                as spend_gbp,
-        sum(reach)                          as reach
-
-    from deduped
-    group by date_start, campaign_id
+    select * from {{ source('bronze', 'meta_api_campaign_daily') }}
 ),
 
 final as (
     select
-        date,
-        campaign_id,
+        parse_date('%Y-%m-%d', date)                                as date,
+        cast(campaign_id as string)                                 as campaign_id,
         campaign_name,
         objective,
-        currency,
+        account_currency                                            as currency,
+
         impressions,
         clicks,
         unique_clicks,
-        spend_gbp,
+        round(spend_gbp, 4)                                         as spend_gbp,
         reach,
 
         case
-            when impressions = 0 then null
+            when impressions = 0 or impressions is null then null
             else round(clicks * 1.0 / impressions, 6)
-        end                                 as ctr,
+        end                                                         as ctr,
 
         case
-            when clicks = 0 then null
+            when clicks = 0 or clicks is null then null
             else round(spend_gbp / clicks, 4)
-        end                                 as avg_cpc_gbp,
+        end                                                         as avg_cpc_gbp,
 
         case
-            when reach = 0 then null
+            when reach = 0 or reach is null then null
             else round(spend_gbp / reach * 1000, 4)
-        end                                 as cpm_gbp
+        end                                                         as cpm_gbp
 
-    from campaign_daily
+    from source
 )
 
 select * from final

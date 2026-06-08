@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: sync-and-build.sh <wildix|sharpspring|google_ads>
+# Usage: sync-and-build.sh <wildix|sharpspring|google_ads|meta>
 # Runs the ingestion module, dbt-builds the relevant downstream silver+gold,
 # then busts the dashboard cache. Uses flock to serialize the dbt step.
 set -euo pipefail
@@ -8,11 +8,11 @@ cd "$HOME/trustwarehouse"
 export PATH="$HOME/.local/bin:$PATH"
 
 # 1. Sync the source data into bronze.
-# Direct-API ingestions (google_ads) need a --run flag; dlt-based ones (wildix,
-# sharpspring) just default to running their pipeline when invoked.
+# Direct-API ingestions (google_ads, meta) need a --run flag; dlt-based ones
+# (wildix, sharpspring) just default to running their pipeline when invoked.
 INGEST_ARGS=""
 case "$SOURCE" in
-  google_ads)
+  google_ads|meta)
     INGEST_ARGS="--run --days 7"
     ;;
 esac
@@ -29,6 +29,9 @@ case "$SOURCE" in
     ;;
   google_ads)
     SELECTOR="silver_google_ads_spend gold_google_ads_spend_by_region gold_campaign_attribution"
+    ;;
+  meta)
+    SELECTOR="silver_meta_spend gold_campaign_attribution"
     ;;
 esac
 

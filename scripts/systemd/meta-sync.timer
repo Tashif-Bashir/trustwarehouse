@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Meta sync 8 times per day at 01/04/07/10/13/16/19/22
+
+[Timer]
+OnCalendar=*-*-* 01,04,07,10,13,16,19,22:00:00 Europe/London
+Persistent=true
+Unit=meta-sync.service
+
+[Install]
+WantedBy=timers.target

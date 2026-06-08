@@ -1,96 +1,147 @@
-"""GA4 Data API → BigQuery bronze ingestion.
+"""dlt pipeline — GA4 Data API → BigQuery bronze.
 
-Pulls daily sessions by source/medium for the last LOOKBACK_DAYS days,
-deletes those dates from bronze first, then inserts fresh rows.
-Bronze table: trustwarehouse.bronze.ga4_session_source_medium
+Replaces the previous slim direct-API module (which only produced
+ga4direct_session_source_medium) and Airbyte's GA4 sync. Produces seven
+bronze tables covering everything the dashboard needs plus the broader
+dimensional cuts useful for downstream ML work.
+
+Bronze tables produced:
+  - ga4_api_sessions_daily       sessions × source/medium/device/country
+  - ga4_api_pages_daily          page-level views + engagement
+  - ga4_api_landing_pages_daily  landing page × source/medium (attribution)
+  - ga4_api_events_daily         event counts × source
+  - ga4_api_geographic_daily     sessions × country/region/city
+  - ga4_api_temporal_daily       sessions × hour × dayOfWeek × device
+  - ga4_api_demographics_daily   sessions × age × gender
+
+All use `replace` write_disposition over a rolling lookback window. Long
+backfills chunk by month to stay inside GA4's per-response row limit.
 """
+
 import os
 from datetime import date, timedelta
+from typing import Iterator
 
-import pandas as pd
-from google.analytics.data_v1beta import BetaAnalyticsDataClient
-from google.analytics.data_v1beta.types import (
-    DateRange,
-    Dimension,
-    Metric,
-    RunReportRequest,
-)
-from google.api_core.exceptions import NotFound
-from google.cloud import bigquery
+import dlt
+from dotenv import load_dotenv
 
-PROPERTY_ID   = "336938127"
-PROJECT       = os.getenv("GCP_PROJECT_ID", "trustwarehouse")
-TABLE_ID      = f"{PROJECT}.bronze.ga4direct_session_source_medium"
-LOOKBACK_DAYS = 3  # overlap catches late-arriving GA4 data
+from ingestion.ga4.client import GA4Client
+
+load_dotenv()
 
 
-def _fetch(start: date, end: date) -> pd.DataFrame:
-    client = BetaAnalyticsDataClient()
-    request = RunReportRequest(
-        property=f"properties/{PROPERTY_ID}",
-        dimensions=[
-            Dimension(name="date"),
-            Dimension(name="sessionSource"),
-            Dimension(name="sessionMedium"),
-            Dimension(name="deviceCategory"),
-            Dimension(name="country"),
+# ----- report definitions --------------------------------------------------
+
+REPORTS = {
+    "ga4_api_sessions_daily": {
+        "dimensions": ["date", "sessionSource", "sessionMedium", "deviceCategory", "country"],
+        "metrics": [
+            "sessions",
+            "totalUsers",
+            "newUsers",
+            "bounceRate",
+            "averageSessionDuration",
+            "screenPageViews",
+            "userEngagementDuration",
+            "conversions",
         ],
-        metrics=[
-            Metric(name="sessions"),
-            Metric(name="totalUsers"),
-            Metric(name="newUsers"),
-            Metric(name="bounceRate"),
-            Metric(name="averageSessionDuration"),
-            Metric(name="screenPageViews"),
+    },
+    "ga4_api_pages_daily": {
+        "dimensions": ["date", "pagePath"],
+        "metrics": [
+            "screenPageViews",
+            "totalUsers",
+            "userEngagementDuration",
+            "bounceRate",
         ],
-        date_ranges=[DateRange(start_date=str(start), end_date=str(end))],
+    },
+    "ga4_api_landing_pages_daily": {
+        "dimensions": ["date", "landingPagePlusQueryString", "sessionSource", "sessionMedium"],
+        "metrics": [
+            "sessions",
+            "conversions",
+            "bounceRate",
+            "engagedSessions",
+            "userEngagementDuration",
+        ],
+    },
+    "ga4_api_events_daily": {
+        "dimensions": ["date", "eventName", "sessionSource"],
+        "metrics": ["eventCount", "eventCountPerUser", "totalUsers"],
+    },
+    "ga4_api_geographic_daily": {
+        "dimensions": ["date", "country", "region", "city"],
+        "metrics": ["sessions", "totalUsers", "newUsers", "conversions"],
+    },
+    "ga4_api_temporal_daily": {
+        "dimensions": ["date", "hour", "dayOfWeek", "deviceCategory"],
+        "metrics": ["sessions", "totalUsers", "newUsers", "screenPageViews"],
+    },
+    "ga4_api_demographics_daily": {
+        "dimensions": ["date", "userAgeBracket", "userGender"],
+        "metrics": ["sessions", "totalUsers"],
+    },
+}
+
+
+# ----- helpers -------------------------------------------------------------
+
+def _chunk_dates(since: str, until: str, chunk_days: int = 31):
+    """Yield (chunk_start, chunk_end) covering [since, until] in chunk_days
+    windows. GA4 caps a single response at 100k rows — chunking by month keeps
+    each call well below that for backfills."""
+    s = date.fromisoformat(since)
+    u = date.fromisoformat(until)
+    cur = s
+    while cur <= u:
+        chunk_end = min(cur + timedelta(days=chunk_days - 1), u)
+        yield cur.isoformat(), chunk_end.isoformat()
+        cur = chunk_end + timedelta(days=1)
+
+
+# ----- resources -----------------------------------------------------------
+
+def _make_resource(table_name: str, spec: dict, since: str, until: str):
+    @dlt.resource(name=table_name, write_disposition="replace")
+    def report_resource():
+        client = GA4Client()
+        for chunk_since, chunk_until in _chunk_dates(since, until, chunk_days=31):
+            print(f"  GA4 {table_name}: {chunk_since} -> {chunk_until}")
+            for row in client.run_report(
+                dimensions=spec["dimensions"],
+                metrics=spec["metrics"],
+                since=chunk_since,
+                until=chunk_until,
+            ):
+                yield row
+    return report_resource
+
+
+def run_pipeline(lookback_days: int | None = 7, start_date: str | None = None) -> None:
+    """Pull GA4 data into bronze across all seven reports.
+
+    Daily run: lookback_days=7 catches any late-arriving GA4 data.
+    Backfill: pass start_date='2022-01-01' (or use --all-time in __main__).
+    """
+    end = date.today()
+    if start_date:
+        since = start_date
+    elif lookback_days:
+        since = (end - timedelta(days=lookback_days - 1)).isoformat()
+    else:
+        raise ValueError("Either lookback_days or start_date must be provided.")
+    until = end.isoformat()
+
+    pipeline = dlt.pipeline(
+        pipeline_name="ga4_api",
+        destination=dlt.destinations.bigquery(location="europe-west2"),
+        dataset_name="bronze",
     )
-    response = client.run_report(request)
 
-    rows = []
-    for row in response.rows:
-        r = {}
-        for i, dim_header in enumerate(response.dimension_headers):
-            r[dim_header.name] = row.dimension_values[i].value
-        for i, met_header in enumerate(response.metric_headers):
-            r[met_header.name] = row.metric_values[i].value
-        rows.append(r)
+    resources = [
+        _make_resource(table_name, spec, since, until)()
+        for table_name, spec in REPORTS.items()
+    ]
 
-    if not rows:
-        return pd.DataFrame()
-
-    df = pd.DataFrame(rows)
-    df["_extracted_at"] = pd.Timestamp.utcnow()
-    return df
-
-
-def _upsert(bq: bigquery.Client, df: pd.DataFrame, start: date, end: date) -> None:
-    try:
-        bq.query(
-            f"DELETE FROM `{TABLE_ID}` WHERE date BETWEEN '{start}' AND '{end}'"
-        ).result()
-    except NotFound:
-        pass  # table doesn't exist yet; load_table_from_dataframe will create it
-
-    job_config = bigquery.LoadJobConfig(
-        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
-        autodetect=True,
-    )
-    bq.load_table_from_dataframe(df, TABLE_ID, job_config=job_config).result()
-    print(f"Loaded {len(df)} rows into {TABLE_ID}")
-
-
-def run_pipeline() -> None:
-    end   = date.today() - timedelta(days=1)
-    start = end - timedelta(days=LOOKBACK_DAYS - 1)
-
-    print(f"Fetching GA4 data: {start} to {end}")
-    df = _fetch(start, end)
-
-    if df.empty:
-        print("No data returned from GA4.")
-        return
-
-    bq = bigquery.Client(project=PROJECT)
-    _upsert(bq, df, start, end)
-    print("Done.")
+    load_info = pipeline.run(resources)
+    print(load_info)

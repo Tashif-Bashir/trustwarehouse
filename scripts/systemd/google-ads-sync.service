@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=oneshot
 User=ubuntu
 WorkingDirectory=/home/ubuntu/trustwarehouse
+EnvironmentFile=/home/ubuntu/trustwarehouse/.env
 ExecStart=/home/ubuntu/trustwarehouse/scripts/sync-and-build.sh google_ads
 TimeoutStartSec=900
 StandardOutput=journal

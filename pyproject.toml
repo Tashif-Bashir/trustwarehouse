@@ -21,6 +21,8 @@ dependencies = [
     "pandas>=2.0",
     "matplotlib>=3.10.9",
     "google-analytics-data>=0.18",
+    "google-ads>=25.0",
+    "google-auth-oauthlib>=1.2",
 ]
 
 [dependency-groups]

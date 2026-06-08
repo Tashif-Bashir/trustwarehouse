@@ -9,6 +9,7 @@ Env vars:
 """
 
 import os
+import re
 from typing import Iterator
 
 from dotenv import load_dotenv
@@ -22,6 +23,13 @@ from google.analytics.data_v1beta.types import (
 )
 
 load_dotenv()
+
+
+def _to_snake(name: str) -> str:
+    """Convert GA4's camelCase field names to snake_case so the dict keys
+    yielded by the client match the snake_case columns dlt creates in BigQuery.
+    Needed so resource primary_key lists match the actual row keys."""
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
 
 _DEFAULT_PROPERTY_ID = "336938127"
 _PAGE_SIZE = 100_000
@@ -66,9 +74,9 @@ class GA4Client:
             for row in response.rows:
                 out: dict = {}
                 for i, dim_header in enumerate(response.dimension_headers):
-                    out[dim_header.name] = row.dimension_values[i].value
+                    out[_to_snake(dim_header.name)] = row.dimension_values[i].value
                 for i, met_header in enumerate(response.metric_headers):
-                    out[met_header.name] = row.metric_values[i].value
+                    out[_to_snake(met_header.name)] = row.metric_values[i].value
                 yield out
 
             row_count = getattr(response, "row_count", 0) or 0

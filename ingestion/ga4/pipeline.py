@@ -31,6 +31,10 @@ load_dotenv()
 
 
 # ----- report definitions --------------------------------------------------
+#
+# Each report's `primary_key` is the FULL set of dimension columns (snake_case)
+# — that lets dlt merge-mode update only the rows in the rolling window and
+# preserve everything else, instead of replace-mode wiping the table each run.
 
 REPORTS = {
     "ga4_api_sessions_daily": {
@@ -45,6 +49,7 @@ REPORTS = {
             "userEngagementDuration",
             "conversions",
         ],
+        "primary_key": ["date", "session_source", "session_medium", "device_category", "country"],
     },
     "ga4_api_pages_daily": {
         "dimensions": ["date", "pagePath"],
@@ -54,6 +59,7 @@ REPORTS = {
             "userEngagementDuration",
             "bounceRate",
         ],
+        "primary_key": ["date", "page_path"],
     },
     "ga4_api_landing_pages_daily": {
         "dimensions": ["date", "landingPagePlusQueryString", "sessionSource", "sessionMedium"],
@@ -64,22 +70,27 @@ REPORTS = {
             "engagedSessions",
             "userEngagementDuration",
         ],
+        "primary_key": ["date", "landing_page_plus_query_string", "session_source", "session_medium"],
     },
     "ga4_api_events_daily": {
         "dimensions": ["date", "eventName", "sessionSource"],
         "metrics": ["eventCount", "eventCountPerUser", "totalUsers"],
+        "primary_key": ["date", "event_name", "session_source"],
     },
     "ga4_api_geographic_daily": {
         "dimensions": ["date", "country", "region", "city"],
         "metrics": ["sessions", "totalUsers", "newUsers", "conversions"],
+        "primary_key": ["date", "country", "region", "city"],
     },
     "ga4_api_temporal_daily": {
         "dimensions": ["date", "hour", "dayOfWeek", "deviceCategory"],
         "metrics": ["sessions", "totalUsers", "newUsers", "screenPageViews"],
+        "primary_key": ["date", "hour", "day_of_week", "device_category"],
     },
     "ga4_api_demographics_daily": {
         "dimensions": ["date", "userAgeBracket", "userGender"],
         "metrics": ["sessions", "totalUsers"],
+        "primary_key": ["date", "user_age_bracket", "user_gender"],
     },
 }
 
@@ -102,7 +113,11 @@ def _chunk_dates(since: str, until: str, chunk_days: int = 31):
 # ----- resources -----------------------------------------------------------
 
 def _make_resource(table_name: str, spec: dict, since: str, until: str):
-    @dlt.resource(name=table_name, write_disposition="replace")
+    @dlt.resource(
+        name=table_name,
+        write_disposition="merge",
+        primary_key=spec["primary_key"],
+    )
     def report_resource():
         client = GA4Client()
         for chunk_since, chunk_until in _chunk_dates(since, until, chunk_days=31):

@@ -68,7 +68,11 @@ def _chunk_dates(since: str, until: str, chunk_days: int = 90):
 
 
 def _campaign_daily_resource(since: str, until: str):
-    @dlt.resource(name="meta_api_campaign_daily", write_disposition="replace")
+    @dlt.resource(
+        name="meta_api_campaign_daily",
+        write_disposition="merge",
+        primary_key=["date", "campaign_id"],
+    )
     def campaign_daily():
         client = MetaClient()
         for chunk_since, chunk_until in _chunk_dates(since, until, chunk_days=90):

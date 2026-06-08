@@ -70,7 +70,11 @@ def _row_campaign(row) -> dict:
 
 
 def _campaign_daily_resource(lookback_days: int | None = None, start_date: str | None = None):
-    @dlt.resource(name="google_ads_api_campaign_daily", write_disposition="replace")
+    @dlt.resource(
+        name="google_ads_api_campaign_daily",
+        write_disposition="merge",
+        primary_key=["date", "campaign_id", "ad_network_type"],
+    )
     def campaign_daily():
         query = CAMPAIGN_DAILY_GAQL.format(
             date_filter=_date_filter(lookback_days=lookback_days, start_date=start_date)

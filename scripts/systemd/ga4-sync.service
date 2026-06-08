@@ -1,0 +1,17 @@
+[Unit]
+Description=GA4 Data API -> BigQuery bronze sync (8 times per day)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/trustwarehouse
+EnvironmentFile=/home/ubuntu/trustwarehouse/.env
+ExecStart=/home/ubuntu/trustwarehouse/scripts/sync-and-build.sh ga4
+TimeoutStartSec=900
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

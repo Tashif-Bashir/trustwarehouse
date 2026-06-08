@@ -295,25 +295,26 @@ def _ts_daily(d0, d1):
         return pd.DataFrame()
 
 def _ga4_sessions(d0, d1):
+    # GA4 Data API returns dates as YYYYMMDD strings (no dashes).
     d0g = d0.replace('-',''); d1g = d1.replace('-','')
     try:
         return _q(f"""
             SELECT
                 CASE
-                    WHEN LOWER(sessionSource) IN ('google','googleads') AND LOWER(sessionMedium) IN ('cpc','ppc','paid','paidsearch') THEN 'Google Paid'
-                    WHEN LOWER(sessionSource) = 'google' AND LOWER(sessionMedium) = 'organic' THEN 'Google Organic'
-                    WHEN LOWER(sessionSource) IN ('facebookads','facebook','fb','instagram','meta')
-                      OR (LOWER(sessionSource) LIKE '%facebook%' AND LOWER(sessionMedium) IN ('cpc','paid','paidsocial','social')) THEN 'Meta'
-                    WHEN LOWER(sessionSource) IN ('bing','bingads','microsoft') AND LOWER(sessionMedium) IN ('cpc','ppc','paid') THEN 'Bing'
-                    WHEN LOWER(sessionSource) = '(direct)' OR LOWER(sessionMedium) = '(none)' THEN 'Direct'
-                    WHEN LOWER(sessionMedium) = 'organic' THEN 'Organic Search'
-                    WHEN LOWER(sessionMedium) IN ('referral','social') THEN 'Referral'
+                    WHEN LOWER(session_source) IN ('google','googleads') AND LOWER(session_medium) IN ('cpc','ppc','paid','paidsearch') THEN 'Google Paid'
+                    WHEN LOWER(session_source) = 'google' AND LOWER(session_medium) = 'organic' THEN 'Google Organic'
+                    WHEN LOWER(session_source) IN ('facebookads','facebook','fb','instagram','meta')
+                      OR (LOWER(session_source) LIKE '%facebook%' AND LOWER(session_medium) IN ('cpc','paid','paidsocial','social')) THEN 'Meta'
+                    WHEN LOWER(session_source) IN ('bing','bingads','microsoft') AND LOWER(session_medium) IN ('cpc','ppc','paid') THEN 'Bing'
+                    WHEN LOWER(session_source) = '(direct)' OR LOWER(session_medium) = '(none)' THEN 'Direct'
+                    WHEN LOWER(session_medium) = 'organic' THEN 'Organic Search'
+                    WHEN LOWER(session_medium) IN ('referral','social') THEN 'Referral'
                     ELSE 'Other'
                 END as channel,
-                SUM(SAFE_CAST(sessions AS INT64))  as sessions,
-                SUM(SAFE_CAST(newUsers AS INT64))   as new_users,
-                SUM(SAFE_CAST(totalUsers AS INT64)) as total_users
-            FROM `{PROJECT}.bronze.ga4direct_session_source_medium`
+                SUM(SAFE_CAST(sessions AS INT64))    as sessions,
+                SUM(SAFE_CAST(new_users AS INT64))   as new_users,
+                SUM(SAFE_CAST(total_users AS INT64)) as total_users
+            FROM `{PROJECT}.bronze.ga4_api_sessions_daily`
             WHERE date BETWEEN '{d0g}' AND '{d1g}'
             GROUP BY 1
             ORDER BY sessions DESC
@@ -322,18 +323,20 @@ def _ga4_sessions(d0, d1):
         return pd.DataFrame()
 
 def _ga4_pages(d0, d1):
+    # GA4 Data API returns dates as YYYYMMDD strings (no dashes).
+    d0g = d0.replace('-',''); d1g = d1.replace('-','')
     try:
         return _q(f"""
             SELECT
-                REGEXP_REPLACE(pagePath, r'\\?.*', '') as path,
-                SUM(screenPageViews) as views,
-                SUM(totalUsers) as users,
-                ROUND(SUM(SAFE_CAST(userEngagementDuration AS FLOAT64))
-                    / NULLIF(SUM(totalUsers),0), 0) as avg_eng_secs
-            FROM `{PROJECT}.bronze.ga4pages_path_report`
-            WHERE date BETWEEN '{d0}' AND '{d1}'
-              AND pagePath NOT IN ('/', '', '(not set)')
-              AND pagePath NOT LIKE '%/wp-%'
+                REGEXP_REPLACE(page_path, r'\\?.*', '') as path,
+                SUM(SAFE_CAST(screen_page_views AS INT64)) as views,
+                SUM(SAFE_CAST(total_users AS INT64)) as users,
+                ROUND(SUM(SAFE_CAST(user_engagement_duration AS FLOAT64))
+                    / NULLIF(SUM(SAFE_CAST(total_users AS INT64)),0), 0) as avg_eng_secs
+            FROM `{PROJECT}.bronze.ga4_api_pages_daily`
+            WHERE date BETWEEN '{d0g}' AND '{d1g}'
+              AND page_path NOT IN ('/', '', '(not set)')
+              AND page_path NOT LIKE '%/wp-%'
             GROUP BY 1
             ORDER BY views DESC
             LIMIT 8

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: sync-and-build.sh <wildix|sharpspring|google_ads|meta>
+# Usage: sync-and-build.sh <wildix|sharpspring|google_ads|meta|ga4>
 # Runs the ingestion module, dbt-builds the relevant downstream silver+gold,
 # then busts the dashboard cache. Uses flock to serialize the dbt step.
 set -euo pipefail
@@ -8,17 +8,19 @@ cd "$HOME/trustwarehouse"
 export PATH="$HOME/.local/bin:$PATH"
 
 # 1. Sync the source data into bronze.
-# Direct-API ingestions (google_ads, meta) need a --run flag; dlt-based ones
-# (wildix, sharpspring) just default to running their pipeline when invoked.
+# Direct-API ingestions (google_ads, meta, ga4) need a --run flag; dlt-based
+# ones (wildix, sharpspring) just default to running their pipeline.
 INGEST_ARGS=""
 case "$SOURCE" in
-  google_ads|meta)
+  google_ads|meta|ga4)
     INGEST_ARGS="--run --days 7"
     ;;
 esac
 uv run python -m "ingestion.${SOURCE}" $INGEST_ARGS 2>&1 | grep -vE "(UserWarning|warnings.warn|google-cloud-bigquery-storage)" || true
 
-# 2. dbt build the downstream models for this source
+# 2. dbt build the downstream models for this source.
+# GA4 has no dbt dependencies — the dashboard reads GA4 bronze tables directly
+# via api/index.py — so we skip dbt entirely for that source.
 SELECTOR=""
 case "$SOURCE" in
   wildix)
@@ -33,9 +35,14 @@ case "$SOURCE" in
   meta)
     SELECTOR="silver_meta_spend gold_campaign_attribution"
     ;;
+  ga4)
+    SELECTOR=""  # no dbt step
+    ;;
 esac
 
-flock /tmp/dbt.lock uv run dbt build --project-dir dbt_project --profiles-dir dbt_project --target prod --threads 4 --select $SELECTOR 2>&1 | tail -5
+if [ -n "$SELECTOR" ]; then
+  flock /tmp/dbt.lock uv run dbt build --project-dir dbt_project --profiles-dir dbt_project --target prod --threads 4 --select $SELECTOR 2>&1 | tail -5
+fi
 
 # 3. Bust dashboard cache so the next page load shows fresh numbers
 curl -sf -X POST https://trustwarehouse.vercel.app/api/refresh --max-time 5 -o /tmp/refresh.json && cat /tmp/refresh.json || echo "refresh endpoint not reachable (non-fatal)"

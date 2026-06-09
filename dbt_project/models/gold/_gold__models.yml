@@ -77,11 +77,23 @@ models:
         tests:
           - not_null
       - name: appointments_booked
-        description: Appointments where appointment_made_by maps to this agent on this date
+        description: Appointments where the agent clicked "book" in CRM on this date.
+          Measures dialling activity output (when the booking was created).
         tests:
           - not_null
-      - name: on_target
-        description: True if the agent hit 1 appointment per 3 outbound calls
+      - name: appointments_scheduled
+        description: Appointments in the agent's diary to sit on this date,
+          regardless of when they were booked. This is what the telesales
+          manager compares against (the agent's pipeline for the period).
+        tests:
+          - not_null
+      - name: appointments_sat
+        description: Subset of appointments_scheduled that have a status
+          indicating the meeting actually happened.
+        tests:
+          - not_null
+      - name: appointments_sold
+        description: Subset of appointments_scheduled that closed to a sale.
         tests:
           - not_null
 

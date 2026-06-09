@@ -368,11 +368,11 @@ def _telesales_whiteboard():
                 ELSE appointment_made_by
               END AS agent_name,
               COUNTIF(appointment_date = CURRENT_DATE()) AS today_appts,
-              -- "This week" = Monday of current week THROUGH TODAY (so far),
-              -- matching the whiteboard's running weekly tally. Forward
-              -- sits later this week count toward "Month" but not "Week".
+              -- "This week" = Mon-Fri of the current calendar week
+              -- (5 working days, includes future days). Sat/Sun excluded
+              -- because the team doesn't work weekends.
               COUNTIF(appointment_date BETWEEN DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY))
-                                          AND CURRENT_DATE()) AS week_appts,
+                                          AND DATE_ADD(DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY)), INTERVAL 4 DAY)) AS week_appts,
               COUNTIF(appointment_date BETWEEN DATE_TRUNC(CURRENT_DATE(), MONTH)
                                           AND LAST_DAY(CURRENT_DATE())) AS month_appts
             FROM `{PROJECT}.silver.silver_sharpspring_leads`

@@ -61,18 +61,31 @@ appointments_scheduled as (
     group by agent_name, appointment_date
 ),
 
--- sales credited to each agent per day
+-- Sales credited to each agent per day.
+--
+-- The CRM team does not populate `converted_by` (NULL on every recent sale
+-- and historically too — it's effectively a dead field). We attribute the
+-- sale to whoever booked the appointment (`appointment_made_by`) which is
+-- populated 100% on sold leads. For value we fall back to `appt_amount`
+-- (the quote) when `deal_amount` is missing, because `deal_amount` is also
+-- routinely left empty in CRM despite the sale being marked as sold.
 sales as (
     select
-        {{ normalise_agent_name('converted_by') }}                                  as agent_name,
-        DATE(SAFE_CAST(order_confirmed_at AS TIMESTAMP))                            as sale_date,
-        count(*)                                                                    as sales_confirmed,
-        round(sum(SAFE_CAST(REGEXP_REPLACE(deal_amount, r',', '') AS NUMERIC)), 2) as total_deal_value
+        {{ normalise_agent_name('appointment_made_by') }}                                       as agent_name,
+        DATE(SAFE_CAST(order_confirmed_at AS TIMESTAMP), 'Europe/London')                       as sale_date,
+        count(*)                                                                                as sales_confirmed,
+        round(sum(
+            coalesce(
+                SAFE_CAST(REGEXP_REPLACE(deal_amount, r',', '') AS NUMERIC),
+                SAFE_CAST(REGEXP_REPLACE(appt_amount,  r',', '') AS NUMERIC),
+                0
+            )
+        ), 2)                                                                                   as total_deal_value
     from {{ ref('silver_sharpspring_leads') }}
     where is_sold = true
-      and converted_by is not null
-      and converted_by != 'Other'
-    group by agent_name, DATE(SAFE_CAST(order_confirmed_at AS TIMESTAMP))
+      and appointment_made_by is not null
+      and order_confirmed_at is not null
+    group by agent_name, DATE(SAFE_CAST(order_confirmed_at AS TIMESTAMP), 'Europe/London')
 ),
 
 -- per agent per day call metrics

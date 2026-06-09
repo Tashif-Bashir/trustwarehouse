@@ -1725,9 +1725,9 @@ function AgentTable({ agents, topAgentName = null }) {
           <thead><tr>
             <th>Agent</th>
             <th style={{ textAlign: 'right' }}>Outbound</th>
-            <th style={{ textAlign: 'right' }}>Qual.Conv</th>
-            <th style={{ textAlign: 'right' }}>Appts</th>
-            <th style={{ textAlign: 'right' }}>Calls/Appt</th>
+            <th style={{ textAlign: 'right' }}>Conv</th>
+            <th style={{ textAlign: 'right' }}>Appts / 85</th>
+            <th style={{ textAlign: 'right' }}>Conv/Appt</th>
             <th style={{ textAlign: 'right' }}>Avg Talk</th>
             <th>Status</th>
           </tr></thead>
@@ -1740,8 +1740,14 @@ function AgentTable({ agents, topAgentName = null }) {
                 </td>
                 <td style={{ textAlign: 'right' }}>{fmt(a.outbound)}</td>
                 <td style={{ textAlign: 'right' }}>{fmt(a.qual_convos)}</td>
-                <td style={{ textAlign: 'right', color: 'var(--ink)', fontWeight: 600 }}>{fmt(a.appts)}</td>
-                <td style={{ textAlign: 'right' }}>{a.calls_per_appt != null ? a.calls_per_appt + 'x' : '—'}</td>
+                <td style={{ textAlign: 'right', color: 'var(--ink)', fontWeight: 600 }}>{fmt(a.appts)} / 85</td>
+                <td style={{
+                  textAlign: 'right',
+                  color: a.conv_per_appt == null ? 'var(--muted)' : a.conv_per_appt <= 3 ? '#1FA77F' : 'var(--rose)',
+                  fontWeight: 600,
+                }} title="Conversations per appointment · target ≤ 3">
+                  {a.conv_per_appt != null ? a.conv_per_appt + 'x' : '—'}
+                </td>
                 <td style={{ textAlign: 'right' }}>{fmtSec(a.avg_talk)}</td>
                 <td>
                   <span className={a.on_target ? 'status-pill pill-target' : 'status-pill pill-miss'}>

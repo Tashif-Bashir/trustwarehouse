@@ -1373,18 +1373,18 @@ function AgentBars({ agents, topAgentName = null }) {
       <div className="sec-head">
         <div>
           <div className="sec-title">Agent performance</div>
-          <div className="sec-sub">Outbound calls · target = 3 calls per appointment</div>
+          <div className="sec-sub">Conversations · Appointments · target ≤ 3 conversations per appointment · monthly target = 85 appts</div>
         </div>
         <div className="legend-bar">
-          <span className="lg"><span className="target-line"/> Target</span>
+          <span className="lg"><span className="target-line"/> Monthly target (85)</span>
           <span className="lg"><span className="lg-dot" style={{ background: 'var(--mint)' }}/>On target</span>
           <span className="lg"><span className="lg-dot" style={{ background: 'var(--rose)' }}/>Off target</span>
         </div>
       </div>
       {agents.map(a => {
         const color = a.on_target ? '#3DD0A4' : '#FF6B7A';
-        const barPct = a.outbound / maxOut;
-        const targetPct = a.appts > 0 ? Math.min((a.appts * 3) / maxOut, 1) : null;
+        const barPct = a.appts / 85;
+        const targetPct = Math.min(1, 1); // monthly target line always at 100% of 85
         const isTop   = a.name === topAgentName;
         return (
           <div className="agent-bar-wrap" key={a.name}>
@@ -1394,20 +1394,20 @@ function AgentBars({ agents, topAgentName = null }) {
             </div>
             <div className="agent-bar-track">
               <div className="agent-bar-fill" style={{
-                width: m ? Math.round(barPct * 100) + '%' : '0%',
+                width: m ? Math.min(100, Math.round(barPct * 100)) + '%' : '0%',
                 background: `linear-gradient(90deg, ${color}cc, ${color}88)`,
-                minWidth: m && a.outbound > 0 ? '4px' : '0',
+                minWidth: m && a.appts > 0 ? '4px' : '0',
               }}/>
-              {targetPct && m && <div className="agent-bar-target" style={{ left: Math.round(targetPct * 100) + '%' }} title={`Target: ${a.appts * 3} calls`}/>}
+              {m && <div className="agent-bar-target" style={{ left: '100%' }} title="Monthly target: 85 appointments"/>}
             </div>
             <div className="agent-bar-nums">
-              <span>{a.outbound} out</span>
-              <span style={{ color: '#1FA77F', fontWeight: 600 }}>{a.appts} appt</span>
+              <span>{a.qual_convos} conv</span>
+              <span style={{ color: '#1FA77F', fontWeight: 600 }}>{a.appts} / 85 appt</span>
               <span style={{
-                color: a.calls_per_appt == null ? 'var(--muted)' : a.calls_per_appt <= 3 ? '#1FA77F' : 'var(--rose)',
+                color: a.conv_per_appt == null ? 'var(--muted)' : a.conv_per_appt <= 3 ? '#1FA77F' : 'var(--rose)',
                 fontWeight: 600,
-              }} title="Calls per appointment · lower is better · target ≤ 3">
-                {a.calls_per_appt != null ? a.calls_per_appt + 'x' : '—'}
+              }} title="Conversations per appointment (period total) · target ≤ 3">
+                {a.conv_per_appt != null ? a.conv_per_appt + 'x' : '—'}
               </span>
             </div>
             <div>
@@ -1725,9 +1725,9 @@ function AgentTable({ agents, topAgentName = null }) {
           <thead><tr>
             <th>Agent</th>
             <th style={{ textAlign: 'right' }}>Outbound</th>
-            <th style={{ textAlign: 'right' }}>Qual.Conv</th>
-            <th style={{ textAlign: 'right' }}>Appts</th>
-            <th style={{ textAlign: 'right' }}>Calls/Appt</th>
+            <th style={{ textAlign: 'right' }}>Conv</th>
+            <th style={{ textAlign: 'right' }}>Appts / 85</th>
+            <th style={{ textAlign: 'right' }}>Conv/Appt</th>
             <th style={{ textAlign: 'right' }}>Avg Talk</th>
             <th>Status</th>
           </tr></thead>
@@ -1740,8 +1740,14 @@ function AgentTable({ agents, topAgentName = null }) {
                 </td>
                 <td style={{ textAlign: 'right' }}>{fmt(a.outbound)}</td>
                 <td style={{ textAlign: 'right' }}>{fmt(a.qual_convos)}</td>
-                <td style={{ textAlign: 'right', color: 'var(--ink)', fontWeight: 600 }}>{fmt(a.appts)}</td>
-                <td style={{ textAlign: 'right' }}>{a.calls_per_appt != null ? a.calls_per_appt + 'x' : '—'}</td>
+                <td style={{ textAlign: 'right', color: 'var(--ink)', fontWeight: 600 }}>{fmt(a.appts)} / 85</td>
+                <td style={{
+                  textAlign: 'right',
+                  color: a.conv_per_appt == null ? 'var(--muted)' : a.conv_per_appt <= 3 ? '#1FA77F' : 'var(--rose)',
+                  fontWeight: 600,
+                }} title="Conversations per appointment · target ≤ 3">
+                  {a.conv_per_appt != null ? a.conv_per_appt + 'x' : '—'}
+                </td>
                 <td style={{ textAlign: 'right' }}>{fmtSec(a.avg_talk)}</td>
                 <td>
                   <span className={a.on_target ? 'status-pill pill-target' : 'status-pill pill-miss'}>

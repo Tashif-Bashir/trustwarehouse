@@ -609,19 +609,21 @@ _html_cache = None
 _html_lock  = threading.Lock()
 
 def _get_html():
+    """Read the dashboard HTML from public/index.html.
+
+    Earlier this fell back to a duplicate index.html at the repo root if the
+    public one was missing. That duplicate was deleted because Vercel's
+    static-file matching took precedence over our rewrite rule, so the
+    stale root copy shadowed dashboard updates that landed in public/.
+    """
     global _html_cache
     if _html_cache is None:
         with _html_lock:
             if _html_cache is None:
                 here = os.path.dirname(os.path.abspath(__file__))
-                for path in [
-                    os.path.join(here, '..', 'public', 'index.html'),
-                    os.path.join(here, '..', 'index.html'),
-                ]:
-                    if os.path.exists(path):
-                        with open(path, 'rb') as f:
-                            _html_cache = f.read()
-                        break
+                path = os.path.join(here, '..', 'public', 'index.html')
+                with open(path, 'rb') as f:
+                    _html_cache = f.read()
     return _html_cache
 
 @app.route('/api/data')

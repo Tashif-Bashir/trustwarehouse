@@ -533,7 +533,12 @@ def _load_all(d0s, d1s):
             outb  = int(r['outbound_calls']) if pd.notna(r['outbound_calls']) else 0
             appts = int(r['appts'])          if pd.notna(r['appts'])          else 0
             sales = int(r['sales'])          if pd.notna(r['sales'])          else 0
-            agents.append({'name':str(r['agent_name']),'total_calls':int(r['total_calls']) if pd.notna(r['total_calls']) else 0,'outbound':outb,'inbound':int(r['inbound_calls']) if pd.notna(r['inbound_calls']) else 0,'missed':int(r['missed_calls']) if pd.notna(r['missed_calls']) else 0,'unique_leads':int(r['unique_leads']) if pd.notna(r['unique_leads']) else 0,'avg_talk':int(r['avg_talk_time']) if pd.notna(r['avg_talk_time']) else 0,'qual_convos':int(r['qual_convos']) if pd.notna(r['qual_convos']) else 0,'appts':appts,'sales':sales,'deal_value':float(r['deal_value']) if pd.notna(r['deal_value']) else 0,'on_target':(outb/appts<=3) if appts>0 else False,'calls_per_appt':round(outb/appts,1) if appts>0 else None})
+            # Period-level ratios — sum first, then divide. Per-day versions
+            # were wrong because today's calls and today's appointments come
+            # from different leads (lead-to-booking lag is days, not zero).
+            # Target = 15 calls/appt (was 3, unrealistic — heating outbound
+            # to warm leads typically lands 7-20 calls/appt).
+            agents.append({'name':str(r['agent_name']),'total_calls':int(r['total_calls']) if pd.notna(r['total_calls']) else 0,'outbound':outb,'inbound':int(r['inbound_calls']) if pd.notna(r['inbound_calls']) else 0,'missed':int(r['missed_calls']) if pd.notna(r['missed_calls']) else 0,'unique_leads':int(r['unique_leads']) if pd.notna(r['unique_leads']) else 0,'avg_talk':int(r['avg_talk_time']) if pd.notna(r['avg_talk_time']) else 0,'qual_convos':int(r['qual_convos']) if pd.notna(r['qual_convos']) else 0,'appts':appts,'sales':sales,'deal_value':float(r['deal_value']) if pd.notna(r['deal_value']) else 0,'on_target':(outb/appts<=15) if appts>0 else False,'calls_per_appt':round(outb/appts,1) if appts>0 else None})
 
     ts_out = sum(a['outbound'] for a in agents); ts_ap = sum(a['appts'] for a in agents)
     ts_sa  = sum(a['sales'] for a in agents);   ts_on = sum(1 for a in agents if a['on_target'])

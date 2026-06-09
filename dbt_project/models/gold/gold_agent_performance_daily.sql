@@ -152,36 +152,17 @@ final as (
         coalesce(asch.appointments_sat, 0)                                                 as appointments_sat,
         coalesce(asch.appointments_sold, 0)                                                as appointments_sold,
         coalesce(s.sales_confirmed, 0)                                                     as sales_confirmed,
-        s.total_deal_value,
+        s.total_deal_value
 
-        -- qualified conversations per appointment (lower = better)
-        case
-            when coalesce(a.appointments_booked, 0) = 0 then null
-            else round(
-                (coalesce(cm.qualified_conversations, 0) + coalesce(cm.qualified_outbound_conversations, 0)) * 1.0
-                / coalesce(a.appointments_booked, 0),
-                1
-            )
-        end                                                                                 as qual_convos_per_appointment,
-
-        -- calls per appointment (1-in-3 target)
-        case
-            when coalesce(a.appointments_booked, 0) = 0 then null
-            else round(coalesce(cm.outbound_calls, 0) * 1.0 / a.appointments_booked, 1)
-        end                                                                                 as calls_per_appointment,
-
-        -- appointment to sale conversion rate per agent per day
-        case
-            when coalesce(a.appointments_booked, 0) = 0 then null
-            else round(coalesce(s.sales_confirmed, 0) * 1.0 / a.appointments_booked, 2)
-        end                                                                                 as appointment_to_sale_rate,
-
-        -- on target flag (1 appointment per 3 calls)
-        case
-            when coalesce(a.appointments_booked, 0) = 0 then false
-            when coalesce(cm.outbound_calls, 0) * 1.0 / a.appointments_booked <= 3 then true
-            else false
-        end                                                                                 as on_target
+        -- Per-day ratios used to live here (calls_per_appointment,
+        -- qual_convos_per_appointment, appointment_to_sale_rate, on_target).
+        -- They were structurally misleading: dividing today's calls by today's
+        -- appointments mixes two unrelated streams — the call activity is
+        -- spread across many leads not yet converted, while today's booked
+        -- appointments often came from leads called yesterday or last week.
+        -- The dashboard now computes these ratios at period-aggregate level
+        -- (sum first, then divide) in api/index.py, which is honest because
+        -- the lead-to-booking lag washes out over a 7-30 day window.
 
     from date_agent_spine sp
     left join call_metrics cm

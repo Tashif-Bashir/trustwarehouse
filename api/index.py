@@ -351,11 +351,14 @@ def _telesales_pre_appt(d0, d1):
 
 
 def _telesales_whiteboard():
-    """Mirror of the team's June @ Telesales whiteboard: per-agent sit
-    counts for Today / This Week (Mon-Sun) / This Month (full calendar
-    month including future-scheduled appointments). This is the headline
-    view the team writes on the office whiteboard — independent of the
-    dashboard's period picker."""
+    """Mirror of the team's office whiteboard. Axes:
+      Daily  = appointments BOOKED today (productivity — what each agent
+               generated today, regardless of when those sits will happen).
+      Weekly = appointments BOOKED this Mon-Sun week (productivity).
+      Month  = appointments SCHEDULED to sit in this calendar month
+               (this is what the 85/agent monthly target is measured
+               against). Mixed axis is intentional — matches the office
+               whiteboard one-for-one."""
     agents_list = "', '".join(TELESALES_AGENTS)
     try:
         return _q(f"""
@@ -367,21 +370,13 @@ def _telesales_whiteboard():
                 WHEN LOWER(appointment_made_by) IN ('alisha','alisha moore') THEN 'Alisha'
                 ELSE appointment_made_by
               END AS agent_name,
-              COUNTIF(appointment_date = CURRENT_DATE()) AS today_appts,
-              -- "Weekly" on the manager's whiteboard = appointments BOOKED
-              -- (created in CRM) within the current Mon-Sun calendar week,
-              -- NOT sits-this-week. It's a productivity metric: how many
-              -- bookings has the agent generated this week, regardless of
-              -- when those sits will happen. Column axes are intentionally
-              -- mixed on the whiteboard:
-              --   Daily  = sits scheduled today (appointment_date = today)
-              --   Weekly = bookings made this week (booked_at in this week)
-              --   Month  = sits scheduled in this calendar month
               COUNTIF(DATE(SAFE_CAST(appointment_booked_at AS TIMESTAMP), 'Europe/London')
-                      BETWEEN DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY))
-                      AND DATE_ADD(DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY)), INTERVAL 6 DAY)) AS week_appts,
-              COUNTIF(appointment_date BETWEEN DATE_TRUNC(CURRENT_DATE(), MONTH)
-                                          AND LAST_DAY(CURRENT_DATE())) AS month_appts
+                      = CURRENT_DATE('Europe/London')) AS today_appts,
+              COUNTIF(DATE(SAFE_CAST(appointment_booked_at AS TIMESTAMP), 'Europe/London')
+                      BETWEEN DATE_TRUNC(CURRENT_DATE('Europe/London'), WEEK(MONDAY))
+                      AND DATE_ADD(DATE_TRUNC(CURRENT_DATE('Europe/London'), WEEK(MONDAY)), INTERVAL 6 DAY)) AS week_appts,
+              COUNTIF(appointment_date BETWEEN DATE_TRUNC(CURRENT_DATE('Europe/London'), MONTH)
+                                          AND LAST_DAY(CURRENT_DATE('Europe/London'))) AS month_appts
             FROM `{PROJECT}.silver.silver_sharpspring_leads`
             WHERE appointment_booked = 'Yes'
               AND appointment_made_by IS NOT NULL

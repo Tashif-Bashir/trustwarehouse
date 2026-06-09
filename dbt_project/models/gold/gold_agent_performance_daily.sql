@@ -15,17 +15,50 @@ with calls as (
     and call_status = 'COMPLETED'
 ),
 
--- normalise agent names from SharpSpring appointment_made_by field
+-- Appointments BOOKED on this day (date the agent clicked save in CRM).
+-- Use Europe/London so the date axis matches the call_date axis (which is
+-- already London-anchored). Without the timezone, BigQuery defaults to UTC
+-- and late-evening UK bookings drift to the previous calendar day.
 appointments as (
     select
         {{ normalise_agent_name('appointment_made_by') }}                           as agent_name,
-        DATE(SAFE_CAST(appointment_booked_at AS TIMESTAMP))                         as appt_booked_date,
+        DATE(SAFE_CAST(appointment_booked_at AS TIMESTAMP), 'Europe/London')        as appt_booked_date,
         count(*)                                                                    as appointments_booked
     from {{ ref('silver_sharpspring_leads') }}
     where appointment_booked = 'Yes'
     and appointment_made_by is not null
     and appointment_booked_at is not null
-    group by agent_name, DATE(SAFE_CAST(appointment_booked_at AS TIMESTAMP))
+    group by agent_name, DATE(SAFE_CAST(appointment_booked_at AS TIMESTAMP), 'Europe/London')
+),
+
+-- Appointments SCHEDULED to sit on this day (the date the customer is in the
+-- diary for). Attributed to whoever booked it in CRM. This is what the
+-- telesales manager actually compares against — "how many appointments are
+-- in Lily's diary for this week" — vs the booked-at metric above which
+-- tracks dialling activity.
+--
+-- Three columns to give the team a clean read on the funnel:
+--   - appointments_scheduled = anything in the diary for this date
+--   - appointments_sat       = subset that actually happened (any outcome)
+--   - appointments_sold      = subset that closed
+appointments_scheduled as (
+    select
+        {{ normalise_agent_name('appointment_made_by') }}                           as agent_name,
+        appointment_date                                                            as appt_sit_date,
+        count(*)                                                                    as appointments_scheduled,
+        countif(lower(appointment_status) in (
+            'appointment sat', 'sold', 'sold on site', 'sold in office',
+            'follow up', 'too expensive', 'not interested', 'bought elsewhere',
+            'not ready yet', 'chc sold'
+        ))                                                                          as appointments_sat,
+        countif(lower(appointment_status) in (
+            'sold', 'sold on site', 'sold in office', 'chc sold'
+        ))                                                                          as appointments_sold
+    from {{ ref('silver_sharpspring_leads') }}
+    where appointment_booked = 'Yes'
+      and appointment_made_by is not null
+      and appointment_date is not null
+    group by agent_name, appointment_date
 ),
 
 -- sales credited to each agent per day
@@ -71,21 +104,40 @@ missed as (
     group by call_date, colleague_name
 ),
 
+-- Build the spine: every (date, agent) where ANYTHING happened. The previous
+-- version started FROM call_metrics, which silently dropped agents/dates that
+-- had appointments-but-no-calls. Most commonly: appointments scheduled to sit
+-- in the future, on a day no calls happen, were invisible.
+date_agent_spine as (
+    select call_date as date, agent_name from call_metrics
+    union distinct
+    select appt_booked_date as date, agent_name from appointments
+    union distinct
+    select appt_sit_date as date, agent_name from appointments_scheduled
+    union distinct
+    select sale_date as date, agent_name from sales
+    union distinct
+    select call_date as date, agent_name from missed
+),
+
 final as (
     select
-        cm.call_date                                                                        as date,
-        cm.agent_name,
+        sp.date,
+        sp.agent_name,
         cm.department,
-        cm.total_calls,
-        cm.outbound_calls,
-        cm.inbound_calls,
+        coalesce(cm.total_calls, 0)                                                        as total_calls,
+        coalesce(cm.outbound_calls, 0)                                                     as outbound_calls,
+        coalesce(cm.inbound_calls, 0)                                                      as inbound_calls,
         coalesce(m.missed_calls, 0)                                                        as missed_calls,
-        cm.unique_leads_contacted,
-        cm.total_talk_time_seconds,
-        cm.avg_talk_time_seconds,
-        cm.qualified_conversations,
-        cm.qualified_outbound_conversations,
+        coalesce(cm.unique_leads_contacted, 0)                                             as unique_leads_contacted,
+        coalesce(cm.total_talk_time_seconds, 0)                                            as total_talk_time_seconds,
+        coalesce(cm.avg_talk_time_seconds, 0)                                              as avg_talk_time_seconds,
+        coalesce(cm.qualified_conversations, 0)                                            as qualified_conversations,
+        coalesce(cm.qualified_outbound_conversations, 0)                                   as qualified_outbound_conversations,
         coalesce(a.appointments_booked, 0)                                                 as appointments_booked,
+        coalesce(asch.appointments_scheduled, 0)                                           as appointments_scheduled,
+        coalesce(asch.appointments_sat, 0)                                                 as appointments_sat,
+        coalesce(asch.appointments_sold, 0)                                                as appointments_sold,
         coalesce(s.sales_confirmed, 0)                                                     as sales_confirmed,
         s.total_deal_value,
 
@@ -93,7 +145,7 @@ final as (
         case
             when coalesce(a.appointments_booked, 0) = 0 then null
             else round(
-                (cm.qualified_conversations + cm.qualified_outbound_conversations) * 1.0
+                (coalesce(cm.qualified_conversations, 0) + coalesce(cm.qualified_outbound_conversations, 0)) * 1.0
                 / coalesce(a.appointments_booked, 0),
                 1
             )
@@ -102,7 +154,7 @@ final as (
         -- calls per appointment (1-in-3 target)
         case
             when coalesce(a.appointments_booked, 0) = 0 then null
-            else round(cm.outbound_calls * 1.0 / a.appointments_booked, 1)
+            else round(coalesce(cm.outbound_calls, 0) * 1.0 / a.appointments_booked, 1)
         end                                                                                 as calls_per_appointment,
 
         -- appointment to sale conversion rate per agent per day
@@ -114,20 +166,21 @@ final as (
         -- on target flag (1 appointment per 3 calls)
         case
             when coalesce(a.appointments_booked, 0) = 0 then false
-            when cm.outbound_calls * 1.0 / a.appointments_booked <= 3 then true
+            when coalesce(cm.outbound_calls, 0) * 1.0 / a.appointments_booked <= 3 then true
             else false
         end                                                                                 as on_target
 
-    from call_metrics cm
+    from date_agent_spine sp
+    left join call_metrics cm
+        on sp.date = cm.call_date and sp.agent_name = cm.agent_name
     left join missed m
-        on cm.call_date = m.call_date
-        and cm.agent_name = m.agent_name
+        on sp.date = m.call_date and sp.agent_name = m.agent_name
     left join appointments a
-        on cm.call_date = a.appt_booked_date
-        and cm.agent_name = a.agent_name
+        on sp.date = a.appt_booked_date and sp.agent_name = a.agent_name
+    left join appointments_scheduled asch
+        on sp.date = asch.appt_sit_date and sp.agent_name = asch.agent_name
     left join sales s
-        on cm.call_date = s.sale_date
-        and cm.agent_name = s.agent_name
+        on sp.date = s.sale_date and sp.agent_name = s.agent_name
 )
 
 select * from final

@@ -266,6 +266,15 @@ def _speed_to_call(d0, d1):
         return pd.DataFrame()
 
 def _telesales(d0, d1):
+    """Per-agent telesales totals over the period.
+
+    Two appointment metrics surfaced:
+      - appts (appointments_scheduled) — how many sits the agent has booked
+        that are due to happen in the period. This is the metric the telesales
+        manager compares against ("how many appointments has Lily got").
+      - appts_booked — booking activity in the period (legacy / fallback).
+    Plus appts_sat (subset that actually happened) and appts_sold (closed).
+    """
     try:
         return _q(f"""
             SELECT agent_name,
@@ -273,7 +282,11 @@ def _telesales(d0, d1):
                 SUM(inbound_calls) as inbound_calls, SUM(missed_calls) as missed_calls,
                 SUM(unique_leads_contacted) as unique_leads, SUM(total_talk_time_seconds) as total_talk_time,
                 ROUND(AVG(avg_talk_time_seconds),0) as avg_talk_time, SUM(qualified_conversations) as qual_convos,
-                SUM(appointments_booked) as appts, SUM(sales_confirmed) as sales,
+                SUM(appointments_scheduled) as appts,
+                SUM(appointments_booked) as appts_booked,
+                SUM(appointments_sat) as appts_sat,
+                SUM(appointments_sold) as appts_sold,
+                SUM(sales_confirmed) as sales,
                 ROUND(SUM(COALESCE(total_deal_value,0)),2) as deal_value
             FROM `{PROJECT}.gold.gold_agent_performance_daily`
             WHERE date BETWEEN '{d0}' AND '{d1}' AND agent_name != 'Other'
@@ -286,7 +299,9 @@ def _ts_daily(d0, d1):
     try:
         return _q(f"""
             SELECT date, SUM(total_calls) as calls, SUM(outbound_calls) as outbound,
-                   SUM(appointments_booked) as appts, SUM(sales_confirmed) as sales
+                   SUM(appointments_scheduled) as appts,
+                   SUM(appointments_sat) as appts_sat,
+                   SUM(sales_confirmed) as sales
             FROM `{PROJECT}.gold.gold_agent_performance_daily`
             WHERE date BETWEEN '{d0}' AND '{d1}' AND agent_name != 'Other'
             GROUP BY date ORDER BY date

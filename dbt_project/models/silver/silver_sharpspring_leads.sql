@@ -138,8 +138,11 @@ enriched as (
             c.region
         ) as derived_region,
 
-        -- clean date of the scheduled appointment (text field has empty strings — SAFE_CAST returns NULL for invalid values)
-        SAFE_CAST(appointment_datetime_text AS DATE)                            as appointment_date,
+        -- UK-local date when the appointment is scheduled to sit. The
+        -- previous version parsed `appointment_datetime_text` (the __v_text
+        -- variant) which SharpSpring leaves empty — so this column was NULL
+        -- for every lead lifetime. We now parse the actual timestamp column.
+        DATE(SAFE_CAST(appointment_datetime AS TIMESTAMP), 'Europe/London')     as appointment_date,
 
         -- domestic vs commercial: map free-text self_described_type to a clean enum
         case

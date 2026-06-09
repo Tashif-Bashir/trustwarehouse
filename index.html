@@ -2377,7 +2377,9 @@ function TelesalesWhiteboardTable({ agents, totals: T, tgtPerAgent, teamTarget }
   );
 }
 
-/* ── Telesales top table — mirrors the manager's xlsx June 2026 top table ─ */
+/* ── Telesales top table — mirrors the manager's xlsx June 2026 top table.
+   Appointments column = full-month sits (matches the whiteboard's Month
+   column), so Conv/Appt = Conv ÷ Month_Appts (her exact formula). */
 function TelesalesTopTable({ agents, totals: T, tgtPerAgent, teamTarget }) {
   const cell = { textAlign: 'right' };
   const ratioColor = (r) => r == null ? 'var(--muted)' : (r <= 3 ? '#1FA77F' : 'var(--rose)');
@@ -2402,12 +2404,12 @@ function TelesalesTopTable({ agents, totals: T, tgtPerAgent, teamTarget }) {
           </tr></thead>
           <tbody>
             {agents.map(a => {
-              const gap = a.appts - tgtPerAgent;
+              const gap = a.month_appts - tgtPerAgent;
               return (
                 <tr key={a.name}>
                   <td style={{color:'var(--ink)',fontWeight:600}}>{a.name}</td>
                   <td style={cell}>{fmt(a.qual_convos)}</td>
-                  <td style={{...cell, color:'var(--ink)', fontWeight:600}}>{fmt(a.appts)}</td>
+                  <td style={{...cell, color:'var(--ink)', fontWeight:600}}>{fmt(a.month_appts)}</td>
                   <td style={{...cell, color:'var(--muted)'}}>{tgtPerAgent}</td>
                   <td style={{...cell, color: gap >= 0 ? '#1FA77F' : 'var(--rose)', fontWeight:600}}>{gap >= 0 ? '+' + gap : gap}</td>
                   <td style={{...cell, color: ratioColor(a.conv_per_appt), fontWeight:600}}>{a.conv_per_appt != null ? a.conv_per_appt + 'x' : '—'}</td>
@@ -2423,9 +2425,9 @@ function TelesalesTopTable({ agents, totals: T, tgtPerAgent, teamTarget }) {
             <tr style={{borderTop:'2px solid var(--line)',fontWeight:700,background:'var(--surface-2)'}}>
               <td style={{color:'var(--ink)'}}>TEAM</td>
               <td style={cell}>{fmt(T.conv)}</td>
-              <td style={{...cell, color:'var(--ink)'}}>{fmt(T.appts)}</td>
+              <td style={{...cell, color:'var(--ink)'}}>{fmt(T.month_appts)}</td>
               <td style={{...cell, color:'var(--muted)'}}>{teamTarget}</td>
-              <td style={{...cell, color: (T.appts - teamTarget) >= 0 ? '#1FA77F' : 'var(--rose)'}}>{(T.appts - teamTarget) >= 0 ? '+' + (T.appts - teamTarget) : (T.appts - teamTarget)}</td>
+              <td style={{...cell, color: (T.month_appts - teamTarget) >= 0 ? '#1FA77F' : 'var(--rose)'}}>{(T.month_appts - teamTarget) >= 0 ? '+' + (T.month_appts - teamTarget) : (T.month_appts - teamTarget)}</td>
               <td style={{...cell, color: ratioColor(T.conv_per_appt)}}>{T.conv_per_appt != null ? T.conv_per_appt + 'x' : '—'}</td>
               <td>
                 <span className={(T.conv_per_appt != null && T.conv_per_appt <= 3) ? 'status-pill pill-target' : 'status-pill pill-miss'}>

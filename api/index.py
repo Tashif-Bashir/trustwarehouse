@@ -634,8 +634,10 @@ def _load_all(d0s, d1s):
             # target <= 3 (industry standard for warm-lead outbound telesales).
             # qual_convos now uses >=30s threshold to roughly match her manually-
             # marked "Conversation = Yes" tracking.
-            conv_per_appt = round(qual/appts, 2) if appts > 0 else None
-            agents.append({'name':str(r['agent_name']),'total_calls':int(r['total_calls']) if pd.notna(r['total_calls']) else 0,'outbound':outb,'inbound':int(r['inbound_calls']) if pd.notna(r['inbound_calls']) else 0,'missed':int(r['missed_calls']) if pd.notna(r['missed_calls']) else 0,'unique_leads':int(r['unique_leads']) if pd.notna(r['unique_leads']) else 0,'avg_talk':int(r['avg_talk_time']) if pd.notna(r['avg_talk_time']) else 0,'qual_convos':qual,'appts':appts,'appts_booked':appts_bookd,'appts_sat':appts_sat,'appts_sold':appts_sold,'sales':sales,'deal_value':float(r['deal_value']) if pd.notna(r['deal_value']) else 0,'on_target':(conv_per_appt is not None and conv_per_appt <= 3),'calls_per_appt':round(outb/appts,1) if appts>0 else None,'conv_per_appt':conv_per_appt,'pre_appt':0})
+            # Period-bounded ratio (kept for non-monthly views) — uses
+            # the period's appts as denominator.
+            conv_per_appt_period = round(qual/appts, 2) if appts > 0 else None
+            agents.append({'name':str(r['agent_name']),'total_calls':int(r['total_calls']) if pd.notna(r['total_calls']) else 0,'outbound':outb,'inbound':int(r['inbound_calls']) if pd.notna(r['inbound_calls']) else 0,'missed':int(r['missed_calls']) if pd.notna(r['missed_calls']) else 0,'unique_leads':int(r['unique_leads']) if pd.notna(r['unique_leads']) else 0,'avg_talk':int(r['avg_talk_time']) if pd.notna(r['avg_talk_time']) else 0,'qual_convos':qual,'appts':appts,'appts_booked':appts_bookd,'appts_sat':appts_sat,'appts_sold':appts_sold,'sales':sales,'deal_value':float(r['deal_value']) if pd.notna(r['deal_value']) else 0,'calls_per_appt':round(outb/appts,1) if appts>0 else None,'conv_per_appt_period':conv_per_appt_period,'pre_appt':0})
 
     # Merge in pre_appt (appointments with sit-date in period but booked before period started)
     pre_by_agent = {}
@@ -666,6 +668,13 @@ def _load_all(d0s, d1s):
         a['week_appts']  = wb.get('week_appts', 0)
         a['month_appts'] = wb.get('month_appts', 0)
         a['togo_appts']  = max(0, MONTHLY_TARGET_PER_AGENT - a['month_appts'])
+        # Manager's headline ratio = MTD conversations ÷ FULL-MONTH appts
+        # (matches her xlsx exactly — she uses sum of "Outcome=Appointment"
+        # across all of June as the denominator, NOT just sits that have
+        # already happened). Reduces ratio from inflated 3-12x back to
+        # the 1-3x range her tracker shows.
+        a['conv_per_appt'] = round(a['qual_convos'] / a['month_appts'], 2) if a['month_appts'] > 0 else None
+        a['on_target'] = (a['conv_per_appt'] is not None and a['conv_per_appt'] <= 3)
 
     ts_out = sum(a['outbound'] for a in agents); ts_ap = sum(a['appts'] for a in agents)
     ts_sa  = sum(a['sales'] for a in agents);   ts_on = sum(1 for a in agents if a['on_target'])
@@ -741,7 +750,9 @@ def _load_all(d0s, d1s):
             'a2s': round(ts_sa/ts_ap*100,1) if ts_ap else 0,
             'cpa': cpa,
             'conv': ts_conv,
-            'conv_per_appt': round(ts_conv/ts_ap, 2) if ts_ap else None,
+            # Team Conv/Appt uses full-month appts denominator (matches xlsx)
+            'conv_per_appt': round(ts_conv/ts_month, 2) if ts_month else None,
+            'conv_per_appt_period': round(ts_conv/ts_ap, 2) if ts_ap else None,
             'pre_appt': ts_pre,
             'new_appt': ts_new,
             'conv_per_new_appt': round(ts_conv/ts_new, 2) if ts_new else None,

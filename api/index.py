@@ -645,9 +645,15 @@ def _load_all(d0s, d1s):
     try:
         d0_dt = date.fromisoformat(d0s)
         d1_dt = date.fromisoformat(d1s)
-        # Monthly = period starts on the 1st AND spans at least 15 days
-        # (covers Month-to-date and Last Month, excludes Today/Yesterday/7d)
-        is_monthly = d0_dt.day == 1 and (d1_dt - d0_dt).days >= 14
+        # Monthly = period starts on the 1st of a month AND ends in the SAME
+        # calendar month. Covers Month-to-date and Last Month. Excludes
+        # Today/Yesterday/Last-7d (those don't start on the 1st) and
+        # Quarter-to-date (ends in a later month than it starts).
+        is_monthly = (
+            d0_dt.day == 1
+            and d0_dt.year == d1_dt.year
+            and d0_dt.month == d1_dt.month
+        )
     except Exception:
         pass
 

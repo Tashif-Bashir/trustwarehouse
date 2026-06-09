@@ -2281,12 +2281,8 @@ function InsightsPanel({ insights }) {
 }
 
 function TelesalesView({ data }) {
-  // Explicit property access — avoids any Babel-standalone quirks with
-  // multi-key-rename destructuring of underscored keys (was producing
-  // undefined isMonthly even when data.is_monthly was true).
   const agents = data.agents || [];
   const T = data.totals || {};
-  const isMonthly = data.is_monthly === true;
   const tgtPerAgent = data.team_target_per_agent || 85;
   const teamTarget = data.team_target || 340;
   const noAgents = !agents.length;
@@ -2319,13 +2315,7 @@ function TelesalesView({ data }) {
 
       {!noAgents && <TelesalesWhiteboardTable agents={agents} totals={T} tgtPerAgent={tgtPerAgent} teamTarget={teamTarget}/>}
       {!noAgents && <TelesalesTopTable agents={agents} totals={T} tgtPerAgent={tgtPerAgent} teamTarget={teamTarget}/>}
-      {!noAgents && isMonthly && <TelesalesFreshnessTable agents={agents} totals={T}/>}
-      {!noAgents && !isMonthly && (
-        <div className="card" style={{padding:'14px 18px',color:'var(--muted)',fontSize:12}}>
-          The <b>New vs Carried Over</b> breakdown is only shown for monthly periods (Month to date, Last month).
-          The "Pre Appt" carry-over needs a month boundary to be meaningful. Switch to <b>Month to date</b> to see it.
-        </div>
-      )}
+      {!noAgents && <TelesalesFreshnessTable agents={agents} totals={T}/>}
     </>
   );
 }

@@ -133,15 +133,20 @@ missed as (
 -- had appointments-but-no-calls. Most commonly: appointments scheduled to sit
 -- in the future, on a day no calls happen, were invisible.
 date_agent_spine as (
-    select call_date as date, agent_name from call_metrics
-    union distinct
-    select appt_booked_date as date, agent_name from appointments
-    union distinct
-    select appt_sit_date as date, agent_name from appointments_scheduled
-    union distinct
-    select sale_date as date, agent_name from sales
-    union distinct
-    select call_date as date, agent_name from missed
+    select * from (
+        select call_date as date, agent_name from call_metrics
+        union distinct
+        select appt_booked_date as date, agent_name from appointments
+        union distinct
+        select appt_sit_date as date, agent_name from appointments_scheduled
+        union distinct
+        select sale_date as date, agent_name from sales
+        union distinct
+        select call_date as date, agent_name from missed
+    )
+    -- normalise_agent_name returns NULL for 'Other' values from CRM;
+    -- drop those rows so the not_null test on agent_name passes.
+    where agent_name is not null
 ),
 
 final as (

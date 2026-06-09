@@ -707,7 +707,21 @@ def _load_all(d0s, d1s):
     ts_new  = sum(a['new_appt'] for a in agents)
     ts_today = sum(a['today_appts'] for a in agents)
     ts_week  = sum(a['week_appts'] for a in agents)
-    ts_month = sum(a['month_appts'] for a in agents)
+    # Use a direct count for team month total so that appointments with
+    # NULL appointment_made_by (not attributable to any agent) are still
+    # included in the team total. Per-agent sum would silently drop them.
+    try:
+        _raw = _q(f"""
+            SELECT COUNTIF(appointment_date BETWEEN DATE_TRUNC(CURRENT_DATE('Europe/London'), MONTH)
+                                               AND LAST_DAY(CURRENT_DATE('Europe/London'))) AS c
+            FROM `{PROJECT}.silver.silver_sharpspring_leads`
+            WHERE appointment_date IS NOT NULL
+              AND LOWER(COALESCE(appointment_status, '')) NOT IN
+                  ('appointment cancelled','cancelled','cancel','appointment cancel')
+        """)
+        ts_month = int(_raw['c'].iloc[0]) if not _raw.empty else sum(a['month_appts'] for a in agents)
+    except Exception:
+        ts_month = sum(a['month_appts'] for a in agents)
     monthly_target_per_agent = MONTHLY_TARGET_PER_AGENT
     team_target = monthly_target_per_agent * len(TELESALES_AGENTS)
     ts_togo = max(0, team_target - ts_month)

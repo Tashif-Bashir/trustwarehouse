@@ -2315,7 +2315,6 @@ function TelesalesView({ data }) {
 
       {!noAgents && <TelesalesWhiteboardTable agents={agents} totals={T} tgtPerAgent={tgtPerAgent} teamTarget={teamTarget}/>}
       {!noAgents && <TelesalesTopTable agents={agents} totals={T} tgtPerAgent={tgtPerAgent} teamTarget={teamTarget}/>}
-      {!noAgents && <TelesalesFreshnessTable agents={agents} totals={T}/>}
     </>
   );
 }
@@ -2430,74 +2429,6 @@ function TelesalesTopTable({ agents, totals: T, tgtPerAgent, teamTarget }) {
                 <span className={(T.conv_per_appt != null && T.conv_per_appt <= 3) ? 'status-pill pill-target' : 'status-pill pill-miss'}>
                   <span className="pill-glyph">{(T.conv_per_appt != null && T.conv_per_appt <= 3) ? Ic.check : Ic.x}</span>
                   {(T.conv_per_appt != null && T.conv_per_appt <= 3) ? 'On' : 'Off'}
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-/* ── Telesales freshness table — mirrors the manager's xlsx June 2026
-       bottom table. Shows Pre Appt (carry-over from previous month) vs New
-       Appt (booked this month), with Conv/New as the tougher efficiency ratio. */
-function TelesalesFreshnessTable({ agents, totals: T }) {
-  const cell = { textAlign: 'right' };
-  const ratioColor = (r) => r == null ? 'var(--muted)' : (r <= 3 ? '#1FA77F' : 'var(--rose)');
-  return (
-    <div className="card">
-      <div className="sec-head">
-        <div>
-          <div className="sec-title">Freshness — new vs carried over</div>
-          <div className="sec-sub">
-            Pre Appt = booked in a previous month, sits this month · New Appt = booked this month · Conv/New target ≤ 3
-          </div>
-        </div>
-      </div>
-      <div className="tbl-scroll">
-        <table className="tbl">
-          <thead><tr>
-            <th>Agent</th>
-            <th style={cell}>Pre Appt</th>
-            <th style={cell}>Conversations</th>
-            <th style={cell}>New Appt</th>
-            <th style={cell}>All Appt</th>
-            <th style={cell}>Conv / New</th>
-            <th>Status</th>
-          </tr></thead>
-          <tbody>
-            {agents.map(a => {
-              const onTarget = a.conv_per_new_appt != null && a.conv_per_new_appt <= 3;
-              return (
-                <tr key={a.name}>
-                  <td style={{color:'var(--ink)',fontWeight:600}}>{a.name}</td>
-                  <td style={{...cell, color:'var(--muted)'}}>{fmt(a.pre_appt)}</td>
-                  <td style={cell}>{fmt(a.qual_convos)}</td>
-                  <td style={{...cell, color:'var(--ink)', fontWeight:600}}>{fmt(a.new_appt)}</td>
-                  <td style={{...cell, color:'var(--muted)'}}>{fmt(a.appts)}</td>
-                  <td style={{...cell, color: ratioColor(a.conv_per_new_appt), fontWeight:600}}>{a.conv_per_new_appt != null ? a.conv_per_new_appt + 'x' : '—'}</td>
-                  <td>
-                    <span className={onTarget ? 'status-pill pill-target' : 'status-pill pill-miss'}>
-                      <span className="pill-glyph">{onTarget ? Ic.check : Ic.x}</span>
-                      {onTarget ? 'On' : 'Off'}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-            <tr style={{borderTop:'2px solid var(--line)',fontWeight:700,background:'var(--surface-2)'}}>
-              <td style={{color:'var(--ink)'}}>TEAM</td>
-              <td style={{...cell, color:'var(--muted)'}}>{fmt(T.pre_appt)}</td>
-              <td style={cell}>{fmt(T.conv)}</td>
-              <td style={{...cell, color:'var(--ink)'}}>{fmt(T.new_appt)}</td>
-              <td style={{...cell, color:'var(--muted)'}}>{fmt(T.appts)}</td>
-              <td style={{...cell, color: ratioColor(T.conv_per_new_appt)}}>{T.conv_per_new_appt != null ? T.conv_per_new_appt + 'x' : '—'}</td>
-              <td>
-                <span className={(T.conv_per_new_appt != null && T.conv_per_new_appt <= 3) ? 'status-pill pill-target' : 'status-pill pill-miss'}>
-                  <span className="pill-glyph">{(T.conv_per_new_appt != null && T.conv_per_new_appt <= 3) ? Ic.check : Ic.x}</span>
-                  {(T.conv_per_new_appt != null && T.conv_per_new_appt <= 3) ? 'On' : 'Off'}
                 </span>
               </td>
             </tr>

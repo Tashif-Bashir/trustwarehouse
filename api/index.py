@@ -265,6 +265,14 @@ def _speed_to_call(d0, d1):
     except Exception:
         return pd.DataFrame()
 
+# The telesales team is exactly these four agents. Everyone else in
+# gold_agent_performance_daily either books occasionally (e.g., Reilly Andrew),
+# fields inbound only (e.g., Helen, Lucy), or is in a different department
+# (e.g., Josh Baron, Alice Hardegon). The manager's Q2 Telesales Tracker
+# spreadsheet has monthly sheets only for these four.
+TELESALES_AGENTS = ('Lily', 'Sue', 'Alicja Aleksiuk', 'Alisha')
+
+
 def _telesales(d0, d1):
     """Per-agent telesales totals over the period.
 
@@ -275,6 +283,7 @@ def _telesales(d0, d1):
       - appts_booked — booking activity in the period (legacy / fallback).
     Plus appts_sat (subset that actually happened) and appts_sold (closed).
     """
+    agents_list = "', '".join(TELESALES_AGENTS)
     try:
         return _q(f"""
             SELECT agent_name,
@@ -289,13 +298,14 @@ def _telesales(d0, d1):
                 SUM(sales_confirmed) as sales,
                 ROUND(SUM(COALESCE(total_deal_value,0)),2) as deal_value
             FROM `{PROJECT}.gold.gold_agent_performance_daily`
-            WHERE date BETWEEN '{d0}' AND '{d1}' AND agent_name != 'Other'
+            WHERE date BETWEEN '{d0}' AND '{d1}' AND agent_name IN ('{agents_list}')
             GROUP BY agent_name ORDER BY appts DESC, outbound_calls DESC
         """)
     except Exception:
         return pd.DataFrame()
 
 def _ts_daily(d0, d1):
+    agents_list = "', '".join(TELESALES_AGENTS)
     try:
         return _q(f"""
             SELECT date, SUM(total_calls) as calls, SUM(outbound_calls) as outbound,
@@ -303,7 +313,7 @@ def _ts_daily(d0, d1):
                    SUM(appointments_sat) as appts_sat,
                    SUM(sales_confirmed) as sales
             FROM `{PROJECT}.gold.gold_agent_performance_daily`
-            WHERE date BETWEEN '{d0}' AND '{d1}' AND agent_name != 'Other'
+            WHERE date BETWEEN '{d0}' AND '{d1}' AND agent_name IN ('{agents_list}')
             GROUP BY date ORDER BY date
         """)
     except Exception:

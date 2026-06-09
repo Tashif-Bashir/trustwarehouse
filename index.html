@@ -1,0 +1,2496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trustwarehouse Analytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
+<style>
+  *,*::before,*::after{ box-sizing:border-box; margin:0; padding:0; }
+  :root{
+    --bg:#F2F3F7; --panel:#FFFFFF;
+    --ink:#171A2B; --ink2:#3B3F55;
+    --muted:#9AA0B4; --muted2:#C7CADA;
+    --line:#EDEEF3; --line2:#E5E7EF;
+    --indigo:#5B6CFF; --indigo-soft:#EEF0FF;
+    --violet:#8B5CF6; --violet-soft:#F2EDFF;
+    --amber:#F5B544; --amber-soft:#FFF4DC;
+    --mint:#3DD0A4; --mint-soft:#E2F8EF;
+    --rose:#FF6B7A; --rose-soft:#FFE9EC;
+    --sky:#5AC8FA; --sky-soft:#E6F6FF;
+    --shadow-sm:0 1px 3px rgba(20,23,40,.05);
+    --shadow-md:0 8px 24px rgba(20,23,40,.08);
+    --shadow-lg:0 12px 40px rgba(20,23,40,.10);
+  }
+  html,body{ background:var(--bg); color:var(--ink); font-family:'DM Sans',system-ui,-apple-system,sans-serif; font-size:14px; -webkit-font-smoothing:antialiased; }
+  button{ font-family:inherit; cursor:pointer; border:none; background:none; color:inherit; touch-action:manipulation; }
+  ::-webkit-scrollbar{ width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb{ background:var(--line2); border-radius:8px; border:2px solid var(--bg); }
+
+  /* ─── Layout ─── */
+  .app{ display:grid; grid-template-columns:52px 1fr; min-height:100vh; }
+
+  /* ─── Sidebar ─── */
+  .sidebar{
+    background:var(--panel); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; padding:22px 0;
+    position:fixed; left:0; top:0; height:100vh; width:230px;
+    z-index:100; overflow:hidden;
+    transform:translateX(-178px);
+    transition:transform .32s cubic-bezier(.22,1,.36,1), box-shadow .32s ease;
+  }
+  .sidebar:hover, .sidebar.expanded{
+    transform:translateX(0);
+    box-shadow:6px 0 28px rgba(20,23,40,.10);
+  }
+  /* fade text in/out with sidebar */
+  .sidebar .logo-name,
+  .sidebar .nav-item span,
+  .sidebar .nav-label{
+    transition:opacity .2s ease;
+  }
+  .sidebar:not(:hover):not(.expanded) .logo-name,
+  .sidebar:not(:hover):not(.expanded) .nav-item span,
+  .sidebar:not(:hover):not(.expanded) .nav-label{
+    opacity:0; pointer-events:none;
+  }
+  /* active left-border strip when collapsed */
+  .nav-item.active{
+    border-left:3px solid transparent;
+    padding-left:9px;
+  }
+  .sidebar:not(:hover):not(.expanded) .nav-item.active{
+    border-left-color:#5B6CFF;
+    background:var(--indigo-soft);
+    border-radius:0 10px 10px 0;
+  }
+  .logo{ display:flex; align-items:center; gap:10px; padding:4px 16px 22px; }
+  .logo-mark{
+    width:32px; height:32px; border-radius:9px; flex-shrink:0;
+    background:linear-gradient(135deg,#5B6CFF 0%,#8B5CF6 100%);
+    display:flex; align-items:center; justify-content:center;
+    color:#fff; font-weight:700; font-size:15px;
+    box-shadow:0 5px 12px rgba(91,108,255,.35);
+  }
+  .logo-name{ font-weight:700; font-size:15px; letter-spacing:-.2px; color:var(--ink); }
+  .nav-label{ font-size:10px; letter-spacing:1.4px; text-transform:uppercase; color:var(--muted); padding:6px 16px; font-weight:600; margin-top:4px; white-space:nowrap; }
+  .nav-item{
+    width:100%; display:flex; align-items:center; gap:11px;
+    padding:10px 16px; border-radius:10px; margin-bottom:2px; white-space:nowrap;
+    color:var(--ink2); font-size:13.5px; font-weight:500;
+    transition:all .15s ease;
+  }
+  .nav-item:hover{ background:var(--bg); color:var(--ink); }
+  .nav-item.active{
+    background:linear-gradient(135deg,#5B6CFF 0%,#8B5CF6 100%);
+    color:#fff; box-shadow:0 6px 18px rgba(91,108,255,.30);
+  }
+  .nav-item svg{ width:17px; height:17px; flex-shrink:0; color:var(--muted); }
+  .nav-item:hover svg{ color:var(--ink); }
+  .nav-item.active svg{ color:#fff; }
+
+  /* ─── Main / Topbar ─── */
+  .main{ padding:22px 26px 48px; min-width:0; overflow-x:hidden; grid-column:2; }
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:22px; gap:18px; flex-wrap:wrap;
+  }
+  .topbar-left{ display:flex; align-items:center; gap:22px; min-width:0; }
+  .page-title{ font-size:22px; font-weight:700; letter-spacing:-.4px; }
+  .tabs{
+    display:flex; background:var(--panel); border-radius:11px;
+    padding:4px; box-shadow:var(--shadow-sm); gap:2px;
+  }
+  .tab{
+    padding:8px 16px; border-radius:8px;
+    font-size:12.5px; font-weight:600; color:var(--muted);
+    transition:all .18s cubic-bezier(.22,1,.36,1);
+  }
+  .tab:hover{ color:var(--ink); }
+  .tab.active{
+    background:linear-gradient(135deg,#5B6CFF 0%,#8B5CF6 100%);
+    color:#fff; box-shadow:0 4px 14px rgba(91,108,255,.30);
+  }
+  .topbar-right{ display:flex; align-items:center; gap:10px; }
+  .refreshed{ font-size:11.5px; color:var(--muted); font-weight:500; }
+  .live-pulse{ display:inline-flex; align-items:center; gap:6px;
+    font-size:11.5px; color:var(--muted); font-weight:600;
+    padding:4px 9px; border-radius:99px; background:var(--bg);
+    user-select:none; }
+  .live-dot{ width:7px; height:7px; border-radius:50%; display:inline-block;
+    box-shadow:0 0 0 0 currentColor; }
+  .live-dot.is-fresh{ background:#3DD0A4; color:#3DD0A4;
+    animation: live-pulse-fresh 2s ease-out infinite; }
+  .live-dot.is-stale{ background:#F5B544; color:#F5B544; }
+  @keyframes live-pulse-fresh {
+    0%   { box-shadow: 0 0 0 0   rgba(61,208,164,0.55); }
+    70%  { box-shadow: 0 0 0 7px rgba(61,208,164,0);    }
+    100% { box-shadow: 0 0 0 0   rgba(61,208,164,0);    }
+  }
+
+  /* Period picker */
+  .period-wrap{ position:relative; }
+  .period-btn{
+    display:flex; align-items:center; gap:8px;
+    background:var(--panel); padding:8px 12px; border-radius:10px;
+    box-shadow:var(--shadow-sm); font-size:12.5px; color:var(--ink2); font-weight:500;
+  }
+  .period-btn:hover{ box-shadow:var(--shadow-md); }
+  .period-btn svg{ width:14px; height:14px; color:var(--muted); }
+  .period-pop{
+    position:absolute; top:calc(100% + 6px); right:0; z-index:30;
+    background:var(--panel); border-radius:12px;
+    box-shadow:var(--shadow-lg); padding:6px;
+    min-width:180px; display:flex; flex-direction:column;
+    animation:popIn .15s ease-out;
+  }
+  .period-pop-head{
+    font-size:10px; letter-spacing:1.4px; text-transform:uppercase;
+    color:var(--muted); font-weight:600; padding:8px 12px 6px;
+  }
+  .period-pop-item{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:8px 12px; border-radius:7px;
+    font-size:13px; font-weight:500; color:var(--ink2);
+    text-align:left; transition:all .12s;
+  }
+  .period-pop-item:hover{ background:var(--indigo-soft); color:var(--indigo); }
+  .period-pop-item.active{ background:var(--indigo-soft); color:var(--indigo); font-weight:600; }
+  .period-pop-check{ display:flex; align-items:center; }
+  .period-pop-check svg{ width:14px; height:14px; }
+
+  .icon-btn{
+    width:36px; height:36px; border-radius:10px;
+    background:var(--panel); display:flex; align-items:center; justify-content:center;
+    box-shadow:var(--shadow-sm); color:var(--ink2);
+    transition:all .15s;
+  }
+  .icon-btn:hover{ box-shadow:var(--shadow-md); color:var(--indigo); }
+  .icon-btn.active{ background:var(--indigo); color:#fff; box-shadow:0 4px 12px rgba(91,108,255,.28); }
+  .icon-btn svg{ width:15px; height:15px; }
+
+  /* ─── Calendar date picker ─── */
+  .cal-pop{
+    position:absolute; right:0; top:calc(100% + 8px);
+    background:var(--panel); border-radius:14px;
+    box-shadow:var(--shadow-lg),0 0 0 1px var(--line);
+    padding:16px; z-index:200; width:272px;
+  }
+  .cal-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .cal-nav-btn{
+    width:28px; height:28px; border-radius:7px; font-size:18px; line-height:1;
+    display:flex; align-items:center; justify-content:center; color:var(--ink2);
+    transition:background .1s;
+  }
+  .cal-nav-btn:hover{ background:var(--bg); color:var(--indigo); }
+  .cal-nav-title{ font-size:13px; font-weight:600; color:var(--ink); }
+  .cal-dow{ display:grid; grid-template-columns:repeat(7,1fr); margin-bottom:4px; }
+  .cal-dow span{ text-align:center; font-size:10px; font-weight:600; color:var(--muted); padding:4px 0; }
+  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); }
+  .cal-day{
+    text-align:center; font-size:12px; padding:6px 0; border-radius:6px; cursor:pointer;
+    color:var(--ink); transition:background .08s,color .08s; user-select:none; position:relative;
+  }
+  .cal-day:hover:not(.future){ background:var(--indigo-soft); color:var(--indigo); }
+  .cal-day.other{ color:var(--muted2); }
+  .cal-day.today{ font-weight:700; }
+  .cal-day.today::after{
+    content:''; position:absolute; bottom:2px; left:50%; transform:translateX(-50%);
+    width:3px; height:3px; border-radius:50%; background:var(--indigo);
+  }
+  .cal-day.future{ opacity:.3; pointer-events:none; }
+  .cal-day.in-range{ background:var(--indigo-soft); color:var(--indigo); border-radius:0; }
+  .cal-day.range-start{ background:var(--indigo)!important; color:#fff!important; border-radius:6px 0 0 6px; }
+  .cal-day.range-end{ background:var(--indigo)!important; color:#fff!important; border-radius:0 6px 6px 0; }
+  .cal-day.range-single{ border-radius:6px!important; }
+  .cal-footer{ margin-top:12px; display:flex; align-items:center; gap:8px; border-top:1px solid var(--line); padding-top:10px; }
+  .cal-range-label{ font-size:11px; color:var(--muted); font-weight:500; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cal-apply{
+    padding:6px 13px; border-radius:8px; background:var(--indigo); color:#fff;
+    font-size:12px; font-weight:600; transition:opacity .1s; white-space:nowrap;
+  }
+  .cal-apply:hover{ opacity:.85; }
+  .cal-apply:disabled{ opacity:.35; pointer-events:none; }
+  .cal-cancel{ padding:6px 10px; border-radius:8px; background:var(--bg); color:var(--ink2); font-size:12px; font-weight:600; white-space:nowrap; }
+
+  /* ─── Grids ─── */
+  /* QC card — attribution data-quality */
+  .qc-card{ margin-bottom:14px; }
+  .qc-card .card-label{ display:flex; align-items:center; gap:10px; }
+  .qc-pill{ background:var(--amber-soft); color:#A87B0A; padding:2px 10px; border-radius:99px; font-size:11px; font-weight:600; letter-spacing:0.02em; }
+  .qc-toggle{ background:transparent; border:1px solid var(--border); color:var(--ink); padding:4px 10px; border-radius:6px; font-size:12px; cursor:pointer; }
+  .qc-toggle:hover{ background:var(--bg-2); }
+  .qc-summary{ display:flex; flex-wrap:wrap; gap:18px; padding:14px 4px 6px; }
+  .qc-row{ display:flex; align-items:baseline; gap:8px; }
+  .qc-row .qc-count{ font-size:22px; font-weight:700; color:#A87B0A; }
+  .qc-row .qc-label{ font-size:12.5px; color:var(--muted); }
+  .qc-row.qc-clean .qc-count{ color:#1FA77F; }
+  .qc-leads{ margin-top:10px; max-height:320px; overflow-y:auto; border-top:1px solid var(--border); padding-top:10px; }
+  .qc-leads table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+  .qc-leads th{ text-align:left; padding:6px 8px; color:var(--muted); font-weight:600; border-bottom:1px solid var(--border); }
+  .qc-leads td{ padding:6px 8px; border-bottom:1px solid var(--border); }
+  .qc-leads td.pf-google{ color:#1A73E8; font-weight:600; }
+  .qc-leads td.pf-meta{ color:#0866FF; font-weight:600; }
+  .qc-leads td.pf-bing{ color:#008373; font-weight:600; }
+  .qc-leads td.pf-none{ color:var(--muted); }
+  .qc-leads td.qc-flag-cell{ font-size:11.5px; color:var(--muted); }
+
+  .g5{ display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:14px; }
+  .g4{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:14px; }
+  .g3{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:14px; }
+  .g2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+  .g21{ display:grid; grid-template-columns:2fr 1fr; gap:14px; margin-bottom:14px; }
+  .g12{ display:grid; grid-template-columns:1fr 2fr; gap:14px; margin-bottom:14px; }
+  .row-mix{ display:grid; grid-template-columns:1fr 1fr 1.2fr 1.2fr; gap:14px; margin-bottom:14px; }
+
+  /* ─── Card ─── */
+  .card{
+    background:var(--panel); border-radius:16px;
+    padding:18px 20px; box-shadow:var(--shadow-sm);
+    animation-duration: var(--motion-dur);
+    animation-timing-function: var(--motion-ease);
+    animation-fill-mode: both;
+    transition: transform .25s var(--motion-ease), box-shadow .25s var(--motion-ease);
+  }
+  /* Motion variants */
+  body[data-motion="rise"]  .card{ animation-name: rise; }
+  body[data-motion="fade"]  .card{ animation-name: fadeUp; }
+  body[data-motion="scale"] .card{ animation-name: scaleIn; }
+  body[data-motion="slide"] .card{ animation-name: slideR; }
+  body[data-motion="blur"]  .card{ animation-name: blurIn; }
+  body[data-motion="pop"]   .card{ animation-name: pop; }
+  body[data-motion="none"]  .card{ animation: none !important; }
+
+  /* Hover effects */
+  body[data-hover="lift"]  .card:hover{ transform: translateY(-3px); box-shadow: var(--shadow-md); }
+  body[data-hover="glow"]  .card:hover{ box-shadow: 0 0 0 1px rgba(91,108,255,.25), 0 12px 32px rgba(91,108,255,.18); }
+  body[data-hover="tilt"]  .card:hover{ transform: translateY(-2px) rotate(-.3deg); box-shadow: var(--shadow-md); }
+  body[data-hover="zoom"]  .card:hover{ transform: scale(1.015); box-shadow: var(--shadow-md); }
+  body[data-hover="none"]  .card:hover{ transform: none; box-shadow: var(--shadow-sm); }
+
+  /* Stagger */
+  .card:nth-child(1) { animation-delay: calc(0 * var(--motion-stagger)); }
+  .card:nth-child(2) { animation-delay: calc(1 * var(--motion-stagger)); }
+  .card:nth-child(3) { animation-delay: calc(2 * var(--motion-stagger)); }
+  .card:nth-child(4) { animation-delay: calc(3 * var(--motion-stagger)); }
+  .card:nth-child(5) { animation-delay: calc(4 * var(--motion-stagger)); }
+  .card:nth-child(6) { animation-delay: calc(5 * var(--motion-stagger)); }
+  .card:nth-child(7) { animation-delay: calc(6 * var(--motion-stagger)); }
+  .card:nth-child(8) { animation-delay: calc(7 * var(--motion-stagger)); }
+
+  @media (prefers-reduced-motion: reduce){
+    .card, .svg-line, .agent-bar-fill{ animation: none !important; transition: none !important; }
+  }
+  .card-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+  .card-label{ font-size:12px; color:var(--muted); font-weight:500; }
+  .card-icon{
+    width:32px; height:32px; border-radius:9px;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .card-icon svg{ width:15px; height:15px; }
+
+  /* KPI grammar */
+  .kpi{ display:flex; flex-direction:column; }
+  .kpi-value{
+    font-size:28px; font-weight:700; letter-spacing:-.6px;
+    margin-top:12px; line-height:1; color:var(--ink);
+  }
+  .kpi-delta{
+    display:inline-flex; align-items:center; gap:4px;
+    padding:4px 10px 4px 8px; border-radius:20px;
+    font-size:10.5px; font-weight:600;
+    margin-top:10px; align-self:flex-start;
+  }
+  .kpi-delta svg{ width:11px; height:11px; }
+  .kpi-delta.good{ background:var(--mint-soft); color:#1FA77F; }
+  .kpi-delta.bad{ background:var(--rose-soft); color:var(--rose); }
+  .kpi-sub{ font-size:11px; color:var(--muted); margin-top:10px; }
+  /* Insights panel (Telesales) */
+  .insights-card{ margin-bottom:14px; }
+  .insights-count{ font-size:11px; color:var(--muted); font-weight:600; padding:3px 10px; background:var(--bg-2); border-radius:99px; }
+  .insights-list{ display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:12px 4px 4px; }
+  @media (max-width: 900px){ .insights-list{ grid-template-columns:1fr; } }
+  .insight{ display:flex; gap:12px; padding:12px 14px; border-radius:10px; border-left:3px solid; }
+  .insight-red   { background:#FFF1F4; border-color:var(--rose);   }
+  .insight-amber { background:#FFF7E6; border-color:#D4A017;       }
+  .insight-green { background:#E9F8F1; border-color:#1FA77F;       }
+  .insight-icon{ font-size:18px; line-height:1.4; flex-shrink:0; }
+  .insight-body{ flex:1; min-width:0; }
+  .insight-title{ font-size:13.5px; font-weight:600; color:var(--ink); margin-bottom:3px; }
+  .insight-detail{ font-size:12px; color:#525252; line-height:1.5; }
+  .insight-action{ font-size:11.5px; color:var(--muted); margin-top:4px; font-style:italic; }
+
+  /* Top pill on AgentBars + AgentTable */
+  .agent-pill{ display:inline-flex; align-items:center; gap:3px; font-size:10px; font-weight:700; padding:2px 7px; border-radius:99px; margin-left:6px; letter-spacing:0.03em; text-transform:uppercase; }
+  .agent-pill-top{   background:#E9F8F1; color:#1FA77F; }
+
+  .kpi-target{ margin-top:10px; }
+  .kpi-target-bar{ width:100%; height:6px; background:var(--bg-2); border-radius:99px; overflow:hidden; }
+  .kpi-target-fill{ height:100%; transition:width .4s cubic-bezier(.22,1,.36,1); }
+  .kpi-target-fill.good{ background:linear-gradient(90deg, #1FA77F, #41C29F); }
+  .kpi-target-fill.bad{  background:linear-gradient(90deg, #E5003B, #FF4D6D); }
+  .kpi-target-caption{ display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--muted); margin-top:6px; gap:6px; }
+  .kpi-delta-inline{ display:inline-flex; align-items:center; gap:2px; font-weight:600; }
+  .kpi-delta-inline.good{ color:#1FA77F; }
+  .kpi-delta-inline.bad{  color:var(--rose); }
+  .kpi-delta-inline svg{ width:11px; height:11px; }
+
+  /* Donut card */
+  .donut-card{ display:flex; align-items:center; gap:12px; padding:16px 18px; }
+  .donut-info{ flex:1; min-width:0; }
+  .donut-sub{ font-size:11px; color:var(--ink2); font-weight:500; margin-bottom:6px; }
+  .donut-legend{ display:flex; flex-direction:column; gap:4px; margin-top:4px; }
+  .legend-row{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--ink2); font-weight:500; }
+  .legend-dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .legend-row b{ margin-left:auto; font-weight:600; color:var(--ink); }
+
+  /* ── Source info tooltip ── */
+  .info-tip{ position:relative; display:inline-flex; align-items:center; }
+  .info-tip-icon{
+    width:13px; height:13px; border-radius:50%;
+    border:1.5px solid #9AA0B4; color:#9AA0B4;
+    font-size:8px; font-weight:700; font-style:italic;
+    font-family:Georgia,'Times New Roman',serif;
+    display:inline-flex; align-items:center; justify-content:center;
+    cursor:help; flex-shrink:0; line-height:1;
+    transition:border-color .15s,color .15s;
+  }
+  .info-tip:hover .info-tip-icon{ border-color:var(--ink2); color:var(--ink2); }
+  .info-tip-bubble{
+    display:none; position:absolute;
+    bottom:calc(100% + 8px); left:0;
+    background:#1C1F35; color:#E8EAF2;
+    font-size:11px; line-height:1.5; font-weight:400; font-style:normal;
+    font-family:'DM Sans',sans-serif;
+    padding:9px 12px; border-radius:8px;
+    width:195px; z-index:200;
+    box-shadow:0 4px 18px rgba(0,0,0,.28);
+    pointer-events:none;
+  }
+  .info-tip-bubble::after{
+    content:''; position:absolute; top:100%; left:5px;
+    border:5px solid transparent; border-top-color:#1C1F35;
+  }
+  .info-tip:hover .info-tip-bubble{ display:block; }
+
+  /* Section heading */
+  .sec-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:10px; flex-wrap:wrap; }
+  .sec-title{ font-size:14px; font-weight:600; letter-spacing:-.2px; color:var(--ink); }
+  .sec-sub{ font-size:11px; color:var(--muted); margin-top:3px; }
+  .legend-bar{ display:flex; gap:12px; align-items:center; }
+  .lg{ display:inline-flex; align-items:center; gap:5px; font-size:11px; color:var(--ink2); font-weight:500; }
+  .lg-dot{ width:7px; height:7px; border-radius:50%; }
+  .target-line{ width:24px; height:0; border-top:2px dashed var(--muted2); }
+
+  /* Bars */
+  .bars-wrap{ display:flex; align-items:flex-end; gap:8px; height:200px; padding:0 2px; }
+  .bar-col{ flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; min-width:0; }
+  .bar-stack{ width:100%; max-width:24px; display:flex; flex-direction:column-reverse; gap:2px; }
+  .bar-seg{ width:100%; border-radius:3px; transition:opacity .15s; }
+  .bar-col:hover .bar-seg{ opacity:.8; }
+  .bar-lbl{ font-size:9.5px; color:var(--muted); font-weight:500; text-transform:uppercase; letter-spacing:.3px; }
+
+  /* Table */
+  .tbl-scroll{ overflow:auto; }
+  .tbl{ width:100%; border-collapse:collapse; font-size:12.5px; }
+  .tbl thead th{
+    position:sticky; top:0; z-index:1;
+    background:var(--panel);
+    text-align:left; font-weight:500; color:var(--muted);
+    font-size:11px; padding:8px 10px; border-bottom:1px solid var(--line);
+  }
+  .tbl td{ padding:10px 10px; border-bottom:1px solid var(--line); color:var(--ink2); font-weight:500; }
+  .tbl tr:last-child td{ border-bottom:none; }
+  .tbl tr:hover td{ background:var(--bg); }
+  .avatar-cell{ display:flex; align-items:center; gap:9px; }
+  .avatar{ width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-size:10.5px; font-weight:600; flex-shrink:0; }
+  .stage-pill{ display:inline-block; padding:3px 9px; border-radius:12px; font-size:10.5px; font-weight:600; white-space:nowrap; }
+  .status-pill{
+    display:inline-flex; align-items:center; gap:4px;
+    padding:2px 9px 2px 7px; border-radius:12px;
+    font-size:10px; font-weight:600;
+  }
+  .status-pill .pill-glyph{ display:flex; align-items:center; }
+  .status-pill svg{ width:10px; height:10px; }
+  .pill-target{ background:var(--mint-soft); color:#1FA77F; }
+  .pill-miss{ background:var(--rose-soft); color:var(--rose); }
+
+  /* Platform breakdown rows */
+  .plat-row{ margin-bottom:14px; }
+  .plat-row:last-child{ margin-bottom:0; }
+
+  /* Agent bars */
+  .agent-bar-wrap{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .agent-bar-name{ width:72px; font-size:12px; font-weight:600; color:var(--ink); flex-shrink:0; text-align:right; }
+  .agent-bar-track{ flex:1; height:20px; background:var(--bg); border-radius:6px; position:relative; overflow:visible; }
+  .agent-bar-fill{ height:100%; border-radius:6px; transition:width 1.2s cubic-bezier(.22,1,.36,1); position:relative; }
+  .agent-bar-target{ position:absolute; top:-5px; bottom:-5px; width:2px; background:rgba(0,0,0,0.25); border-radius:2px; pointer-events:none; }
+  .agent-bar-nums{ width:150px; flex-shrink:0; display:flex; gap:10px; font-size:11px; color:var(--muted); }
+  .agent-bar-nums b{ color:var(--ink); font-weight:600; }
+
+  /* SVG line draw */
+  @keyframes drawLine{ from{ stroke-dashoffset:3000; } to{ stroke-dashoffset:0; } }
+  .svg-line{ stroke-dasharray:3000; stroke-dashoffset:3000; animation:drawLine 1.8s cubic-bezier(.22,1,.36,1) .3s both; }
+
+  /* Motion CSS variables + keyframes */
+  :root{
+    --motion-dur: 400ms;
+    --motion-ease: cubic-bezier(.22,1,.36,1);
+    --motion-stagger: 60ms;
+  }
+  @keyframes rise   { from{ opacity:0; transform:translateY(10px); } to{ opacity:1; transform:translateY(0); } }
+  @keyframes fadeUp { from{ opacity:0; }                              to{ opacity:1; } }
+  @keyframes scaleIn{ from{ opacity:0; transform:scale(.94); }        to{ opacity:1; transform:scale(1); } }
+  @keyframes slideR { from{ opacity:0; transform:translateX(-14px); } to{ opacity:1; transform:translateX(0); } }
+  @keyframes blurIn { from{ opacity:0; filter:blur(8px); }            to{ opacity:1; filter:blur(0); } }
+  @keyframes pop    { 0%{ opacity:0; transform:scale(.85); } 60%{ transform:scale(1.04); } 100%{ opacity:1; transform:scale(1); } }
+  @keyframes popIn  { from{ opacity:0; transform:translateY(-4px) scale(.98); } to{ opacity:1; transform:translateY(0) scale(1); } }
+  @keyframes fadeIn { from{ opacity:0; } to{ opacity:1; } }
+  .view-fade{ animation:fadeIn .25s ease-out; display:flex; flex-direction:column; gap:20px; }
+
+  /* Empty state */
+  .empty{ padding:32px 16px; text-align:center; color:var(--muted); font-size:12.5px; }
+  .empty-glyph{ font-size:28px; margin-bottom:8px; color:var(--muted2); }
+
+  /* Loading / error */
+  .loader{ display:flex; align-items:center; justify-content:center; height:60vh; flex-direction:column; gap:16px; color:var(--muted); }
+  .spinner{ width:36px; height:36px; border:3px solid var(--line2); border-top-color:var(--indigo); border-radius:50%; animation:spin .8s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .err-box{ background:var(--rose-soft); color:var(--rose); padding:14px 18px; border-radius:12px; font-size:13px; max-width:500px; margin:40px auto; }
+
+  /* Responsive */
+  @media (max-width:1200px){
+    .row-mix{ grid-template-columns:1fr 1fr; }
+    .g21{ grid-template-columns:1fr; }
+    .g12{ grid-template-columns:1fr; }
+  }
+  @media (max-width:880px){
+    .app{ grid-template-columns:1fr; }
+    .sidebar{ display:none; }
+    .main{ padding:16px 16px 48px; }
+    .g3{ grid-template-columns:1fr 1fr; }
+    .g4{ grid-template-columns:1fr 1fr; }
+    .g5{ grid-template-columns:1fr 1fr; }
+    .g2{ grid-template-columns:1fr; }
+    .row-mix{ grid-template-columns:1fr 1fr; }
+    .topbar{ flex-direction:column; align-items:stretch; }
+    .topbar-left{ justify-content:space-between; }
+  }
+  /* ── Mobile bottom nav ─── */
+  .mobile-nav{
+    display:none; position:fixed; bottom:0; left:0; right:0;
+    height:58px; background:var(--panel); border-top:1px solid var(--line);
+    align-items:stretch; justify-content:space-around;
+    padding:0 4px; z-index:100;
+    box-shadow:0 -4px 24px rgba(20,23,40,.09);
+  }
+  .mob-nav-btn{
+    flex:1; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:3px; padding:6px 4px; border-radius:10px;
+    color:var(--muted); font-size:9.5px; font-weight:600; letter-spacing:.2px;
+    transition:color .15s;
+  }
+  .mob-nav-btn.active{ color:var(--indigo); }
+  .mob-nav-btn svg{ width:20px; height:20px; }
+  /* ── Phone ≤ 480px ─── */
+  @media (max-width:480px){
+    .main{ padding:12px 12px 74px; }
+    .page-title{ font-size:18px; }
+    .kpi-value{ font-size:22px; letter-spacing:-.4px; }
+    .kpi-delta span{ font-size:9px; }
+    .kpi-delta{ padding:3px 8px 3px 6px; }
+    .g3{ grid-template-columns:1fr; }
+    .g4{ grid-template-columns:1fr 1fr; }
+    .g5{ grid-template-columns:1fr; }
+    .row-mix{ grid-template-columns:1fr; }
+    .tabs{ display:none; }
+    .topbar{ flex-direction:row; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+    .topbar-left{ flex:1; gap:0; }
+    .topbar-right{ flex-shrink:0; gap:6px; }
+    .refreshed{ display:none; }
+    .agent-bar-name{ width:58px; font-size:11px; }
+    .agent-bar-nums{ width:110px; font-size:10px; gap:6px; }
+    .card{ padding:14px 14px; border-radius:13px; }
+    .donut-card{ flex-direction:column; align-items:flex-start; }
+    .cal-pop{ position:fixed; left:12px; right:12px; width:auto; top:auto; bottom:72px; transform:none; }
+    .period-pop{ right:auto; left:0; min-width:160px; }
+    .bars-wrap{ height:160px; }
+    .mobile-nav{ display:flex; }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:'DM Sans',sans-serif;color:#9AA0B4;font-size:14px;">Connecting…</div>
+</div>
+
+<script type="text/babel" data-presets="env,react">
+/* ═══════════════════════════════════════════════════════════════
+   components.jsx — shared primitives, sidebar, topbar, KPI, donut
+   ═══════════════════════════════════════════════════════════════ */
+
+const { useState, useEffect, useMemo, useRef } = React;
+
+/* ── Color tokens ──────────────────────────────────────────── */
+const PC     = { Google:'#5B6CFF', Meta:'#8B5CF6', Bing:'#3DD0A4', Email:'#F59E0B', Content:'#EC4899', Enquiry:'#F97316', Direct:'#94A3B8' };
+const PCsoft = { Google:'#EEF0FF', Meta:'#F2EDFF', Bing:'#E2F8EF' };
+const SOURCE_TIPS = {
+  Google:  'Paid search — lead clicked a Google Ads ad. Campaign ID was matched in SharpSpring.',
+  Meta:    'Paid social — lead clicked a Meta (Facebook or Instagram) ad. Campaign ID was matched in SharpSpring.',
+  Bing:    'Paid search — lead clicked a Microsoft/Bing Ads ad. Campaign ID was matched in SharpSpring.',
+  Email:   'Lead clicked a link inside a SharpSpring email campaign (utm_source=sharpspring found in the URL).',
+  Content: 'Lead came from a blog post, guide, or news article on the website before submitting a form.',
+  Enquiry: 'Lead submitted a form from a tracked page (e.g. service page, landing page) that doesn\'t fit another category.',
+  Direct:  'No URL tracking data was recorded — likely a direct visit, bookmark, or a click from WhatsApp/email where UTM params are stripped.',
+};
+
+const STAGE_COLOR = {
+  'New':         '#5AC8FA',
+  'Qualified':   '#5B6CFF',
+  'Demo':        '#8B5CF6',
+  'Proposal':    '#F5B544',
+  'Negotiation': '#FF6B7A',
+  'Closed Won':  '#3DD0A4',
+  'Closed Lost': '#9AA0B4',
+};
+const stageColor = (s) => STAGE_COLOR[s] || '#C7CADA';
+
+/* ── Helpers ─────────────────────────────────────────────── */
+const gbp = (v, d = 0) => '£' + Number(v || 0).toLocaleString('en-GB', { maximumFractionDigits: d });
+const fmt = (v) => Number(v || 0).toLocaleString('en-GB');
+const fmtSec = (v) => {
+  if (!v) return '—';
+  const m = Math.floor(v / 60), s = Math.floor(v % 60);
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+};
+
+/* Delta calculator */
+function delta(cur, prev, goodDir = 'up') {
+  if (prev === 0 || prev == null) return null;
+  const pct = ((cur - prev) / prev) * 100;
+  if (!isFinite(pct)) return null;
+  const up = pct >= 0;
+  const good = goodDir === 'up' ? up : !up;
+  return { pct: Math.abs(pct).toFixed(1) + '%', up, good, raw: pct };
+}
+
+/* Date helpers for period resolution */
+function isoToday() { return new Date().toISOString().slice(0, 10); }
+function isoSub(iso, days) { const d = new Date(iso); d.setDate(d.getDate() - days); return d.toISOString().slice(0, 10); }
+function isoYest() { return isoSub(isoToday(), 1); }
+function isoMonthStart() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10); }
+function isoQStart() { const d = new Date(); const q = Math.floor(d.getMonth() / 3); return new Date(d.getFullYear(), q * 3, 1).toISOString().slice(0, 10); }
+
+function periodDates(id) {
+  const yest = isoYest();
+  switch (id) {
+    case 'today':     return { d0: isoToday(), d1: isoToday() };
+    case 'yesterday': return { d0: yest,       d1: yest };
+    case '7d':        return { d0: isoSub(yest, 6),  d1: yest };
+    case '30d':       return { d0: isoSub(yest, 29), d1: yest };
+    case 'mtd':       return { d0: isoMonthStart(),  d1: yest };
+    case 'qtd':       return { d0: isoQStart(),      d1: yest };
+    case '90d':       return { d0: isoSub(yest, 89), d1: yest };
+    default:          return { d0: isoSub(yest, 29), d1: yest };
+  }
+}
+
+/* ── Icons ──────────────────────────────────────────────── */
+const Ic = {
+  chart:     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
+  briefcase: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>,
+  phone:     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>,
+  spend:     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+  leads:     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+  appt:      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  sale:      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
+  wallet:    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>,
+  calendar:  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  target:    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>,
+  refresh:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>,
+  chev:      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>,
+  check:     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
+  x:         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  arrowUp:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 14 12 8 18 14"/></svg>,
+  arrowDown: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 10 12 16 18 10"/></svg>,
+  settings:  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+  droplet:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>,
+};
+
+/* ── Hooks ──────────────────────────────────────────────── */
+function useMounted(delay = 80) {
+  const [m, setM] = useState(false);
+  useEffect(() => { const id = setTimeout(() => setM(true), delay); return () => clearTimeout(id); }, []);
+  return m;
+}
+
+function useClickAway(ref, onAway) {
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) onAway(); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [onAway]);
+}
+
+/* ── Sidebar ─────────────────────────────────────────── */
+function Sidebar({ activeTab, setActiveTab }) {
+  const items = [
+    { label: 'Marketing', icon: Ic.chart },
+    { label: 'Sales',     icon: Ic.briefcase },
+    { label: 'Telesales', icon: Ic.phone },
+  ];
+  return (
+    <aside className="sidebar">
+      <div className="logo">
+        <div className="logo-mark" style={{flexShrink:0}}>T</div>
+        <div className="logo-name">Trustwarehouse</div>
+      </div>
+      <div className="nav-label">Dashboards</div>
+      {items.map(it => (
+        <button key={it.label}
+          className={`nav-item${activeTab === it.label ? ' active' : ''}`}
+          onClick={() => setActiveTab(it.label)}>
+          <span style={{flexShrink:0,display:'flex'}}>{it.icon}</span>
+          <span style={{overflow:'hidden'}}>{it.label}</span>
+        </button>
+      ))}
+    </aside>
+  );
+}
+
+/* ── Period picker ───────────────────────────────────── */
+const PRESETS = [
+  { id: 'today',     label: 'Today' },
+  { id: 'yesterday', label: 'Yesterday' },
+  { id: '7d',        label: 'Last 7 days' },
+  { id: '30d',       label: 'Last 30 days' },
+  { id: 'mtd',       label: 'Month to date' },
+  { id: 'qtd',       label: 'Quarter to date' },
+  { id: '90d',       label: 'Last 90 days' },
+];
+
+function PeriodPicker({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useClickAway(ref, () => setOpen(false));
+  return (
+    <div ref={ref} className="period-wrap">
+      <button className="period-btn" onClick={() => setOpen(o => !o)}>
+        {Ic.calendar}
+        <span>{value.label}</span>
+        {Ic.chev}
+      </button>
+      {open && (
+        <div className="period-pop">
+          <div className="period-pop-head">Period</div>
+          {PRESETS.map(p => (
+            <button key={p.id}
+              className={`period-pop-item${value.id === p.id ? ' active' : ''}`}
+              onClick={() => { onChange(p); setOpen(false); }}>
+              {p.label}
+              {value.id === p.id && <span className="period-pop-check">{Ic.check}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Custom date range picker ────────────────────────── */
+function fmtRangeLabel(d0, d1) {
+  const fmt = (iso) => {
+    const [, m, d] = iso.split('-');
+    const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return parseInt(d, 10) + ' ' + M[parseInt(m, 10) - 1];
+  };
+  return d0 === d1 ? fmt(d0) : fmt(d0) + ' – ' + fmt(d1);
+}
+
+function CalendarPicker({ onApply, onClose }) {
+  const today = isoToday();
+  const now = new Date();
+  const [vy, setVy] = useState(now.getFullYear());
+  const [vm, setVm] = useState(now.getMonth());
+  const [start, setStart] = useState(null);
+  const [end,   setEnd]   = useState(null);
+  const [hover, setHover] = useState(null);
+
+  const goPrev = () => { if (vm === 0) { setVm(11); setVy(y => y - 1); } else setVm(m => m - 1); };
+  const goNext = () => { if (vm === 11) { setVm(0); setVy(y => y + 1); } else setVm(m => m + 1); };
+
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const DOW = ['Mo','Tu','We','Th','Fr','Sa','Su'];
+
+  const cells = React.useMemo(() => {
+    const firstDay = new Date(vy, vm, 1).getDay();
+    const dInM    = new Date(vy, vm + 1, 0).getDate();
+    const offset  = (firstDay + 6) % 7;
+    const prevM = vm === 0 ? 11 : vm - 1, prevY = vm === 0 ? vy - 1 : vy;
+    const nextM = vm === 11 ? 0 : vm + 1, nextY = vm === 11 ? vy + 1 : vy;
+    const dInPrev = new Date(prevY, prevM + 1, 0).getDate();
+    const pad = n => String(n).padStart(2, '0');
+    const iso = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
+    const out = [];
+    for (let i = offset - 1; i >= 0; i--) out.push({ iso: iso(prevY, prevM, dInPrev - i), day: dInPrev - i, other: true });
+    for (let d = 1; d <= dInM; d++) out.push({ iso: iso(vy, vm, d), day: d, other: false });
+    for (let d = 1; out.length < 42; d++) out.push({ iso: iso(nextY, nextM, d), day: d, other: true });
+    return out;
+  }, [vy, vm]);
+
+  const handleDay = (iso) => {
+    if (iso > today) return;
+    if (!start || (start && end)) { setStart(iso); setEnd(null); }
+    else if (iso < start) { setEnd(start); setStart(iso); }
+    else setEnd(iso);
+  };
+
+  const effEnd = end || (start && hover ? hover : null);
+  const lo = start && effEnd ? (start <= effEnd ? start : effEnd) : null;
+  const hi = start && effEnd ? (start <= effEnd ? effEnd : start) : null;
+
+  const dayCls = ({ iso, other }) => {
+    let c = 'cal-day';
+    if (other) c += ' other';
+    if (iso === today) c += ' today';
+    if (iso > today) c += ' future';
+    if (lo && hi) {
+      if (iso === lo && iso === hi) c += ' range-start range-end range-single';
+      else if (iso === lo) c += ' range-start';
+      else if (iso === hi) c += ' range-end';
+      else if (iso > lo && iso < hi) c += ' in-range';
+    } else if (start && !effEnd && iso === start) c += ' range-start range-single';
+    return c;
+  };
+
+  const fmtD = (iso) => {
+    if (!iso) return '–';
+    const [, m, d] = iso.split('-');
+    const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return parseInt(d, 10) + ' ' + M[parseInt(m, 10) - 1];
+  };
+
+  const hoverLabel = hover && start && !end && hover !== start ? fmtD(hover) : fmtD(end || start);
+  const rangeLabel = start ? fmtD(start) + ' – ' + hoverLabel : 'Select a start date';
+
+  return (
+    <div className="cal-pop">
+      <div className="cal-nav">
+        <button className="cal-nav-btn" onClick={goPrev}>‹</button>
+        <span className="cal-nav-title">{MONTHS[vm]} {vy}</span>
+        <button className="cal-nav-btn" onClick={goNext}>›</button>
+      </div>
+      <div className="cal-dow">{DOW.map(d => <span key={d}>{d}</span>)}</div>
+      <div className="cal-grid">
+        {cells.map(cell => (
+          <div key={cell.iso} className={dayCls(cell)}
+            onClick={() => handleDay(cell.iso)}
+            onMouseEnter={() => start && !end && setHover(cell.iso)}
+            onMouseLeave={() => setHover(null)}>
+            {cell.day}
+          </div>
+        ))}
+      </div>
+      <div className="cal-footer">
+        <span className="cal-range-label">{rangeLabel}</span>
+        <button className="cal-cancel" onClick={onClose}>Cancel</button>
+        <button className="cal-apply" disabled={!start} onClick={() => onApply(start, end || start)}>Apply</button>
+      </div>
+    </div>
+  );
+}
+
+function DateRangePicker({ onApply }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useClickAway(ref, () => setOpen(false));
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button className={`icon-btn${open ? ' active' : ''}`} title="Custom date range" onClick={() => setOpen(o => !o)}>
+        {Ic.calendar}
+      </button>
+      {open && (
+        <CalendarPicker
+          onApply={(d0, d1) => { onApply(d0, d1); setOpen(false); }}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── Topbar ──────────────────────────────────────────── */
+function Topbar({ title, period, setPeriod, refreshedAt, onRefresh, onCustomDate, lastPoll }) {
+  // "Live" pulse — show seconds since the last successful poll. Updates every 5s.
+  const [, force] = React.useState(0);
+  React.useEffect(() => { const id = setInterval(() => force(x => x + 1), 5000); return () => clearInterval(id); }, []);
+  const sec = Math.max(0, Math.round((Date.now() - (lastPoll || Date.now())) / 1000));
+  const fresh = sec < 90;
+  const label = sec < 60 ? `${sec}s ago` : `${Math.round(sec/60)}m ago`;
+  return (
+    <div className="topbar">
+      <div className="topbar-left">
+        <div className="page-title">{title}</div>
+      </div>
+      <div className="topbar-right">
+        <span className="live-pulse" title={`Auto-refreshing every 30s · last update ${label}`}>
+          <span className={`live-dot ${fresh ? 'is-fresh' : 'is-stale'}`}/> Live · {label}
+        </span>
+        <PeriodPicker value={period} onChange={setPeriod} />
+        <DateRangePicker onApply={onCustomDate} />
+        <button className="icon-btn" onClick={onRefresh} title="Force refresh">{Ic.refresh}</button>
+      </div>
+    </div>
+  );
+}
+
+/* ── KPI Card ────────────────────────────────────────── */
+function Kpi({ label, value, sub, delta: d, icon, iconBg, iconColor, delay = 0, target = null, targetRaw = null, valueRaw = null, targetDir = 'up' }) {
+  let footer;
+  // If a target is provided, show a progress bar + "X / Y target" caption underneath the value.
+  // targetDir: 'up' means higher is better (e.g. l2a%, calls/day); 'down' means lower is better (e.g. CPA, mins to first call)
+  if (target != null && targetRaw != null && valueRaw != null) {
+    const pct = targetDir === 'down'
+      ? Math.max(0, Math.min(100, (targetRaw / Math.max(valueRaw, targetRaw)) * 100))
+      : Math.max(0, Math.min(100, (valueRaw / targetRaw) * 100));
+    const hit = targetDir === 'down' ? valueRaw <= targetRaw : valueRaw >= targetRaw;
+    footer = (
+      <div className="kpi-target">
+        <div className="kpi-target-bar">
+          <div className={`kpi-target-fill ${hit ? 'good' : 'bad'}`} style={{ width: pct + '%' }}/>
+        </div>
+        <div className="kpi-target-caption">
+          <span>{value} / {target} target</span>
+          {d && (
+            <span className={`kpi-delta-inline ${d.good ? 'good' : 'bad'}`}>
+              {d.up ? Ic.arrowUp : Ic.arrowDown}{d.pct}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  } else if (d) {
+    footer = (
+      <div className={`kpi-delta ${d.good ? 'good' : 'bad'}`}>
+        {d.up ? Ic.arrowUp : Ic.arrowDown}
+        <span>{d.pct} {d.up ? 'higher' : 'lower'} than last period</span>
+      </div>
+    );
+  } else if (sub) {
+    footer = <div className="kpi-sub">{sub}</div>;
+  } else {
+    footer = <div className="kpi-sub">vs last period — no data</div>;
+  }
+  return (
+    <div className="card kpi" style={{ animationDelay: delay + 'ms' }}>
+      <div className="card-head">
+        <div className="card-label">{label}</div>
+        <div className="card-icon" style={{ background: iconBg, color: iconColor }}>{icon}</div>
+      </div>
+      <div className="kpi-value">{value}</div>
+      {footer}
+    </div>
+  );
+}
+
+/* ── Donut card ──────────────────────────────────────── */
+function DonutCard({ title, segments, total, totalLabel, sub }) {
+  const size = 80, stroke = 13, r = (size - stroke) / 2, c = 2 * Math.PI * r;
+  let offset = 0;
+  const sum = segments.reduce((s, x) => s + x.value, 0) || 1;
+  return (
+    <div className="card donut-card">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#F2F3F7" strokeWidth={stroke}/>
+        {segments.map((s, i) => {
+          const len = (s.value / sum) * c, dash = `${len} ${c - len}`;
+          const el = <circle key={i} cx={size/2} cy={size/2} r={r} fill="none" stroke={s.color}
+            strokeWidth={stroke} strokeDasharray={dash} strokeDashoffset={-offset}
+            transform={`rotate(-90 ${size/2} ${size/2})`} strokeLinecap="butt"/>;
+          offset += len; return el;
+        })}
+        <text x={size/2} y={size/2 - 1} textAnchor="middle" fontSize="10.5" fontWeight="700" fill="#171A2B">{total}</text>
+        <text x={size/2} y={size/2 + 11} textAnchor="middle" fontSize="7" fill="#9AA0B4">{totalLabel}</text>
+      </svg>
+      <div className="donut-info">
+        <div className="card-label" style={{ marginBottom: 4 }}>{title}</div>
+        {sub && <div className="donut-sub">{sub}</div>}
+        <div className="donut-legend">
+          {segments.map((s, i) => (
+            <div className="legend-row" key={i}>
+              <span className="legend-dot" style={{ background: s.color }}/>
+              <span>{s.label}</span>
+              <b>{Math.round(s.value / sum * 100)}%</b>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Empty placeholder ───────────────────────────────── */
+function EmptyCard({ title, message }) {
+  return (
+    <div className="card">
+      {title && <div className="sec-head"><div className="sec-title">{title}</div></div>}
+      <div className="empty">
+        <div className="empty-glyph">∅</div>
+        <div>{message || 'No data for this period.'}</div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   charts.jsx — all chart components
+   ═══════════════════════════════════════════════════════════════ */
+
+const { useState: useStateC, useMemo: useMemoC, useRef: useRefC, useEffect: useEffectC } = React;
+
+/* Smart bucketing: ≤14d daily, 15-90d weekly, >90d monthly */
+function bucketSpend(daily) {
+  if (!daily.length) return { rows: [], granularity: 'day' };
+  const dates = [...new Set(daily.map(r => r.date))].sort();
+  const d0 = new Date(dates[0]), d1 = new Date(dates[dates.length - 1]);
+  const days = Math.round((d1 - d0) / 86400000) + 1;
+  const gran = days <= 14 ? 'day' : days <= 90 ? 'week' : 'month';
+  const keyOf = (iso) => {
+    const d = new Date(iso);
+    if (gran === 'day')   return iso;
+    if (gran === 'month') return iso.slice(0, 7);
+    const tmp = new Date(d); tmp.setUTCDate(tmp.getUTCDate() - ((tmp.getUTCDay() + 6) % 7));
+    return tmp.toISOString().slice(0, 10);
+  };
+  const labelOf = (key) => {
+    if (gran === 'day')   { const p = key.split('-'); return p[2] + '/' + p[1]; }
+    if (gran === 'month') { const [y, m] = key.split('-'); return new Date(+y, +m - 1, 1).toLocaleDateString('en-GB', { month: 'short' }); }
+    const p = key.split('-'); return 'Wk ' + p[2] + '/' + p[1];
+  };
+  const m = {};
+  daily.forEach(r => {
+    const k = keyOf(r.date);
+    if (!m[k]) m[k] = { key: k, label: labelOf(k), Google: 0, Meta: 0, Bing: 0 };
+    m[k][r.platform] = (m[k][r.platform] || 0) + (r.spend || 0);
+  });
+  const rows = Object.values(m).sort((a, b) => a.key.localeCompare(b.key));
+  return { rows, granularity: gran };
+}
+
+/* ── Spend by platform (smart-bucketed stacked bars) ─── */
+function SpendChart({ daily }) {
+  if (!daily.length) return <EmptyCard title="Ad spend by platform" message="No spend data for this period." />;
+  const { rows, granularity } = useMemoC(() => bucketSpend(daily), [daily]);
+  const maxV = Math.max(...rows.map(r => r.Google + r.Meta + r.Bing), 1);
+  const H = 200;
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Ad spend by platform</div>
+          <div className="sec-sub">{granularity === 'day' ? 'Daily' : granularity === 'week' ? 'Weekly' : 'Monthly'} · GBP</div>
+        </div>
+        <div className="legend-bar">
+          {['Google', 'Meta', 'Bing'].map(p => (
+            <span key={p} className="lg"><span className="lg-dot" style={{ background: PC[p] }}/>{p}</span>
+          ))}
+        </div>
+      </div>
+      <div className="bars-wrap">
+        {rows.map(r => {
+          const total = r.Google + r.Meta + r.Bing;
+          const h = (v) => (v / maxV) * H;
+          return (
+            <div className="bar-col" key={r.key} title={`${r.label}: ${gbp(total)}`}>
+              <div className="bar-stack">
+                {r.Google > 0 && <div className="bar-seg" style={{ height: h(r.Google), background: PC.Google }}/>}
+                {r.Meta   > 0 && <div className="bar-seg" style={{ height: h(r.Meta),   background: PC.Meta }}/>}
+                {r.Bing   > 0 && <div className="bar-seg" style={{ height: h(r.Bing),   background: PC.Bing }}/>}
+              </div>
+              <div className="bar-lbl">{r.label}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ── Activity line chart (leads only) ───────────────── */
+function ActivityChart({ daily }) {
+  const data = useMemoC(() => {
+    const m = {};
+    daily.forEach(r => {
+      if (!m[r.date]) m[r.date] = { date: r.date, leads: 0 };
+      m[r.date].leads += r.leads || 0;
+    });
+    return Object.values(m).sort((a, b) => a.date.localeCompare(b.date));
+  }, [daily]);
+  if (!data.length) return <EmptyCard title="Daily leads" message="No daily activity data." />;
+  const W = 680, H = 220, P = { t: 18, r: 18, b: 28, l: 36 };
+  const cw = W - P.l - P.r, ch = H - P.t - P.b;
+  const maxV = Math.max(...data.map(d => d.leads), 1);
+  const x = (i) => P.l + (i / (data.length - 1 || 1)) * cw;
+  const y = (v) => P.t + ch - (v / maxV) * ch;
+  const path = (k) => data.map((d, i) => (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ' ' + y(d[k]).toFixed(1)).join(' ');
+  const area = (k) => path(k) + ` L ${x(data.length - 1).toFixed(1)} ${(P.t + ch).toFixed(1)} L ${P.l} ${(P.t + ch).toFixed(1)} Z`;
+  const step = Math.max(1, Math.ceil(data.length / 5));
+  const fmtD = (d) => { const p = d.split('-'); return p[2] + '/' + p[1]; };
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Daily leads</div>
+          <div className="sec-sub">Paid leads per day by platform</div>
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ overflow: 'visible' }}>
+        <defs>
+          <linearGradient id="glv" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#8B5CF6" stopOpacity=".18"/>
+            <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        {[0, .5, 1].map(t => (
+          <line key={t} x1={P.l} x2={W - P.r} y1={P.t + ch * (1 - t)} y2={P.t + ch * (1 - t)} stroke="#EDEEF3" strokeWidth="1" strokeDasharray="3 4"/>
+        ))}
+        {[0, .5, 1].map(t => (
+          <text key={t} x={P.l - 6} y={P.t + ch * (1 - t) + 4} textAnchor="end" fontSize="9.5" fill="#9AA0B4">{Math.round(maxV * t)}</text>
+        ))}
+        {data.filter((_, i) => i % step === 0 || i === data.length - 1).map(d => (
+          <text key={d.date} x={x(data.indexOf(d))} y={H - 6} textAnchor="middle" fontSize="9.5" fill="#9AA0B4">{fmtD(d.date)}</text>
+        ))}
+        <path d={area('leads')} fill="url(#glv)"/>
+        <path d={path('leads')} fill="none" stroke="#8B5CF6" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="svg-line"/>
+      </svg>
+    </div>
+  );
+}
+
+/* ── Platform breakdown ──────────────────────────────── */
+function PlatformBreakdown({ platforms, totalSpend }) {
+  const m = useMounted(120);
+  if (!platforms.length) return null;
+  return (
+    <div className="card">
+      <div className="sec-head"><div className="sec-title">Platform breakdown</div></div>
+      {platforms.map(p => {
+        const pct = totalSpend > 0 ? Math.round(p.spend / totalSpend * 100) : 0;
+        const color = PC[p.platform] || '#9AA0B4';
+        const soft = PCsoft[p.platform] || '#F2F3F7';
+        return (
+          <div className="plat-row" key={p.platform}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+              <span style={{ width: 28, height: 28, borderRadius: 8, background: soft, color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11 }}>{p.platform[0]}</span>
+              <span style={{ fontWeight: 600, color: 'var(--ink)', fontSize: 13 }}>{p.platform}</span>
+              <span style={{ marginLeft: 'auto', fontWeight: 600, fontSize: 13, color: 'var(--ink)' }}>{gbp(p.spend)}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ flex: 1, height: 7, background: 'var(--bg)', borderRadius: 5, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: (m ? pct : 0) + '%', background: color, borderRadius: 5, transition: 'width 1.2s cubic-bezier(.22,1,.36,1)' }}/>
+              </div>
+              <span style={{ width: 30, textAlign: 'right', fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>{pct}%</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 6, marginTop: 8, fontSize: 11, color: 'var(--muted)' }}>
+              {[['Leads', fmt(p.leads)], ['CPL', gbp(p.cpl ?? 0)]].map(([l, v]) => (
+                <div key={l}>{l}<b style={{ display: 'block', color: 'var(--ink)', fontSize: 12.5, fontWeight: 600, marginTop: 2 }}>{v}</b></div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Lead sources table ───────────────────────────────── */
+function LeadSourcesCard({ sources }) {
+  if (!sources.length) return <EmptyCard title="Lead sources" message="No lead-source data." />;
+  const total = sources.reduce((s, r) => s + r.leads, 0) || 1;
+  const COLS = PC;
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div className="sec-title">Lead sources</div>
+        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{fmt(total)} total</div>
+      </div>
+      <div className="tbl-scroll" style={{ maxHeight: 320 }}>
+        <table className="tbl">
+          <thead><tr>
+            <th>Source</th>
+            <th style={{ textAlign: 'right' }}>Leads</th>
+            <th style={{ textAlign: 'right' }}>Share</th>
+          </tr></thead>
+          <tbody>
+            {sources.map(r => {
+              const color = COLS[r.source] || '#9AA0B4';
+              return (
+                <tr key={r.source}>
+                  <td>
+                    <div className="avatar-cell">
+                      <span style={{ width: 24, height: 24, borderRadius: 6, background: color + '18', color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{r.source[0]}</span>
+                      <span style={{ color: 'var(--ink)', fontWeight: 600 }}>{r.source}</span>
+                    </div>
+                  </td>
+                  <td style={{ textAlign: 'right', color: 'var(--ink)', fontWeight: 600 }}>{fmt(r.leads)}</td>
+                  <td style={{ textAlign: 'right', color: 'var(--muted)' }}>{Math.round(r.leads / total * 100)}%</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── Lead split card (replaces LeadBreakdownBar + Leads split donut) ── */
+function LeadSplitCard({ sources, totalLeads }) {
+  if (!sources || !sources.length) return <EmptyCard title="Leads breakdown"/>;
+
+  const total         = totalLeads || sources.reduce((s, r) => s + r.leads, 0) || 1;
+  const PAID          = new Set(['Google', 'Meta', 'Bing']);
+  const COLS          = PC;
+  const paidTotal     = sources.filter(r => PAID.has(r.source)).reduce((s, r) => s + r.leads, 0);
+  const organicTotal  = sources.filter(r => !PAID.has(r.source)).reduce((s, r) => s + r.leads, 0);
+  const callableTotal = sources.reduce((s, r) => s + (r.callable || 0), 0);
+
+  const size = 80, stroke = 13, r = (size - stroke) / 2, c = 2 * Math.PI * r;
+  let offset = 0;
+
+  return (
+    <div className="card donut-card">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }} aria-hidden="true">
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--bg)" strokeWidth={stroke}/>
+        {sources.map(s => {
+          const len = (s.leads / total) * c;
+          const el  = (
+            <circle key={s.source} cx={size/2} cy={size/2} r={r}
+              fill="none" stroke={COLS[s.source] || '#94A3B8'}
+              strokeWidth={stroke} strokeDasharray={`${len} ${c - len}`}
+              strokeDashoffset={-offset}
+              transform={`rotate(-90 ${size/2} ${size/2})`}
+              strokeLinecap="butt"
+            />
+          );
+          offset += len;
+          return el;
+        })}
+        <text x={size/2} y={size/2 - 1} textAnchor="middle" fontSize="10.5" fontWeight="700" fill="#171A2B">{fmt(total)}</text>
+        <text x={size/2} y={size/2 + 11} textAnchor="middle" fontSize="7" fill="#9AA0B4">LEADS</text>
+      </svg>
+
+      <div className="donut-info">
+        <div className="card-label" style={{ marginBottom: 6 }}>Leads breakdown</div>
+        <div className="donut-legend" style={{ marginBottom: 10 }}>
+          {sources.map(s => {
+            const pct = Math.round(s.leads / total * 100);
+            return (
+              <div className="legend-row" key={s.source}>
+                <span className="legend-dot" style={{ background: COLS[s.source] || '#94A3B8' }}/>
+                <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {s.source}
+                  {SOURCE_TIPS[s.source] && (
+                    <span className="info-tip">
+                      <span className="info-tip-icon">i</span>
+                      <span className="info-tip-bubble">{SOURCE_TIPS[s.source]}</span>
+                    </span>
+                  )}
+                </span>
+                <b style={{ marginRight: 5 }}>{fmt(s.leads)}</b>
+                <span style={{ color: 'var(--muted)', fontSize: 10.5, minWidth: 28, textAlign: 'right' }}>{pct}%</span>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display: 'flex', gap: 14, borderTop: '1px solid var(--line)', paddingTop: 9 }}>
+          {[
+            { label: 'Paid',     value: paidTotal,     color: '#FF6B7A' },
+            { label: 'Organic',  value: organicTotal,  color: '#94A3B8' },
+            { label: 'Callable', value: callableTotal, color: '#1FA77F' },
+          ].map(({ label, value, color }) => (
+            <div key={label}>
+              <div style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>{label}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color }}>{fmt(value)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Stage bars with avg age ─────────────────────────── */
+function StageBreakdown({ stages }) {
+  const m = useMounted(100);
+  if (!stages.length) return <EmptyCard title="Pipeline by stage" />;
+  const open = stages.filter(s => !s.stage.startsWith('Closed'));
+  const maxVal = Math.max(...open.map(s => s.total_value), 1);
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Pipeline by stage</div>
+          <div className="sec-sub">Open opportunities · value &amp; count</div>
+        </div>
+      </div>
+      {open.map(s => {
+        const pct = s.total_value / maxVal;
+        const color = stageColor(s.stage);
+        return (
+          <div key={s.stage} style={{ marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }}/>
+                <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink)' }}>{s.stage}</span>
+                <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                  {s.count} deal{s.count !== 1 ? 's' : ''}
+                  {s.avg_age_days != null ? ` · avg ${s.avg_age_days}d` : ''}
+                </span>
+              </div>
+              <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink)' }}>{gbp(s.total_value)}</span>
+            </div>
+            <div style={{ height: 8, background: 'var(--bg)', borderRadius: 5, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: (m ? Math.round(pct * 100) : 0) + '%', background: color, borderRadius: 5, transition: 'width 1.2s cubic-bezier(.22,1,.36,1)' }}/>
+            </div>
+            <div style={{ marginTop: 4, fontSize: 10.5, color: 'var(--muted)' }}>Weighted: {gbp(s.weighted_value)}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Win rate by stage (replaces pipeline donut) ──────── */
+function WinRateByStage({ rows }) {
+  const m = useMounted(140);
+  if (!rows || !rows.length) return <EmptyCard title="Win rate by stage" />;
+  const maxRate = Math.max(...rows.map(r => r.rate), 1);
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Win rate by stage</div>
+          <div className="sec-sub">% of deals reaching each stage that close Won</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {rows.map(r => {
+          const color = stageColor(r.stage);
+          const pct = r.rate / maxRate;
+          return (
+            <div key={r.stage}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink)' }}>{r.stage}</span>
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                  <b style={{ color, fontSize: 14 }}>{r.rate}%</b>
+                  <span style={{ marginLeft: 8 }}>{r.won}/{r.touched}</span>
+                </span>
+              </div>
+              <div style={{ height: 10, background: 'var(--bg)', borderRadius: 6, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: (m ? Math.round(pct * 100) : 0) + '%',
+                  background: `linear-gradient(90deg, ${color}, ${color}aa)`,
+                  borderRadius: 6,
+                  transition: 'width 1.2s cubic-bezier(.22,1,.36,1)',
+                }}/>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {rows.length > 0 && (
+        <div style={{ marginTop: 14, padding: '10px 12px', background: 'var(--bg)', borderRadius: 8, fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.5 }}>
+          Reading: if a deal reaches <b style={{ color: 'var(--ink)' }}>{rows[rows.length - 1]?.stage}</b>, it has a {rows[rows.length - 1]?.rate}% chance of closing.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Recent opportunities table ─────────────────────── */
+function OpportunitiesTable({ recent }) {
+  if (!recent.length) return <EmptyCard title="Open opportunities" />;
+  const fmtDate = (d) => { if (!d) return '—'; const p = d.split('-'); return p[2] + '/' + p[1] + '/' + p[0].slice(2); };
+  const initials = (s) => s.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
+  const AVATAR_COLORS = ['#5B6CFF', '#8B5CF6', '#3DD0A4', '#F5B544', '#FF6B7A', '#5AC8FA'];
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div className="sec-title">Open opportunities</div>
+        <span style={{ fontSize: 11, color: 'var(--muted)' }}>{recent.length} shown</span>
+      </div>
+      <div className="tbl-scroll" style={{ maxHeight: 380 }}>
+        <table className="tbl">
+          <thead><tr>
+            <th>Opportunity</th>
+            <th>Contact</th>
+            <th>Stage</th>
+            <th style={{ textAlign: 'right' }}>Value</th>
+            <th style={{ textAlign: 'right' }}>Prob.</th>
+            <th>Sector</th>
+            <th>Created</th>
+          </tr></thead>
+          <tbody>
+            {recent.map((r, i) => (
+              <tr key={i}>
+                <td style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--ink)', fontWeight: 600 }}>{r.name}</td>
+                <td>
+                  <div className="avatar-cell">
+                    <span className="avatar" style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}>{initials(r.contact)}</span>
+                    <span style={{ color: 'var(--ink)', fontWeight: 500 }}>{r.contact}</span>
+                  </div>
+                </td>
+                <td>
+                  <span className="stage-pill" style={{ background: stageColor(r.stage) + '20', color: stageColor(r.stage) }}>{r.stage}</span>
+                </td>
+                <td style={{ textAlign: 'right', color: 'var(--ink)', fontWeight: 600 }}>{r.amount > 0 ? gbp(r.amount) : '—'}</td>
+                <td style={{ textAlign: 'right' }}>{r.probability > 0 ? r.probability + '%' : '—'}</td>
+                <td style={{ fontSize: 11, color: 'var(--muted)' }}>{r.sector || '—'}</td>
+                <td style={{ fontSize: 11, color: 'var(--muted)' }}>{fmtDate(r.created_date)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── Agent bars ──────────────────────────────────────── */
+function AgentBars({ agents, topAgentName = null }) {
+  const m = useMounted(100);
+  if (!agents.length) return <EmptyCard title="Agent performance" />;
+  const maxOut = Math.max(...agents.map(a => a.outbound), 1);
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Agent performance</div>
+          <div className="sec-sub">Conversations · Appointments · target ≤ 3 conversations per appointment · monthly target = 85 appts</div>
+        </div>
+        <div className="legend-bar">
+          <span className="lg"><span className="target-line"/> Monthly target (85)</span>
+          <span className="lg"><span className="lg-dot" style={{ background: 'var(--mint)' }}/>On target</span>
+          <span className="lg"><span className="lg-dot" style={{ background: 'var(--rose)' }}/>Off target</span>
+        </div>
+      </div>
+      {agents.map(a => {
+        const color = a.on_target ? '#3DD0A4' : '#FF6B7A';
+        const barPct = a.appts / 85;
+        const targetPct = Math.min(1, 1); // monthly target line always at 100% of 85
+        const isTop   = a.name === topAgentName;
+        return (
+          <div className="agent-bar-wrap" key={a.name}>
+            <div className="agent-bar-name">
+              {a.name}
+              {isTop && <span className="agent-pill agent-pill-top">⭐ Top</span>}
+            </div>
+            <div className="agent-bar-track">
+              <div className="agent-bar-fill" style={{
+                width: m ? Math.min(100, Math.round(barPct * 100)) + '%' : '0%',
+                background: `linear-gradient(90deg, ${color}cc, ${color}88)`,
+                minWidth: m && a.appts > 0 ? '4px' : '0',
+              }}/>
+              {m && <div className="agent-bar-target" style={{ left: '100%' }} title="Monthly target: 85 appointments"/>}
+            </div>
+            <div className="agent-bar-nums">
+              <span>{a.qual_convos} conv</span>
+              <span style={{ color: '#1FA77F', fontWeight: 600 }}>{a.appts} / 85 appt</span>
+              <span style={{
+                color: a.conv_per_appt == null ? 'var(--muted)' : a.conv_per_appt <= 3 ? '#1FA77F' : 'var(--rose)',
+                fontWeight: 600,
+              }} title="Conversations per appointment (period total) · target ≤ 3">
+                {a.conv_per_appt != null ? a.conv_per_appt + 'x' : '—'}
+              </span>
+            </div>
+            <div>
+              <span className={a.on_target ? 'status-pill pill-target' : 'status-pill pill-miss'}>
+                <span className="pill-glyph">{a.on_target ? Ic.check : Ic.x}</span>
+                {a.on_target ? 'On target' : 'Off target'}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Telesales daily trend (dual-axis) ───────────────── */
+function TsTrendChart({ daily }) {
+  if (!daily.length) return <EmptyCard title="Daily call activity" />;
+  const W = 680, H = 200, P = { t: 16, r: 14, b: 26, l: 32 };
+  const cw = W - P.l - P.r, ch = H - P.t - P.b;
+  const maxC = Math.max(...daily.map(d => d.calls), 1);
+  const maxA = Math.max(...daily.map(d => d.appts), 1);
+  const x = (i) => P.l + (i / (daily.length - 1 || 1)) * cw;
+  const yC = (v) => P.t + ch - (v / maxC) * ch;
+  const yA = (v) => P.t + ch - (v / maxA) * ch;
+  const pathC = daily.map((d, i) => (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ' ' + yC(d.calls).toFixed(1)).join(' ');
+  const pathA = daily.map((d, i) => (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ' ' + yA(d.appts).toFixed(1)).join(' ');
+  const areaC = pathC + ` L ${x(daily.length - 1).toFixed(1)} ${(P.t + ch).toFixed(1)} L ${P.l} ${(P.t + ch).toFixed(1)} Z`;
+  const step = Math.max(1, Math.ceil(daily.length / 5));
+  const fmtD = (d) => { const p = d.split('-'); return p[2] + '/' + p[1]; };
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Daily call activity</div>
+          <div className="sec-sub">Calls (left axis) · Appointments (right axis)</div>
+        </div>
+        <div className="legend-bar">
+          <span className="lg"><span className="lg-dot" style={{ background: '#5B6CFF' }}/>Calls</span>
+          <span className="lg"><span className="lg-dot" style={{ background: '#F5B544' }}/>Appts</span>
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ overflow: 'visible' }}>
+        <defs>
+          <linearGradient id="gtsc" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#5B6CFF" stopOpacity=".16"/>
+            <stop offset="100%" stopColor="#5B6CFF" stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        {[0, .5, 1].map(t => (
+          <line key={t} x1={P.l} x2={W - P.r} y1={P.t + ch * (1 - t)} y2={P.t + ch * (1 - t)} stroke="#EDEEF3" strokeWidth="1" strokeDasharray="3 4"/>
+        ))}
+        {[0, .5, 1].map(t => (
+          <text key={'l' + t} x={P.l - 6} y={P.t + ch * (1 - t) + 4} textAnchor="end" fontSize="9.5" fill="#5B6CFF">{Math.round(maxC * t)}</text>
+        ))}
+        {[0, .5, 1].map(t => (
+          <text key={'r' + t} x={W - P.r + 6} y={P.t + ch * (1 - t) + 4} textAnchor="start" fontSize="9.5" fill="#F5B544">{Math.round(maxA * t)}</text>
+        ))}
+        {daily.filter((_, i) => i % step === 0 || i === daily.length - 1).map(d => (
+          <text key={d.date} x={x(daily.indexOf(d))} y={H - 6} textAnchor="middle" fontSize="9.5" fill="#9AA0B4">{fmtD(d.date)}</text>
+        ))}
+        <path d={areaC} fill="url(#gtsc)"/>
+        <path d={pathC} fill="none" stroke="#5B6CFF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="svg-line"/>
+        <path d={pathA} fill="none" stroke="#F5B544" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="svg-line" style={{ animationDelay: '.3s' }}/>
+      </svg>
+    </div>
+  );
+}
+
+/* ── Best-time-to-call heatmap ─────────────────────────
+   Rows = day of week (Mon-Fri/weekends), columns = hours 8-17.
+   Cell hue = appt rate (honest per-call: appt_within_24h).
+   Low-volume cells (<10 calls) are visually de-emphasised to suppress
+   single-call noise (where 1/1 = 100% would otherwise dominate). */
+function CallHeatmap({ cells }) {
+  const m = useMounted(140);
+  const [hover, setHover] = useStateC(null);
+  if (!cells || !cells.length) return null;
+
+  // BigQuery DOW: 1=Sun, 2=Mon, ... 7=Sat. We order: Mon, Tue, Wed, Thu, Fri, Sat, Sun.
+  const ROW_ORDER = [2, 3, 4, 5, 6, 7, 1];
+  const ROW_LABEL = {1:'Sun', 2:'Mon', 3:'Tue', 4:'Wed', 5:'Thu', 6:'Fri', 7:'Sat'};
+  const HOURS     = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+  const MIN_CALLS = 10;  // floor for "trustable" rate
+
+  // Index cells by "dow-hour" for O(1) lookup
+  const map = {};
+  for (const c of cells) map[`${c.dow}-${c.hour}`] = c;
+
+  // Compute color scale across cells that pass the volume floor
+  const eligible = cells.filter(c => c.calls >= MIN_CALLS);
+  const maxRate  = Math.max(...eligible.map(c => c.rate || 0), 1);
+
+  // Find the best cell (>= MIN_CALLS) to highlight
+  const best = eligible.length ? eligible.reduce((a,b) => (b.rate || 0) > (a.rate || 0) ? b : a) : null;
+
+  const cellColor = (c) => {
+    if (!c || c.calls === 0) return 'transparent';
+    if (c.calls < MIN_CALLS)  return 'rgba(154,160,180,0.10)'; // low-vol grey
+    const intensity = Math.min((c.rate || 0) / maxRate, 1);     // 0..1
+    // Mint gradient — strong = greener
+    const alpha = 0.15 + intensity * 0.75;
+    return `rgba(61, 208, 164, ${alpha})`;
+  };
+  const cellText = (c) => {
+    if (!c || c.calls === 0)    return { txt: '·', col: 'var(--muted)' };
+    if (c.calls < MIN_CALLS)    return { txt: c.rate != null ? c.rate.toFixed(0)+'%' : '–', col: '#C7CADA' };
+    const intensity = Math.min((c.rate || 0) / maxRate, 1);
+    return { txt: c.rate.toFixed(0)+'%', col: intensity > 0.55 ? '#0F4A35' : 'var(--ink)' };
+  };
+
+  return (
+    <div className="card" style={{position:'relative'}}>
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Best time to call</div>
+          <div className="sec-sub">Appt-within-24h rate by day &amp; hour · cells with &lt; {MIN_CALLS} calls are de-emphasised</div>
+        </div>
+        {best && (
+          <span style={{fontSize:11, fontWeight:600, padding:'4px 9px', borderRadius:99, background:'rgba(61,208,164,0.14)', color:'#0F8A60'}}>
+            ★ best slot · {ROW_LABEL[best.dow]} {String(best.hour).padStart(2,'0')}:00 · {best.rate.toFixed(1)}%
+          </span>
+        )}
+      </div>
+      <div style={{overflowX:'auto'}}>
+        <div style={{display:'inline-grid', gridTemplateColumns:`44px repeat(${HOURS.length}, 1fr)`, gap:3, minWidth: 480, opacity: m ? 1 : 0, transition: 'opacity 600ms ease'}}>
+          {/* header row */}
+          <div/>
+          {HOURS.map(h => (
+            <div key={'h'+h} style={{textAlign:'center', fontSize:10.5, color:'var(--muted)', fontWeight:600, padding:'4px 0'}}>{String(h).padStart(2,'0')}</div>
+          ))}
+          {/* body */}
+          {ROW_ORDER.map(dow => (
+            <React.Fragment key={'r'+dow}>
+              <div style={{display:'flex', alignItems:'center', fontSize:11, color:'var(--muted)', fontWeight:600}}>{ROW_LABEL[dow]}</div>
+              {HOURS.map(h => {
+                const c = map[`${dow}-${h}`];
+                const isBest = best && c && c.dow === best.dow && c.hour === best.hour;
+                const { txt, col } = cellText(c);
+                return (
+                  <div
+                    key={`${dow}-${h}`}
+                    onMouseEnter={() => c && setHover({...c, dow_label: ROW_LABEL[dow]})}
+                    onMouseLeave={() => setHover(null)}
+                    style={{
+                      height: 30, borderRadius: 6, background: cellColor(c),
+                      border: isBest ? '1.5px solid #0F8A60' : '1px solid var(--line)',
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      fontSize: 10.5, fontWeight: 600, color: col,
+                      cursor: c && c.calls > 0 ? 'default' : 'default',
+                    }}
+                  >{txt}</div>
+                );
+              })}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+      {hover && (
+        <div style={{
+          position:'absolute', bottom: 14, right: 14,
+          padding:'8px 12px', background:'rgba(23,26,43,0.95)', color:'#fff',
+          borderRadius:8, fontSize:11.5, lineHeight:1.5, boxShadow:'0 8px 22px rgba(0,0,0,0.25)',
+          pointerEvents:'none', zIndex: 5,
+        }}>
+          <div style={{fontWeight:700, marginBottom:3}}>{hover.dow_label} {String(hover.hour).padStart(2,'0')}:00</div>
+          <div>{fmt(hover.calls)} calls · {fmt(hover.appts)} appts</div>
+          <div style={{color: hover.calls >= MIN_CALLS ? '#3DD0A4' : '#C7CADA', fontWeight:600}}>
+            {hover.rate != null ? hover.rate.toFixed(1) + '% appt rate' : 'no data'}
+            {hover.calls < MIN_CALLS && hover.calls > 0 && ' · low volume'}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Speed to first call ───────────────────────────────
+   Tests the CLAUDE.md "respond within 5 min" target directly.
+   Buckets leads by minutes-from-create-to-first-outbound-call and shows
+   appt rate per bucket. Makes the speed→conversion cliff visible. */
+function SpeedToCallCard({ rows }) {
+  const m = useMounted(120);
+  if (!rows || !rows.length) return null;
+  // For bar scaling, use the max rate across all buckets (so the best bucket = 100%)
+  const maxRate = Math.max(...rows.map(r => r.appt_rate || 0), 1);
+  const totalLeads = rows.reduce((s, r) => s + r.leads, 0);
+
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Speed to first call</div>
+          <div className="sec-sub">Time from lead → first outbound call · target ≤5 min</div>
+        </div>
+        <div style={{fontSize:11, color:'var(--muted)'}}>{fmt(totalLeads)} leads</div>
+      </div>
+      {rows.map(r => {
+        const isTarget = r.bucket === '≤5 min';
+        const rate = r.appt_rate || 0;
+        const widthPct = rate / maxRate;
+        const sharePct = totalLeads > 0 ? Math.round(r.leads / totalLeads * 100) : 0;
+        // Mint for target bucket; rose for late buckets; neutral for the rest
+        let color = 'var(--indigo)';
+        if (isTarget)                                    color = '#3DD0A4';
+        else if (r.bucket === '1-4 hr' || r.bucket === '>4 hr' || r.bucket === 'next day+') color = '#FF6B7A';
+        return (
+          <div key={r.bucket} style={{display:'grid', gridTemplateColumns:'120px 1fr 200px', alignItems:'center', gap:12, padding:'7px 0', borderBottom:'1px solid var(--line)'}}>
+            <div style={{fontSize:12.5, fontWeight:600, color: isTarget ? '#0F8A60' : 'var(--ink)'}}>
+              {isTarget && <span style={{marginRight:5}}>★</span>}
+              {r.bucket}
+            </div>
+            <div style={{height:9, background:'var(--bg)', borderRadius:5, overflow:'hidden', position:'relative'}}>
+              <div style={{
+                height:'100%',
+                width: m ? Math.round(widthPct * 100) + '%' : '0%',
+                background: `linear-gradient(90deg, ${color}, ${color}aa)`,
+                borderRadius: 5,
+                transition: 'width 1.2s cubic-bezier(.22,1,.36,1)',
+                minWidth: m && rate > 0 ? '4px' : '0'
+              }}/>
+            </div>
+            <div style={{display:'flex', gap:10, justifyContent:'flex-end', fontSize:11.5, color:'var(--muted)'}}>
+              <span><b style={{color:'var(--ink)'}}>{fmt(r.leads)}</b> leads <span style={{opacity:0.65}}>({sharePct}%)</span></span>
+              <span style={{color: isTarget ? '#0F8A60' : 'var(--ink)', fontWeight: 600, minWidth:50, textAlign:'right'}}>
+                {rate.toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        );
+      })}
+      <div style={{fontSize:10.5, color:'var(--muted)', marginTop:10, lineHeight:1.5}}>
+        Appt rate shown per bucket — lead must convert to appointment to count. <i>“next day+”</i> = first call landed on a calendar day after lead creation.
+      </div>
+    </div>
+  );
+}
+
+/* ── Duration sweet spot ───────────────────────────────
+   Talk-time bucket vs honest appt-within-24h rate. Answers "how long
+   should a productive call be?" The 5-10 min bucket consistently wins
+   in this data; <2 min is mostly voicemails / brush-offs (1-3% rate). */
+function DurationSweetSpotCard({ rows }) {
+  const m = useMounted(120);
+  if (!rows || !rows.length) return null;
+  const totalCalls = rows.reduce((s, r) => s + r.calls, 0);
+  // Sweet spot = highest rate among buckets with >= 20 calls (volume floor for trust)
+  const eligible = rows.filter(r => r.calls >= 20);
+  const sweet = eligible.length ? eligible.reduce((a, b) => (b.rate || 0) > (a.rate || 0) ? b : a) : null;
+  const maxRate = Math.max(...rows.map(r => r.rate || 0), 1);
+
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Duration sweet spot</div>
+          <div className="sec-sub">Appt-within-24h rate by talk-time bucket · outbound calls only</div>
+        </div>
+        {sweet && (
+          <span style={{fontSize:11, fontWeight:600, padding:'4px 9px', borderRadius:99, background:'rgba(61,208,164,0.14)', color:'#0F8A60'}}>
+            ★ sweet spot · {sweet.bucket}
+          </span>
+        )}
+      </div>
+      {rows.map(r => {
+        const isSweet = sweet && r.bucket === sweet.bucket;
+        const rate = r.rate || 0;
+        const widthPct = rate / maxRate;
+        const sharePct = totalCalls > 0 ? Math.round(r.calls / totalCalls * 100) : 0;
+        // Mint for sweet spot; rose for the noise floor (<2 min); neutral indigo otherwise
+        let color = 'var(--indigo)';
+        if (isSweet)                                                 color = '#3DD0A4';
+        else if (r.bucket === '<30s' || r.bucket === '30-60s' || r.bucket === '1-2 min') color = '#FF6B7A';
+        return (
+          <div key={r.bucket} style={{display:'grid', gridTemplateColumns:'120px 1fr 200px', alignItems:'center', gap:12, padding:'7px 0', borderBottom:'1px solid var(--line)'}}>
+            <div style={{fontSize:12.5, fontWeight:600, color: isSweet ? '#0F8A60' : 'var(--ink)'}}>
+              {isSweet && <span style={{marginRight:5}}>★</span>}
+              {r.bucket}
+            </div>
+            <div style={{height:9, background:'var(--bg)', borderRadius:5, overflow:'hidden', position:'relative'}}>
+              <div style={{
+                height:'100%',
+                width: m ? Math.round(widthPct * 100) + '%' : '0%',
+                background: `linear-gradient(90deg, ${color}, ${color}aa)`,
+                borderRadius: 5,
+                transition: 'width 1.2s cubic-bezier(.22,1,.36,1)',
+                minWidth: m && rate > 0 ? '4px' : '0'
+              }}/>
+            </div>
+            <div style={{display:'flex', gap:10, justifyContent:'flex-end', fontSize:11.5, color:'var(--muted)'}}>
+              <span><b style={{color:'var(--ink)'}}>{fmt(r.calls)}</b> calls <span style={{opacity:0.65}}>({sharePct}%)</span></span>
+              <span style={{color: isSweet ? '#0F8A60' : 'var(--ink)', fontWeight: 600, minWidth:50, textAlign:'right'}}>
+                {rate.toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        );
+      })}
+      <div style={{fontSize:10.5, color:'var(--muted)', marginTop:10, lineHeight:1.5}}>
+        Rate counts only appts booked in the 24h after the call (honest per-call attribution).
+        <i> &lt;2 min</i> is dominated by voicemails and quick brush-offs.
+      </div>
+    </div>
+  );
+}
+
+/* ── Agent summary table ─────────────────────────────── */
+function AgentTable({ agents, topAgentName = null }) {
+  if (!agents.length) return <EmptyCard title="Agent summary" />;
+  return (
+    <div className="card">
+      <div className="sec-head"><div className="sec-title">Agent summary</div></div>
+      <div className="tbl-scroll" style={{ maxHeight: 360 }}>
+        <table className="tbl">
+          <thead><tr>
+            <th>Agent</th>
+            <th style={{ textAlign: 'right' }}>Outbound</th>
+            <th style={{ textAlign: 'right' }}>Conv</th>
+            <th style={{ textAlign: 'right' }}>Appts / 85</th>
+            <th style={{ textAlign: 'right' }}>Conv/Appt</th>
+            <th style={{ textAlign: 'right' }}>Avg Talk</th>
+            <th>Status</th>
+          </tr></thead>
+          <tbody>
+            {agents.map(a => (
+              <tr key={a.name}>
+                <td style={{ color: 'var(--ink)', fontWeight: 600 }}>
+                  {a.name}
+                  {a.name === topAgentName && <span className="agent-pill agent-pill-top">⭐ Top</span>}
+                </td>
+                <td style={{ textAlign: 'right' }}>{fmt(a.outbound)}</td>
+                <td style={{ textAlign: 'right' }}>{fmt(a.qual_convos)}</td>
+                <td style={{ textAlign: 'right', color: 'var(--ink)', fontWeight: 600 }}>{fmt(a.appts)} / 85</td>
+                <td style={{
+                  textAlign: 'right',
+                  color: a.conv_per_appt == null ? 'var(--muted)' : a.conv_per_appt <= 3 ? '#1FA77F' : 'var(--rose)',
+                  fontWeight: 600,
+                }} title="Conversations per appointment · target ≤ 3">
+                  {a.conv_per_appt != null ? a.conv_per_appt + 'x' : '—'}
+                </td>
+                <td style={{ textAlign: 'right' }}>{fmtSec(a.avg_talk)}</td>
+                <td>
+                  <span className={a.on_target ? 'status-pill pill-target' : 'status-pill pill-miss'}>
+                    <span className="pill-glyph">{a.on_target ? Ic.check : Ic.x}</span>
+                    {a.on_target ? 'On' : 'Off'}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── UK Choropleth Map ───────────────────────────────────── */
+/*
+ * Perfectly tiling jigsaw — shared border points are IDENTICAL across regions.
+ *
+ * Key shared boundary lines (viewBox 0 0 200 302):
+ *   Scotland/England border y≈92:  x=38→115→162
+ *   NW/NE England divider x=115:   y=92→150
+ *   Wales/England border  x=88:    y=150→245
+ *   Yorkshire bottom      y=198:   x=88→158
+ *   Midlands/EoE divider  x=115:   y=198→245
+ *   SW/SE divider         x=88:    y=245→298
+ *   EoE/SE divider        x=162:   y=245 (point)
+ *
+ * Render order: large first → small last (Scotland, SE, SW, Wales, EoE,
+ *               NW Eng, NE Eng, Midlands, Yorkshire, Greater London)
+ * Yorkshire and Greater London always paint on top of everything.
+ */
+const UK_REGIONS_SVG = {
+  'Scotland':
+    { d:'M38,0 L162,0 L170,22 L176,52 L165,80 L162,92 L115,92 L38,92 L28,80 L24,55 L30,28 Z',
+      lx:100, ly:46 },
+  'South East':
+    { d:'M88,245 L115,245 L162,245 L168,258 L172,278 L162,295 L128,300 L98,295 L88,298 Z',
+      lx:132, ly:278 },
+  'South West':
+    { d:'M36,245 L88,245 L88,298 L70,298 L50,296 L32,285 L22,268 L24,252 Z',
+      lx:55,  ly:272 },
+  'Wales':
+    { d:'M38,150 L88,150 L88,245 L68,252 L48,246 L34,230 L26,212 L30,188 L34,165 Z',
+      lx:54,  ly:200 },
+  'East of England':
+    { d:'M158,150 L170,162 L175,188 L168,220 L162,245 L115,245 L115,198 L158,198 Z',
+      lx:148, ly:198 },
+  'Northern England':
+    { d:'M38,92 L115,92 L115,150 L38,150 Z',
+      lx:76,  ly:121 },
+  'North East':
+    { d:'M115,92 L162,92 L168,108 L165,138 L158,150 L115,150 Z',
+      lx:138, ly:120 },
+  'Midlands':
+    { d:'M88,198 L115,198 L115,245 L88,245 Z',
+      lx:102, ly:222 },
+  'Yorkshire':
+    { d:'M88,150 L158,150 L158,198 L88,198 Z',
+      lx:122, ly:174 },
+  'Greater London':
+    { d:'M108,258 L148,258 L150,276 L126,284 L106,282 L104,266 Z',
+      lx:127, ly:271 },
+};
+
+function UKSpendMap({ regions = [] }) {
+  const [hovered, setHovered] = React.useState(null);
+  const [tip, setTip]         = React.useState({ x:0, y:0 });
+  const svgRef = React.useRef(null);
+
+  const spendMap = {}, cplMap = {};
+  regions.forEach(r => { spendMap[r.region] = r.spend_gbp || 0; cplMap[r.region] = r.cpl; });
+  const maxSpend = Math.max(...Object.values(spendMap).filter(v => v > 0), 1);
+
+  function getColor(name) {
+    const s = spendMap[name] || 0;
+    if (!s) return 'var(--line)';
+    const t = Math.pow(s / maxSpend, 0.65);
+    return `rgb(${Math.round(255+t*(229-255))},${Math.round(233+t*(0-233))},${Math.round(236+t*(59-236))})`;
+  }
+
+  function onMove(e, name) {
+    if (!svgRef.current) return;
+    const r = svgRef.current.getBoundingClientRect();
+    setTip({ x: e.clientX - r.left, y: e.clientY - r.top });
+    setHovered(name);
+  }
+
+  const fmtK = v => !v ? '—' : v >= 1000 ? `£${(v/1000).toFixed(1)}k` : `£${Math.round(v)}`;
+
+  // Greater London always renders last so it's always on top and interactive.
+  // When any other region is hovered, London stays on top AND stays undimmed.
+  const ALWAYS_TOP = 'Greater London';
+  const entries = Object.entries(UK_REGIONS_SVG);
+  const sorted = (() => {
+    const base  = entries.filter(([n]) => n !== ALWAYS_TOP && n !== hovered);
+    const top   = entries.find(([n]) => n === ALWAYS_TOP);
+    const hovE  = hovered && hovered !== ALWAYS_TOP ? entries.find(([n]) => n === hovered) : null;
+    if (hovered === ALWAYS_TOP) {
+      // London is hovered — it goes last, everything else before it
+      return [...entries.filter(([n]) => n !== ALWAYS_TOP), top];
+    }
+    // Something else hovered — hovered region second-to-last, London always last
+    return hovE ? [...base, hovE, top] : [...base, top];
+  })();
+
+  return (
+    <div className="card" style={{padding:'18px 20px'}}>
+      <div style={{marginBottom:10}}>
+        <div className="card-label">Google spend by region</div>
+        <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>Google Ads only · National excluded</div>
+      </div>
+      <div style={{position:'relative'}}>
+        <svg ref={svgRef} viewBox="0 0 200 302"
+          style={{width:'100%',height:'auto',display:'block',overflow:'visible'}}
+          onMouseLeave={() => setHovered(null)}>
+          {sorted.map(([name, {d, lx, ly}]) => {
+            const isHov   = hovered === name;
+            const isDim   = hovered && !isHov && name !== ALWAYS_TOP;
+            const spend   = spendMap[name] || 0;
+            const isSmall = name === 'Greater London' || name === 'Midlands';
+            return (
+              <g key={name} style={{
+                transformBox:'fill-box', transformOrigin:'center',
+                transform:  isHov ? 'scale(1.08)' : 'scale(1)',
+                filter:     isHov ? 'drop-shadow(0 6px 20px rgba(0,0,0,0.42))'
+                          : isDim ? 'blur(1.5px)' : 'none',
+                opacity:    isDim ? 0.18 : 1,
+                transition:'transform .38s cubic-bezier(.34,1.56,.64,1), filter .22s ease, opacity .22s ease',
+                cursor:'pointer',
+              }}
+              onMouseMove={e => onMove(e, name)}
+              onMouseEnter={e => onMove(e, name)}>
+                <path d={d} fill={getColor(name)} stroke="#fff"
+                  strokeWidth={isHov ? 1.8 : 1.4} strokeLinejoin="round"/>
+                {spend > 0 && (
+                  <text x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
+                    style={{fontSize: isSmall ? '5px' : '6.5px', fontWeight:700,
+                      fill:'#fff', pointerEvents:'none', fontFamily:'DM Sans,sans-serif',
+                      filter:'drop-shadow(0 1px 2px rgba(0,0,0,0.5))'}}>
+                    {fmtK(spend)}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+        {hovered && (
+          <div style={{position:'absolute', left: Math.min(tip.x+14, 160), top: tip.y-16,
+            background:'#1C1F35', color:'#E8EAF2', fontSize:11, lineHeight:1.55,
+            padding:'8px 11px', borderRadius:8, pointerEvents:'none', zIndex:50,
+            whiteSpace:'nowrap', boxShadow:'0 4px 16px rgba(0,0,0,.28)'}}>
+            <div style={{fontWeight:600,marginBottom:2}}>{hovered}</div>
+            <div>{fmtK(spendMap[hovered] || 0)}</div>
+            {cplMap[hovered] && <div style={{color:'#9AA0B4',fontSize:10,marginTop:2}}>CPL {fmtK(cplMap[hovered])}</div>}
+          </div>
+        )}
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginTop:10}}>
+        <span style={{fontSize:9.5,color:'var(--muted)'}}>Low</span>
+        <div style={{height:5,borderRadius:3,flex:1,background:'linear-gradient(to right,#FFE9EC,#E5003B)'}}/>
+        <span style={{fontSize:9.5,color:'var(--muted)'}}>High</span>
+      </div>
+    </div>
+  );
+}
+
+/* ── Region horizontal bar card (reusable) ───────────────── */
+function RegionBarCard({ title, rows, valueKey, formatVal, color, icon, sub, warning }) {
+  const m = useMounted(200);
+  if (!rows || !rows.length) return <EmptyCard title={title}/>;
+  const max = Math.max(...rows.map(r => r[valueKey] || 0), 1);
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
+          <div className="card-label">{title}</div>
+          {warning && (
+            <div className="info-tip" style={{marginTop:1}}>
+              <span className="info-tip-icon">i</span>
+              <div className="info-tip-bubble" style={{width:220}}>{warning}</div>
+            </div>
+          )}
+        </div>
+        {sub && <div style={{fontSize:11,color:'var(--muted)',marginTop:3}}>{sub}</div>}
+        {icon && <div className="card-icon" style={{background:'var(--indigo-soft)'}}>{icon}</div>}
+      </div>
+      <div style={{marginTop:14,display:'flex',flexDirection:'column',gap:9}}>
+        {rows.slice(0,10).map((r,i) => {
+          const val = r[valueKey] || 0;
+          const pct = max > 0 ? val / max * 100 : 0;
+          return (
+            <div key={r.region}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                <span style={{fontSize:11.5,fontWeight:500,color:'var(--ink2)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'55%'}}>{r.region}</span>
+                <div style={{display:'flex',gap:10,alignItems:'center'}}>
+                  {r.cpl != null && valueKey === 'spend_gbp' && <span style={{fontSize:10.5,color:'var(--muted)',fontWeight:500}}>{'£'+r.cpl+' CPL'}</span>}
+                  <span style={{fontSize:11.5,fontWeight:700,color:'var(--ink)'}}>{formatVal(val)}</span>
+                </div>
+              </div>
+              <div style={{height:5,background:'var(--line)',borderRadius:4,overflow:'hidden'}}>
+                <div style={{height:'100%',width:(m ? pct : 0)+'%',background:color,borderRadius:4,transition:'width 1s cubic-bezier(.22,1,.36,1) '+(i*0.05)+'s'}}/>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ── GA4 Traffic by Channel ──────────────────────────────── */
+const CH_COLOR = { 'Google Paid':'#5B6CFF','Google Organic':'#3DD0A4','Meta':'#8B5CF6','Bing':'#F59E0B','Direct':'#94A3B8','Organic Search':'#10B981','Referral':'#F97316','Other':'#CBD5E1' };
+
+function GA4SessionsCard({ sessions }) {
+  const m = useMounted(150);
+  if (!sessions || !sessions.length) return null;
+  const total = sessions.reduce((s, r) => s + r.sessions, 0) || 1;
+  return (
+    <div className="card">
+      <div className="card-head" style={{marginBottom:14}}>
+        <div>
+          <div className="card-label">Website traffic by channel</div>
+          <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>GA4 sessions · {fmt(total)} total</div>
+        </div>
+        <div className="card-icon" style={{background:'var(--sky-soft)'}}>
+          <svg viewBox="0 0 16 16" fill="none" stroke="var(--sky)" strokeWidth="1.5"><path d="M2 12 L5 8 L8 10 L11 5 L14 7"/><circle cx="14" cy="7" r="1.2" fill="var(--sky)" stroke="none"/></svg>
+        </div>
+      </div>
+      {sessions.slice(0,7).map((r,i) => {
+        const pct = r.sessions / total * 100;
+        const col = CH_COLOR[r.channel] || '#CBD5E1';
+        return (
+          <div key={r.channel} style={{marginBottom:9}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+              <div style={{display:'flex',alignItems:'center',gap:7}}>
+                <div style={{width:7,height:7,borderRadius:'50%',background:col,flexShrink:0}}/>
+                <span style={{fontSize:11.5,fontWeight:500,color:'var(--ink2)'}}>{r.channel}</span>
+              </div>
+              <div style={{display:'flex',gap:10,alignItems:'center'}}>
+                <span style={{fontSize:10.5,color:'var(--muted)'}}>{pct.toFixed(1)}%</span>
+                <span style={{fontSize:11.5,fontWeight:700,color:'var(--ink)',minWidth:35,textAlign:'right'}}>{fmt(r.sessions)}</span>
+              </div>
+            </div>
+            <div style={{height:4,background:'var(--line)',borderRadius:3,overflow:'hidden'}}>
+              <div style={{height:'100%',width:(m?pct:0)+'%',background:col,borderRadius:3,transition:'width .9s cubic-bezier(.22,1,.36,1) '+(i*0.06)+'s'}}/>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── GA4 Top Landing Pages ───────────────────────────────── */
+function GA4PagesCard({ pages }) {
+  if (!pages || !pages.length) return null;
+  const maxViews = Math.max(...pages.map(p => p.views), 1);
+  const fmtPath = p => p.replace(/^\/lp\/[0-9]-[0-9]\//, '/').replace(/\/$/, '').replace(/-/g,' ').replace(/^\//,'') || p;
+  const fmtSecs = s => s >= 60 ? `${Math.floor(s/60)}m ${s%60}s` : `${s}s`;
+  return (
+    <div className="card">
+      <div className="card-head" style={{marginBottom:14}}>
+        <div>
+          <div className="card-label">Top landing pages</div>
+          <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>By page views · GA4</div>
+        </div>
+        <div className="card-icon" style={{background:'var(--mint-soft)'}}>
+          <svg viewBox="0 0 16 16" fill="none" stroke="#1FA77F" strokeWidth="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 6h6M5 9h4"/></svg>
+        </div>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:7}}>
+        {pages.slice(0,7).map((p,i) => (
+          <div key={p.path} style={{display:'grid',gridTemplateColumns:'1fr auto',gap:8,alignItems:'center'}}>
+            <div>
+              <div style={{fontSize:11,fontWeight:500,color:'var(--ink)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',textTransform:'capitalize'}}>{fmtPath(p.path)}</div>
+              <div style={{height:3,background:'var(--line)',borderRadius:2,marginTop:3,overflow:'hidden'}}>
+                <div style={{height:'100%',width:`${p.views/maxViews*100}%`,background:'var(--mint)',borderRadius:2,transition:'width .8s cubic-bezier(.22,1,.36,1) '+(i*0.07)+'s'}}/>
+              </div>
+            </div>
+            <div style={{textAlign:'right',flexShrink:0}}>
+              <div style={{fontSize:11.5,fontWeight:700,color:'var(--ink)'}}>{fmt(p.views)}</div>
+              <div style={{fontSize:10,color:'var(--muted)',marginTop:1}}>{fmtSecs(p.avg_eng_secs)}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   QC Card — surfaces attribution conflicts (CRM vs UTM)
+   ═══════════════════════════════════════════════════════════════ */
+
+const QC_LABEL = {
+  crm_no_utm: 'CRM tagged paid, no UTM trail',
+  utm_only:   'UTM identified paid, CRM unmapped',
+  disagree:   'CRM/UTM disagree on platform',
+};
+
+function QcCard({ qc }) {
+  const [open, setOpen] = React.useState(false);
+  if (!qc || !qc.flagged_total) return null;
+  const cats = ['crm_no_utm', 'utm_only', 'disagree'].filter(k => qc[k] > 0);
+  return (
+    <div className="card qc-card">
+      <div className="card-head">
+        <div className="card-label">
+          Attribution data quality
+          <span className="qc-pill">{qc.flagged_total} flagged</span>
+        </div>
+        <button className="qc-toggle" onClick={() => setOpen(o => !o)}>
+          {open ? 'Hide' : 'Show'} leads
+        </button>
+      </div>
+      <div className="qc-summary">
+        {cats.map(k => (
+          <div key={k} className="qc-row">
+            <span className="qc-count">{qc[k]}</span>
+            <span className="qc-label">{QC_LABEL[k]}</span>
+          </div>
+        ))}
+        <div className="qc-row qc-clean">
+          <span className="qc-count">{qc.agree || 0}</span>
+          <span className="qc-label">CRM and UTM agree</span>
+        </div>
+      </div>
+      {open && qc.leads && qc.leads.length > 0 && (
+        <div className="qc-leads">
+          <table>
+            <thead>
+              <tr><th>Lead</th><th>Date</th><th>CRM</th><th>UTM</th><th>→ Attributed</th><th>Flag</th></tr>
+            </thead>
+            <tbody>
+              {qc.leads.map(l => (
+                <tr key={l.lead_id}>
+                  <td>{l.name}</td>
+                  <td>{l.created_date}</td>
+                  <td className={l.crm_platform ? 'pf-' + l.crm_platform.toLowerCase() : 'pf-none'}>{l.crm_platform || '—'}</td>
+                  <td className={l.utm_platform ? 'pf-' + l.utm_platform.toLowerCase() : 'pf-none'}>{l.utm_platform || '—'}</td>
+                  <td className={l.attributed ? 'pf-' + l.attributed.toLowerCase() : 'pf-none'}>{l.attributed || 'organic'}</td>
+                  <td className="qc-flag-cell">{QC_LABEL[l.qc_flag] || l.qc_flag}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   views.jsx — MarketingView, TelesalesView, SalesView, App
+   ═══════════════════════════════════════════════════════════════ */
+
+function MarketingView({ data }) {
+  const { totals: T, prev_totals: PT, platforms, daily, lead_sources, regions = [], ga4_sessions = [], ga4_pages = [], water_split = [], qc = null } = data;
+  const pt = PT || {};
+  const totalLeads     = T.total_leads || T.leads;
+  const prevTotalLeads = pt.total_leads != null ? pt.total_leads : pt.leads;
+  const spendSegs      = platforms.map(p => ({ label: p.platform, value: p.spend, color: PC[p.platform] }));
+  const waterCount     = T.water_leads || 0;
+  const waterPrev      = pt.water_leads || 0;
+  const waterOnly      = (water_split.find(w => w.type === 'Water') || {}).leads || 0;
+  const waterAndHeat   = (water_split.find(w => w.type === 'Heating and Water') || {}).leads || 0;
+  return (
+    <>
+      <div className="g5">
+        <Kpi label="Total spend"  value={gbp(T.spend)}    icon={Ic.spend}   iconBg="var(--rose-soft)"   iconColor="var(--rose)"   delta={delta(T.spend, pt.spend, 'down')}       delay={0}/>
+        <Kpi label="Total leads"  value={fmt(totalLeads)} icon={Ic.leads}   iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(totalLeads, prevTotalLeads, 'up')} delay={60}/>
+        <Kpi label="Paid CPL"     value={gbp(T.cpl)}      icon={Ic.target}  iconBg="var(--amber-soft)"  iconColor="#A87B0A"       delta={delta(T.cpl, pt.cpl, 'down')}           delay={120}/>
+        <Kpi label="Clicks"       value={fmt(T.clicks)}   icon={Ic.chart}   iconBg="var(--sky-soft)"    iconColor="var(--sky)"    delay={180}/>
+        <Kpi label="Water leads"  value={fmt(waterCount)} icon={Ic.droplet} iconBg="#E6F2FB"            iconColor="#1E7CC4"       delta={delta(waterCount, waterPrev, 'up')}
+             sub={waterCount > 0 ? `${waterAndHeat} Heat+Water · ${waterOnly} Water` : null}
+             delay={240}/>
+      </div>
+      <div className="g2">
+        <DonutCard title="Spend split" segments={spendSegs} total={gbp(T.spend/1000,1)+'k'} totalLabel="SPEND"
+          sub={fmt(T.clicks) + ' clicks'}/>
+        <LeadSplitCard sources={lead_sources} totalLeads={totalLeads}/>
+      </div>
+      <QcCard qc={qc}/>
+      <div style={{display:'grid',gridTemplateColumns:'1.6fr 1fr 1fr',gap:14,marginBottom:14}}>
+        <SpendChart daily={daily}/>
+        <PlatformBreakdown platforms={platforms} totalSpend={T.spend}/>
+        <UKSpendMap regions={regions.filter(r => r.spend_gbp > 0)}/>
+      </div>
+      <div className="g12">
+        <LeadSourcesCard sources={lead_sources}/>
+        <ActivityChart daily={daily}/>
+      </div>
+      {/* GA4 + Leads by region — pack into a smart grid depending on what has data */}
+      {(() => {
+        const hasSessions = ga4_sessions.length > 0;
+        const hasPages    = ga4_pages.length > 0;
+        const hasRegions  = regions.filter(r => r.leads > 0).length > 0;
+        const leadsCard   = hasRegions ? (
+          <RegionBarCard
+            title="Leads by region"
+            rows={regions.filter(r => r.leads > 0)}
+            valueKey="leads"
+            formatVal={v => fmt(v)}
+            color="var(--violet)"
+            sub="Derived from UTM campaign · postcode fallback"
+            warning="Partial data — region is only known when a lead has a regional UTM campaign name, a postcode, or a manually entered region in SharpSpring. Leads from generic campaigns with no postcode cannot be attributed."
+          />
+        ) : null;
+
+        // Collect non-null cards in order
+        const cards = [
+          hasSessions ? <GA4SessionsCard key="ga4s" sessions={ga4_sessions}/> : null,
+          hasPages    ? <GA4PagesCard    key="ga4p" pages={ga4_pages}/> : null,
+          leadsCard   ? React.cloneElement(leadsCard, {key:'reg'}) : null,
+        ].filter(Boolean);
+
+        if (cards.length === 0) return null;
+        if (cards.length === 1) return <div style={{marginBottom:14}}>{cards[0]}</div>;
+        if (cards.length === 2) return <div className="g2">{cards}</div>;
+        return <div className="g3">{cards}</div>;
+      })()}
+    </>
+  );
+}
+
+// Telesales targets — see CLAUDE.md
+const TS_TARGET_L2A     = 33;   // 33% appointments per call target
+const TS_TARGET_CPA_GBP = 150;  // £150 max cost-per-appointment (paid spend ÷ appts)
+const TS_CPA_PAUSE_GBP  = 200;  // any source with CPA above this is flagged "pause"
+
+/* ── Insights computation ─────────────────────────────────
+   Rules-based insights — each returns null if not triggered.
+   Severity: 'red' (action now), 'amber' (watch), 'green' (positive).      */
+function computeInsights({ agents, T, pt, sourceCpa }) {
+  const insights = [];
+
+  // Team-average calls-per-appt (only for agents with >=1 appt to avoid Infinity)
+  const validAgents = agents.filter(a => a.appts > 0 && a.outbound > 0);
+  const teamAvgCpA = validAgents.length
+    ? validAgents.reduce((s, a) => s + (a.outbound / a.appts), 0) / validAgents.length
+    : 0;
+
+  // Rule 1 — Lead → Appt rate dropping
+  if (pt && pt.l2a != null && T.l2a != null) {
+    const drop = T.l2a - pt.l2a;
+    if (drop <= -2) {
+      insights.push({
+        severity: 'amber',
+        icon: '📉',
+        title: `Conversion declining`,
+        body: `Call → appt rate dropped ${Math.abs(drop).toFixed(1)} percentage points vs last period (now ${T.l2a}%, was ${pt.l2a}%).`,
+        action: 'Check if call quality has slipped or new lead source is converting worse.',
+      });
+    }
+  }
+
+  // Rule 2 — Top performer (highest appt/outbound ratio, min 5 calls)
+  const performersByRate = validAgents
+    .filter(a => a.outbound >= 5)
+    .map(a => ({ ...a, rate: a.appts / a.outbound }))
+    .sort((a, b) => b.rate - a.rate);
+  const topPerformer = performersByRate[0];
+  if (topPerformer && topPerformer.rate >= 0.20) {
+    insights.push({
+      severity: 'green',
+      icon: '⭐',
+      title: `${topPerformer.name} is the top performer`,
+      body: `Booking ${topPerformer.appts} appts off ${topPerformer.outbound} calls — ${(topPerformer.rate * 100).toFixed(1)}% conversion.`,
+      action: 'Capture their approach — script, tone, time-of-day patterns.',
+    });
+  }
+
+  // Rule 3 — Source with CPA > pause threshold
+  const expensiveSource = sourceCpa
+    .filter(s => s.cost_per_appt != null && s.cost_per_appt > TS_CPA_PAUSE_GBP && s.spend >= 100)
+    .sort((a, b) => b.cost_per_appt - a.cost_per_appt)[0];
+  if (expensiveSource) {
+    insights.push({
+      severity: 'red',
+      icon: '💸',
+      title: `${expensiveSource.platform} cost per appt is £${expensiveSource.cost_per_appt}`,
+      body: `Spent £${expensiveSource.spend.toFixed(0)} for ${expensiveSource.appts} appointment${expensiveSource.appts === 1 ? '' : 's'} — above the £${TS_CPA_PAUSE_GBP} pause threshold.`,
+      action: 'Pause or rebid this source.',
+    });
+  }
+
+  return {
+    insights: insights.slice(0, 4),
+    topAgentName: topPerformer ? topPerformer.name : null,
+    teamAvgCpA,
+  };
+}
+
+function InsightsPanel({ insights }) {
+  const list = insights.insights || [];
+  if (list.length === 0) return null;
+  return (
+    <div className="card insights-card">
+      <div className="card-head">
+        <div className="card-label">Insights — what to act on today</div>
+        <div className="insights-count">{list.length} flag{list.length === 1 ? '' : 's'}</div>
+      </div>
+      <div className="insights-list">
+        {list.map((ins, i) => (
+          <div key={i} className={`insight insight-${ins.severity}`}>
+            <div className="insight-icon">{ins.icon}</div>
+            <div className="insight-body">
+              <div className="insight-title">{ins.title}</div>
+              <div className="insight-detail">{ins.body}</div>
+              {ins.action && <div className="insight-action">{ins.action}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TelesalesView({ data, marketingData }) {
+  const { agents, daily, totals: T, prev_totals: PT, speed_to_call = [], heatmap = [], duration_buckets = [] } = data;
+  const pt = PT || {};
+  const sourceCpa = (marketingData && marketingData.source_cpa) || [];
+  const noAgents = !agents.length;
+
+  // L2A target progress
+  const l2aVal = T.l2a || 0;
+  const l2aDeltaPP = pt.l2a != null ? +(l2aVal - pt.l2a).toFixed(1) : null;
+
+  // CPA target progress (lower is better)
+  const cpaVal = T.cpa || 0;
+
+  // Insights — computed rules-based, severity-coded
+  const insights = computeInsights({ agents, T, pt, sourceCpa });
+  const { topAgentName } = insights;
+
+  return (
+    <>
+      <div className="g4">
+        <Kpi label="Outbound calls"    value={fmt(T.outbound)} icon={Ic.phone}  iconBg="var(--indigo-soft)" iconColor="var(--indigo)" delta={delta(T.outbound, pt.outbound, 'up')} delay={0}/>
+        <Kpi label="Appointments"      value={fmt(T.appts)}    icon={Ic.appt}   iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(T.appts, pt.appts, 'up')}       delay={60}/>
+        <Kpi label="Call → Appt rate"  value={l2aVal + '%'}    icon={Ic.target} iconBg="var(--amber-soft)"  iconColor="#A87B0A"
+             target={TS_TARGET_L2A + '%'} targetRaw={TS_TARGET_L2A} valueRaw={l2aVal} targetDir="up"
+             delta={l2aDeltaPP != null ? { up: l2aDeltaPP >= 0, good: l2aDeltaPP >= 0, pct: (l2aDeltaPP >= 0 ? '+' : '') + l2aDeltaPP + 'pp' } : null}
+             delay={120}/>
+        <Kpi label="Cost per appt"     value={gbp(cpaVal)}     icon={Ic.spend}  iconBg="var(--rose-soft)"   iconColor="var(--rose)"
+             target={'£' + TS_TARGET_CPA_GBP} targetRaw={TS_TARGET_CPA_GBP} valueRaw={cpaVal} targetDir="down"
+             delta={delta(cpaVal, pt.cpa, 'down')}
+             delay={180}/>
+      </div>
+      {noAgents && (
+        <div className="card" style={{textAlign:'center',padding:'24px',color:'var(--muted)',fontSize:13}}>
+          No calls have been logged in this period yet. KPI tiles above show 0; agent breakdown will appear as calls come in.
+        </div>
+      )}
+      {!noAgents && <InsightsPanel insights={insights}/>}
+      <div className="g2">
+        <SpeedToCallCard rows={speed_to_call}/>
+        <DurationSweetSpotCard rows={duration_buckets}/>
+      </div>
+      <CallHeatmap cells={heatmap}/>
+      {!noAgents && <AgentBars agents={agents} topAgentName={topAgentName}/>}
+      {!noAgents && <TsTrendChart daily={daily}/>}
+      {!noAgents && <AgentTable agents={agents} topAgentName={topAgentName}/>}
+    </>
+  );
+}
+
+function SalesView({ data }) {
+  const { stages, recent, win_rate_by_stage, totals: T, prev_totals: PT } = data;
+  const pt = PT || {};
+  if (!stages.length && !recent.length) return <EmptyCard title="" message="No pipeline data available."/>;
+  const openCount = T.count - T.won;
+  const prevOpen  = (pt.count || 0) - (pt.won || 0);
+  const winRate   = T.count > 0 ? Math.round(T.won / T.count * 100) : 0;
+  return (
+    <>
+      <div className="g4">
+        <Kpi label="Active deals"    value={fmt(openCount)}        icon={Ic.briefcase} iconBg="var(--indigo-soft)" iconColor="var(--indigo)" delta={delta(openCount, prevOpen, 'up')}                           delay={0}/>
+        <Kpi label="Won deals"       value={fmt(T.won)}            icon={Ic.sale}      iconBg="var(--mint-soft)"   iconColor="#1FA77F"       delta={delta(T.won, pt.won, 'up')}                                 delay={60}/>
+        <Kpi label="Pipeline value"  value={gbp(T.pipeline_value)} icon={Ic.spend}     iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(T.pipeline_value, pt.pipeline_value, 'up')}           delay={120}/>
+        <Kpi label="Weighted value"  value={gbp(T.weighted_value)} icon={Ic.wallet}    iconBg="var(--amber-soft)"  iconColor="#A87B0A"       delta={delta(T.weighted_value, pt.weighted_value, 'up')}           delay={180}/>
+      </div>
+      <div className="g21">
+        <StageBreakdown stages={stages}/>
+        <WinRateByStage rows={win_rate_by_stage}/>
+      </div>
+      <OpportunitiesTable recent={recent}/>
+    </>
+  );
+}
+
+/* ── Motion presets ──────────────────────────────────── */
+const TWEAK_DEFAULTS = {
+  motion: 'rise', hover: 'lift', duration: 400, stagger: 60, easing: 'smooth', replayOnTab: true,
+};
+const EASE_PRESETS = {
+  smooth: 'cubic-bezier(.22,1,.36,1)',
+  bounce: 'cubic-bezier(.34,1.56,.64,1)',
+  snappy: 'cubic-bezier(.16,1,.3,1)',
+  linear: 'linear',
+  ease:   'ease-out',
+};
+
+/* ── App root ─────────────────────────────────────────── */
+/* ── Mobile nav ─────────────────────────────────────────── */
+function MobileNav({ activeTab, setActiveTab }) {
+  const items = [
+    { label: 'Marketing', icon: Ic.chart },
+    { label: 'Sales',     icon: Ic.briefcase },
+    { label: 'Telesales', icon: Ic.phone },
+  ];
+  return (
+    <nav className="mobile-nav">
+      {items.map(it => (
+        <button key={it.label}
+          className={`mob-nav-btn${activeTab === it.label ? ' active' : ''}`}
+          onClick={() => setActiveTab(it.label)}>
+          {it.icon}<span>{it.label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function App() {
+  const [activeTab, setActiveTab] = React.useState(
+    () => sessionStorage.getItem('dash:tab') || 'Marketing'
+  );
+  React.useEffect(() => { sessionStorage.setItem('dash:tab', activeTab); }, [activeTab]);
+
+  const [period, setPeriod] = React.useState({ id: '30d', label: 'Last 30 days' });
+  const [data,   setData]   = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error,   setError]   = React.useState(null);
+  const [refreshKey, setRefreshKey] = React.useState(0);
+  const [bustCache,  setBustCache]  = React.useState(false);
+
+  const t = TWEAK_DEFAULTS;
+
+  /* Resolve preset id → actual dates (custom periods carry d0/d1 directly) */
+  const { d0, d1 } = React.useMemo(() => {
+    if (period.id === 'custom') return { d0: period.d0, d1: period.d1 };
+    return periodDates(period.id);
+  }, [period.id, period.d0, period.d1]);
+
+  /* Fetch from local API — bust server cache first when explicitly refreshed */
+  React.useEffect(() => {
+    if (!d0 || !d1) return;
+    setLoading(true); setError(null);
+    const doFetch = (silent = false) =>
+      fetch(`/api/data?d0=${d0}&d1=${d1}`)
+        .then(r => { if (!r.ok) throw new Error(`Server error ${r.status}`); return r.json(); })
+        .then(d => { if (d.error) throw new Error(d.error); setData(d); })
+        .catch(e => { if (!silent) setError(e.message); })
+        .finally(() => { if (!silent) setLoading(false); });
+    if (bustCache) {
+      setBustCache(false);
+      fetch('/api/refresh').then(() => doFetch()).catch(() => doFetch());
+    } else {
+      doFetch();
+    }
+  }, [d0, d1, refreshKey]);
+
+  /* Live polling — every 30s silently refetch the period's data so KPIs and
+     agent bars tick over as the day progresses without the user clicking
+     refresh. Only polls while the browser tab is visible (saves bandwidth
+     when nobody's looking). Backed by VM-side cron syncing every 60s and
+     busting the API cache after each dbt rebuild — so "live" here means
+     "within 90s of the actual event". */
+  const [lastPoll, setLastPoll] = React.useState(Date.now());
+  React.useEffect(() => {
+    if (!d0 || !d1) return;
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      if (document.hidden) return;  // skip if tab not visible
+      fetch(`/api/data?d0=${d0}&d1=${d1}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d && !d.error && !cancelled) { setData(d); setLastPoll(Date.now()); } })
+        .catch(() => {});
+    };
+    const id = setInterval(tick, 30000);   // poll every 30 seconds
+    return () => { cancelled = true; clearInterval(id); };
+  }, [d0, d1]);
+
+  /* Apply motion settings to <body> */
+  React.useEffect(() => {
+    const b = document.body;
+    b.setAttribute('data-motion', t.motion);
+    b.setAttribute('data-hover',  t.hover);
+    b.style.setProperty('--motion-dur',     t.duration + 'ms');
+    b.style.setProperty('--motion-stagger', t.stagger  + 'ms');
+    b.style.setProperty('--motion-ease',    EASE_PRESETS[t.easing] || EASE_PRESETS.smooth);
+  }, [t.motion, t.hover, t.duration, t.stagger, t.easing]);
+
+  const viewKey = t.replayOnTab ? (activeTab + refreshKey) : ('view-' + refreshKey);
+  const refreshedAt = data?.refreshed_at || new Date().toISOString();
+
+  return (
+    <div className="app">
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab}/>
+      <main className="main">
+        <Topbar
+          title={activeTab}
+          period={period} setPeriod={(p) => { setPeriod(p); setRefreshKey(k => k + 1); }}
+          refreshedAt={refreshedAt}
+          lastPoll={lastPoll}
+          onRefresh={() => { setBustCache(true); setRefreshKey(k => k + 1); }}
+          onCustomDate={(d0, d1) => {
+            setPeriod({ id: 'custom', label: fmtRangeLabel(d0, d1), d0, d1 });
+            setRefreshKey(k => k + 1);
+          }}
+        />
+        {loading && (
+          <div className="loader">
+            <div className="spinner"/>
+            <span>Loading BigQuery data…</span>
+          </div>
+        )}
+        {!loading && error && <div className="err-box">Error: {error}</div>}
+        {!loading && !error && data && (
+          <div key={viewKey} className="view-fade">
+            {activeTab === 'Marketing'  && <MarketingView  data={data.marketing}/>}
+            {activeTab === 'Telesales' && <TelesalesView  data={data.telesales} marketingData={data.marketing}/>}
+            {activeTab === 'Sales' && (
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'60vh',gap:'16px'}}>
+                <div style={{fontSize:'48px'}}>🚧</div>
+                <div style={{fontSize:'28px',fontWeight:'700',color:'#E5003B',letterSpacing:'-0.5px'}}>Sales Dashboard</div>
+                <div style={{fontSize:'16px',color:'#888',fontWeight:'500'}}>Coming soon — we're working on it.</div>
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+
+      <MobileNav activeTab={activeTab} setActiveTab={setActiveTab}/>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

@@ -378,9 +378,8 @@ def _telesales_whiteboard():
               COUNTIF(appointment_date BETWEEN DATE_TRUNC(CURRENT_DATE('Europe/London'), MONTH)
                                           AND LAST_DAY(CURRENT_DATE('Europe/London'))) AS month_appts
             FROM `{PROJECT}.silver.silver_sharpspring_leads`
-            WHERE appointment_booked = 'Yes'
+            WHERE appointment_date IS NOT NULL
               AND appointment_made_by IS NOT NULL
-              AND appointment_date IS NOT NULL
               AND LOWER(COALESCE(appointment_status, '')) NOT IN ('appointment cancelled','cancelled','cancel','appointment cancel')
             GROUP BY agent_name
             HAVING agent_name IN ('{agents_list}')

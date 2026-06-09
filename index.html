@@ -2281,7 +2281,14 @@ function InsightsPanel({ insights }) {
 }
 
 function TelesalesView({ data }) {
-  const { agents, totals: T, is_monthly: isMonthly, team_target_per_agent: tgtPerAgent = 85, team_target: teamTarget = 340 } = data;
+  // Explicit property access — avoids any Babel-standalone quirks with
+  // multi-key-rename destructuring of underscored keys (was producing
+  // undefined isMonthly even when data.is_monthly was true).
+  const agents = data.agents || [];
+  const T = data.totals || {};
+  const isMonthly = data.is_monthly === true;
+  const tgtPerAgent = data.team_target_per_agent || 85;
+  const teamTarget = data.team_target || 340;
   const noAgents = !agents.length;
 
   // Headline KPI cards — match the four numbers the team reads off the

@@ -2279,28 +2279,24 @@ function TelesalesView({ data }) {
   const { agents, totals: T, is_monthly: isMonthly, team_target_per_agent: tgtPerAgent = 85, team_target: teamTarget = 340 } = data;
   const noAgents = !agents.length;
 
-  // Headline KPI cards — these are the 4 numbers the telesales manager
-  // tracks every day in her Q2 Telesales Tracker xlsx:
-  //   - Conv         = qualified conversations team-wide
-  //   - Appts        = appointments scheduled to sit in period
-  //   - Conv/Appt    = team-level efficiency ratio (target ≤ 3)
-  //   - Pace         = appts vs monthly team target (4 × 85)
-  const convPerAppt = T.conv_per_appt;
-  const paceLabel = T.appts + ' / ' + teamTarget;
-
+  // Headline KPI cards — match the four numbers the team reads off the
+  // office whiteboard every morning:
+  //   - Today's appointments (sits in the diary for today)
+  //   - This week's appointments (Mon-Sun current week)
+  //   - This month's appointments (full calendar month, including future sits)
+  //   - To go (team target 340 minus this month's sits)
   return (
     <>
       <div className="g4">
-        <Kpi label="Conversations" value={fmt(T.conv)} icon={Ic.phone}
-             iconBg="var(--indigo-soft)" iconColor="var(--indigo)" delay={0}/>
-        <Kpi label="Appointments" value={fmt(T.appts)} icon={Ic.appt}
-             iconBg="var(--violet-soft)" iconColor="var(--violet)" delay={60}/>
-        <Kpi label="Conv / Appt" value={convPerAppt != null ? convPerAppt + 'x' : '—'}
-             icon={Ic.target} iconBg="var(--amber-soft)" iconColor="#A87B0A"
-             target="≤ 3x" targetRaw={3} valueRaw={convPerAppt} targetDir="down" delay={120}/>
-        <Kpi label="Pace to target" value={paceLabel} icon={Ic.spend}
+        <Kpi label="Today" value={fmt(T.today_appts)} icon={Ic.appt}
+             iconBg="var(--violet-soft)" iconColor="var(--violet)" delay={0}/>
+        <Kpi label="This week" value={fmt(T.week_appts)} icon={Ic.target}
+             iconBg="var(--indigo-soft)" iconColor="var(--indigo)" delay={60}/>
+        <Kpi label="This month" value={fmt(T.month_appts) + ' / ' + teamTarget} icon={Ic.phone}
              iconBg="var(--mint-soft)" iconColor="var(--mint)"
-             target={teamTarget.toString()} targetRaw={teamTarget} valueRaw={T.appts} targetDir="up" delay={180}/>
+             target={teamTarget.toString()} targetRaw={teamTarget} valueRaw={T.month_appts} targetDir="up" delay={120}/>
+        <Kpi label="To go" value={fmt(T.togo_appts)} icon={Ic.spend}
+             iconBg="var(--amber-soft)" iconColor="#A87B0A" delay={180}/>
       </div>
 
       {noAgents && (
@@ -2309,6 +2305,7 @@ function TelesalesView({ data }) {
         </div>
       )}
 
+      {!noAgents && <TelesalesWhiteboardTable agents={agents} totals={T} tgtPerAgent={tgtPerAgent} teamTarget={teamTarget}/>}
       {!noAgents && <TelesalesTopTable agents={agents} totals={T} tgtPerAgent={tgtPerAgent} teamTarget={teamTarget}/>}
       {!noAgents && isMonthly && <TelesalesFreshnessTable agents={agents} totals={T}/>}
       {!noAgents && !isMonthly && (
@@ -2318,6 +2315,55 @@ function TelesalesView({ data }) {
         </div>
       )}
     </>
+  );
+}
+
+/* ── Whiteboard table — mirrors the physical "June @ Telesales" board the
+       team writes on every day. Counts are always for current Today / This
+       Week / This Month, INDEPENDENT of the dashboard's period picker. */
+function TelesalesWhiteboardTable({ agents, totals: T, tgtPerAgent, teamTarget }) {
+  const cell = { textAlign: 'right' };
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">June @ Telesales — appointments</div>
+          <div className="sec-sub">Sits in the diary · Daily / This week / This month (matches the office whiteboard)</div>
+        </div>
+      </div>
+      <div className="tbl-scroll">
+        <table className="tbl">
+          <thead><tr>
+            <th>Agent</th>
+            <th style={cell}>Daily</th>
+            <th style={cell}>Weekly</th>
+            <th style={cell}>Month</th>
+            <th style={cell}>To go</th>
+            <th style={cell}>Target</th>
+          </tr></thead>
+          <tbody>
+            {agents.map(a => (
+              <tr key={a.name}>
+                <td style={{color:'var(--ink)',fontWeight:600}}>{a.name}</td>
+                <td style={cell}>{fmt(a.today_appts)}</td>
+                <td style={cell}>{fmt(a.week_appts)}</td>
+                <td style={{...cell, color:'var(--ink)', fontWeight:600}}>{fmt(a.month_appts)}</td>
+                <td style={{...cell, color: a.togo_appts === 0 ? '#1FA77F' : 'var(--rose)', fontWeight:600}}>{fmt(a.togo_appts)}</td>
+                <td style={{...cell, color:'var(--muted)'}}>{tgtPerAgent}</td>
+              </tr>
+            ))}
+            <tr style={{borderTop:'2px solid var(--line)',fontWeight:700,background:'var(--surface-2)'}}>
+              <td style={{color:'var(--ink)'}}>TEAM</td>
+              <td style={cell}>{fmt(T.today_appts)}</td>
+              <td style={cell}>{fmt(T.week_appts)}</td>
+              <td style={{...cell, color:'var(--ink)'}}>{fmt(T.month_appts)}</td>
+              <td style={{...cell, color: T.togo_appts === 0 ? '#1FA77F' : 'var(--rose)'}}>{fmt(T.togo_appts)}</td>
+              <td style={{...cell, color:'var(--muted)'}}>{teamTarget}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 

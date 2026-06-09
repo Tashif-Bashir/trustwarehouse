@@ -349,6 +349,40 @@ def _telesales_pre_appt(d0, d1):
     except Exception:
         return pd.DataFrame()
 
+
+def _telesales_whiteboard():
+    """Mirror of the team's June @ Telesales whiteboard: per-agent sit
+    counts for Today / This Week (Mon-Sun) / This Month (full calendar
+    month including future-scheduled appointments). This is the headline
+    view the team writes on the office whiteboard — independent of the
+    dashboard's period picker."""
+    agents_list = "', '".join(TELESALES_AGENTS)
+    try:
+        return _q(f"""
+            SELECT
+              CASE
+                WHEN LOWER(appointment_made_by) IN ('lily','lily harpham') THEN 'Lily'
+                WHEN LOWER(appointment_made_by) IN ('sue','susan england') THEN 'Sue'
+                WHEN LOWER(appointment_made_by) IN ('alicja','alicja aleksiuk') THEN 'Alicja Aleksiuk'
+                WHEN LOWER(appointment_made_by) IN ('alisha','alisha moore') THEN 'Alisha'
+                ELSE appointment_made_by
+              END AS agent_name,
+              COUNTIF(appointment_date = CURRENT_DATE()) AS today_appts,
+              COUNTIF(appointment_date BETWEEN DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY))
+                                          AND DATE_ADD(DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY)), INTERVAL 6 DAY)) AS week_appts,
+              COUNTIF(appointment_date BETWEEN DATE_TRUNC(CURRENT_DATE(), MONTH)
+                                          AND LAST_DAY(CURRENT_DATE())) AS month_appts
+            FROM `{PROJECT}.silver.silver_sharpspring_leads`
+            WHERE appointment_booked = 'Yes'
+              AND appointment_made_by IS NOT NULL
+              AND appointment_date IS NOT NULL
+              AND LOWER(COALESCE(appointment_status, '')) NOT IN ('appointment cancelled','cancelled','cancel','appointment cancel')
+            GROUP BY agent_name
+            HAVING agent_name IN ('{agents_list}')
+        """)
+    except Exception:
+        return pd.DataFrame()
+
 def _ga4_sessions(d0, d1):
     # GA4 Data API returns dates as YYYYMMDD strings (no dashes).
     d0g = d0.replace('-',''); d1g = d1.replace('-','')
@@ -461,6 +495,7 @@ def _load_all(d0s, d1s):
         'ts_prev':    (f'ts:{p0s}:{p1s}',    lambda: _telesales(p0s, p1s)),
         'ts_day':     (f'tsd:{d0s}:{d1s}',   lambda: _ts_daily(d0s, d1s)),
         'ts_pre':     (f'tspre:{d0s}:{d1s}', lambda: _telesales_pre_appt(d0s, d1s)),
+        'ts_wb':      ('tswb',                 _telesales_whiteboard),
         'pipeline':   ('pipeline',            _pipeline),
         'reg_leads':   (f'regl:{d0s}:{d1s}',   lambda: _regional_leads(d0s, d1s)),
         'reg_spend':   (f'regs:{d0s}:{d1s}',   lambda: _regional_spend(d0s, d1s)),
@@ -490,6 +525,7 @@ def _load_all(d0s, d1s):
     df_ts_prev   = results['ts_prev']
     df_ts_day    = results['ts_day']
     df_ts_pre    = results['ts_pre']
+    df_ts_wb     = results['ts_wb']
     df_stg, df_rec   = results['pipeline']
     df_reg_leads     = results['reg_leads']
     df_reg_spend     = results['reg_spend']
@@ -596,10 +632,30 @@ def _load_all(d0s, d1s):
     if not df_ts_pre.empty:
         for _, r in df_ts_pre.iterrows():
             pre_by_agent[str(r['agent_name'])] = int(r['pre_appt'])
+    # Merge in whiteboard counts (today / this week / this month — always
+    # computed from CURRENT_DATE, independent of the period picker).
+    wb_by_agent = {}
+    if not df_ts_wb.empty:
+        for _, r in df_ts_wb.iterrows():
+            wb_by_agent[str(r['agent_name'])] = {
+                'today_appts': int(r['today_appts']),
+                'week_appts':  int(r['week_appts']),
+                'month_appts': int(r['month_appts']),
+            }
+    # Monthly target per agent — matches the team's whiteboard ("TARGET 85")
+    # and her xlsx ("Appt Per Month = 85"). Keep this constant in sync with
+    # both if it ever changes.
+    MONTHLY_TARGET_PER_AGENT = 85
+
     for a in agents:
         a['pre_appt'] = pre_by_agent.get(a['name'], 0)
         a['new_appt'] = max(0, a['appts'] - a['pre_appt'])  # New = All - Pre
         a['conv_per_new_appt'] = round(a['qual_convos'] / a['new_appt'], 2) if a['new_appt'] > 0 else None
+        wb = wb_by_agent.get(a['name'], {})
+        a['today_appts'] = wb.get('today_appts', 0)
+        a['week_appts']  = wb.get('week_appts', 0)
+        a['month_appts'] = wb.get('month_appts', 0)
+        a['togo_appts']  = max(0, MONTHLY_TARGET_PER_AGENT - a['month_appts'])
 
     ts_out = sum(a['outbound'] for a in agents); ts_ap = sum(a['appts'] for a in agents)
     ts_sa  = sum(a['sales'] for a in agents);   ts_on = sum(1 for a in agents if a['on_target'])
@@ -636,8 +692,12 @@ def _load_all(d0s, d1s):
     ts_conv = sum(a['qual_convos'] for a in agents)
     ts_pre  = sum(a['pre_appt'] for a in agents)
     ts_new  = sum(a['new_appt'] for a in agents)
-    monthly_target_per_agent = 85
+    ts_today = sum(a['today_appts'] for a in agents)
+    ts_week  = sum(a['week_appts'] for a in agents)
+    ts_month = sum(a['month_appts'] for a in agents)
+    monthly_target_per_agent = MONTHLY_TARGET_PER_AGENT
     team_target = monthly_target_per_agent * len(TELESALES_AGENTS)
+    ts_togo = max(0, team_target - ts_month)
 
     # Detect whether the selected period is a "monthly" view — used by the
     # frontend to decide whether the Pre/New freshness table makes sense.
@@ -676,6 +736,10 @@ def _load_all(d0s, d1s):
             'new_appt': ts_new,
             'conv_per_new_appt': round(ts_conv/ts_new, 2) if ts_new else None,
             'pace_pct': round(ts_ap/team_target*100, 1) if team_target else 0,
+            'today_appts': ts_today,
+            'week_appts':  ts_week,
+            'month_appts': ts_month,
+            'togo_appts':  ts_togo,
         },
         'prev_totals': prev_telesales_totals,
         'speed_to_call': speed_to_call, 'heatmap': heatmap, 'duration_buckets': duration_buckets,

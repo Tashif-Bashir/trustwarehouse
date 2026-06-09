@@ -2275,52 +2275,181 @@ function InsightsPanel({ insights }) {
   );
 }
 
-function TelesalesView({ data, marketingData }) {
-  const { agents, daily, totals: T, prev_totals: PT, speed_to_call = [], heatmap = [], duration_buckets = [] } = data;
-  const pt = PT || {};
-  const sourceCpa = (marketingData && marketingData.source_cpa) || [];
+function TelesalesView({ data }) {
+  const { agents, totals: T, is_monthly: isMonthly, team_target_per_agent: tgtPerAgent = 85, team_target: teamTarget = 340 } = data;
   const noAgents = !agents.length;
 
-  // L2A target progress
-  const l2aVal = T.l2a || 0;
-  const l2aDeltaPP = pt.l2a != null ? +(l2aVal - pt.l2a).toFixed(1) : null;
-
-  // CPA target progress (lower is better)
-  const cpaVal = T.cpa || 0;
-
-  // Insights — computed rules-based, severity-coded
-  const insights = computeInsights({ agents, T, pt, sourceCpa });
-  const { topAgentName } = insights;
+  // Headline KPI cards — these are the 4 numbers the telesales manager
+  // tracks every day in her Q2 Telesales Tracker xlsx:
+  //   - Conv         = qualified conversations team-wide
+  //   - Appts        = appointments scheduled to sit in period
+  //   - Conv/Appt    = team-level efficiency ratio (target ≤ 3)
+  //   - Pace         = appts vs monthly team target (4 × 85)
+  const convPerAppt = T.conv_per_appt;
+  const paceLabel = T.appts + ' / ' + teamTarget;
 
   return (
     <>
       <div className="g4">
-        <Kpi label="Outbound calls"    value={fmt(T.outbound)} icon={Ic.phone}  iconBg="var(--indigo-soft)" iconColor="var(--indigo)" delta={delta(T.outbound, pt.outbound, 'up')} delay={0}/>
-        <Kpi label="Appointments"      value={fmt(T.appts)}    icon={Ic.appt}   iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(T.appts, pt.appts, 'up')}       delay={60}/>
-        <Kpi label="Call → Appt rate"  value={l2aVal + '%'}    icon={Ic.target} iconBg="var(--amber-soft)"  iconColor="#A87B0A"
-             target={TS_TARGET_L2A + '%'} targetRaw={TS_TARGET_L2A} valueRaw={l2aVal} targetDir="up"
-             delta={l2aDeltaPP != null ? { up: l2aDeltaPP >= 0, good: l2aDeltaPP >= 0, pct: (l2aDeltaPP >= 0 ? '+' : '') + l2aDeltaPP + 'pp' } : null}
-             delay={120}/>
-        <Kpi label="Cost per appt"     value={gbp(cpaVal)}     icon={Ic.spend}  iconBg="var(--rose-soft)"   iconColor="var(--rose)"
-             target={'£' + TS_TARGET_CPA_GBP} targetRaw={TS_TARGET_CPA_GBP} valueRaw={cpaVal} targetDir="down"
-             delta={delta(cpaVal, pt.cpa, 'down')}
-             delay={180}/>
+        <Kpi label="Conversations" value={fmt(T.conv)} icon={Ic.phone}
+             iconBg="var(--indigo-soft)" iconColor="var(--indigo)" delay={0}/>
+        <Kpi label="Appointments" value={fmt(T.appts)} icon={Ic.appt}
+             iconBg="var(--violet-soft)" iconColor="var(--violet)" delay={60}/>
+        <Kpi label="Conv / Appt" value={convPerAppt != null ? convPerAppt + 'x' : '—'}
+             icon={Ic.target} iconBg="var(--amber-soft)" iconColor="#A87B0A"
+             target="≤ 3x" targetRaw={3} valueRaw={convPerAppt} targetDir="down" delay={120}/>
+        <Kpi label="Pace to target" value={paceLabel} icon={Ic.spend}
+             iconBg="var(--mint-soft)" iconColor="var(--mint)"
+             target={teamTarget.toString()} targetRaw={teamTarget} valueRaw={T.appts} targetDir="up" delay={180}/>
       </div>
+
       {noAgents && (
         <div className="card" style={{textAlign:'center',padding:'24px',color:'var(--muted)',fontSize:13}}>
-          No calls have been logged in this period yet. KPI tiles above show 0; agent breakdown will appear as calls come in.
+          No telesales activity logged in this period yet.
         </div>
       )}
-      {!noAgents && <InsightsPanel insights={insights}/>}
-      <div className="g2">
-        <SpeedToCallCard rows={speed_to_call}/>
-        <DurationSweetSpotCard rows={duration_buckets}/>
-      </div>
-      <CallHeatmap cells={heatmap}/>
-      {!noAgents && <AgentBars agents={agents} topAgentName={topAgentName}/>}
-      {!noAgents && <TsTrendChart daily={daily}/>}
-      {!noAgents && <AgentTable agents={agents} topAgentName={topAgentName}/>}
+
+      {!noAgents && <TelesalesTopTable agents={agents} totals={T} tgtPerAgent={tgtPerAgent} teamTarget={teamTarget}/>}
+      {!noAgents && isMonthly && <TelesalesFreshnessTable agents={agents} totals={T}/>}
+      {!noAgents && !isMonthly && (
+        <div className="card" style={{padding:'14px 18px',color:'var(--muted)',fontSize:12}}>
+          The <b>New vs Carried Over</b> breakdown is only shown for monthly periods (Month to date, Last month).
+          The "Pre Appt" carry-over needs a month boundary to be meaningful. Switch to <b>Month to date</b> to see it.
+        </div>
+      )}
     </>
+  );
+}
+
+/* ── Telesales top table — mirrors the manager's xlsx June 2026 top table ─ */
+function TelesalesTopTable({ agents, totals: T, tgtPerAgent, teamTarget }) {
+  const cell = { textAlign: 'right' };
+  const ratioColor = (r) => r == null ? 'var(--muted)' : (r <= 3 ? '#1FA77F' : 'var(--rose)');
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Agent performance vs target</div>
+          <div className="sec-sub">Monthly target = {tgtPerAgent} appointments per agent · Conv/Appt target ≤ 3</div>
+        </div>
+      </div>
+      <div className="tbl-scroll">
+        <table className="tbl">
+          <thead><tr>
+            <th>Agent</th>
+            <th style={cell}>Conversations</th>
+            <th style={cell}>Appointments</th>
+            <th style={cell}>Target</th>
+            <th style={cell}>Gap</th>
+            <th style={cell}>Conv / Appt</th>
+            <th>Status</th>
+          </tr></thead>
+          <tbody>
+            {agents.map(a => {
+              const gap = a.appts - tgtPerAgent;
+              return (
+                <tr key={a.name}>
+                  <td style={{color:'var(--ink)',fontWeight:600}}>{a.name}</td>
+                  <td style={cell}>{fmt(a.qual_convos)}</td>
+                  <td style={{...cell, color:'var(--ink)', fontWeight:600}}>{fmt(a.appts)}</td>
+                  <td style={{...cell, color:'var(--muted)'}}>{tgtPerAgent}</td>
+                  <td style={{...cell, color: gap >= 0 ? '#1FA77F' : 'var(--rose)', fontWeight:600}}>{gap >= 0 ? '+' + gap : gap}</td>
+                  <td style={{...cell, color: ratioColor(a.conv_per_appt), fontWeight:600}}>{a.conv_per_appt != null ? a.conv_per_appt + 'x' : '—'}</td>
+                  <td>
+                    <span className={a.on_target ? 'status-pill pill-target' : 'status-pill pill-miss'}>
+                      <span className="pill-glyph">{a.on_target ? Ic.check : Ic.x}</span>
+                      {a.on_target ? 'On' : 'Off'}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+            <tr style={{borderTop:'2px solid var(--line)',fontWeight:700,background:'var(--surface-2)'}}>
+              <td style={{color:'var(--ink)'}}>TEAM</td>
+              <td style={cell}>{fmt(T.conv)}</td>
+              <td style={{...cell, color:'var(--ink)'}}>{fmt(T.appts)}</td>
+              <td style={{...cell, color:'var(--muted)'}}>{teamTarget}</td>
+              <td style={{...cell, color: (T.appts - teamTarget) >= 0 ? '#1FA77F' : 'var(--rose)'}}>{(T.appts - teamTarget) >= 0 ? '+' + (T.appts - teamTarget) : (T.appts - teamTarget)}</td>
+              <td style={{...cell, color: ratioColor(T.conv_per_appt)}}>{T.conv_per_appt != null ? T.conv_per_appt + 'x' : '—'}</td>
+              <td>
+                <span className={(T.conv_per_appt != null && T.conv_per_appt <= 3) ? 'status-pill pill-target' : 'status-pill pill-miss'}>
+                  <span className="pill-glyph">{(T.conv_per_appt != null && T.conv_per_appt <= 3) ? Ic.check : Ic.x}</span>
+                  {(T.conv_per_appt != null && T.conv_per_appt <= 3) ? 'On' : 'Off'}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── Telesales freshness table — mirrors the manager's xlsx June 2026
+       bottom table. Shows Pre Appt (carry-over from previous month) vs New
+       Appt (booked this month), with Conv/New as the tougher efficiency ratio. */
+function TelesalesFreshnessTable({ agents, totals: T }) {
+  const cell = { textAlign: 'right' };
+  const ratioColor = (r) => r == null ? 'var(--muted)' : (r <= 3 ? '#1FA77F' : 'var(--rose)');
+  return (
+    <div className="card">
+      <div className="sec-head">
+        <div>
+          <div className="sec-title">Freshness — new vs carried over</div>
+          <div className="sec-sub">
+            Pre Appt = booked in a previous month, sits this month · New Appt = booked this month · Conv/New target ≤ 3
+          </div>
+        </div>
+      </div>
+      <div className="tbl-scroll">
+        <table className="tbl">
+          <thead><tr>
+            <th>Agent</th>
+            <th style={cell}>Pre Appt</th>
+            <th style={cell}>Conversations</th>
+            <th style={cell}>New Appt</th>
+            <th style={cell}>All Appt</th>
+            <th style={cell}>Conv / New</th>
+            <th>Status</th>
+          </tr></thead>
+          <tbody>
+            {agents.map(a => {
+              const onTarget = a.conv_per_new_appt != null && a.conv_per_new_appt <= 3;
+              return (
+                <tr key={a.name}>
+                  <td style={{color:'var(--ink)',fontWeight:600}}>{a.name}</td>
+                  <td style={{...cell, color:'var(--muted)'}}>{fmt(a.pre_appt)}</td>
+                  <td style={cell}>{fmt(a.qual_convos)}</td>
+                  <td style={{...cell, color:'var(--ink)', fontWeight:600}}>{fmt(a.new_appt)}</td>
+                  <td style={{...cell, color:'var(--muted)'}}>{fmt(a.appts)}</td>
+                  <td style={{...cell, color: ratioColor(a.conv_per_new_appt), fontWeight:600}}>{a.conv_per_new_appt != null ? a.conv_per_new_appt + 'x' : '—'}</td>
+                  <td>
+                    <span className={onTarget ? 'status-pill pill-target' : 'status-pill pill-miss'}>
+                      <span className="pill-glyph">{onTarget ? Ic.check : Ic.x}</span>
+                      {onTarget ? 'On' : 'Off'}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+            <tr style={{borderTop:'2px solid var(--line)',fontWeight:700,background:'var(--surface-2)'}}>
+              <td style={{color:'var(--ink)'}}>TEAM</td>
+              <td style={{...cell, color:'var(--muted)'}}>{fmt(T.pre_appt)}</td>
+              <td style={cell}>{fmt(T.conv)}</td>
+              <td style={{...cell, color:'var(--ink)'}}>{fmt(T.new_appt)}</td>
+              <td style={{...cell, color:'var(--muted)'}}>{fmt(T.appts)}</td>
+              <td style={{...cell, color: ratioColor(T.conv_per_new_appt)}}>{T.conv_per_new_appt != null ? T.conv_per_new_appt + 'x' : '—'}</td>
+              <td>
+                <span className={(T.conv_per_new_appt != null && T.conv_per_new_appt <= 3) ? 'status-pill pill-target' : 'status-pill pill-miss'}>
+                  <span className="pill-glyph">{(T.conv_per_new_appt != null && T.conv_per_new_appt <= 3) ? Ic.check : Ic.x}</span>
+                  {(T.conv_per_new_appt != null && T.conv_per_new_appt <= 3) ? 'On' : 'Off'}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 

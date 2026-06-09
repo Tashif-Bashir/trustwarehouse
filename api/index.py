@@ -320,6 +320,35 @@ def _ts_daily(d0, d1):
     except Exception:
         return pd.DataFrame()
 
+
+def _telesales_pre_appt(d0, d1):
+    """Pre Appt = appointments with sit-date in period that were BOOKED
+    before the period started. This is the manager's "carry-over from previous
+    month" metric in the bottom table of the June 2026 sheet."""
+    agents_list = "', '".join(TELESALES_AGENTS)
+    try:
+        return _q(f"""
+            SELECT
+              CASE
+                WHEN LOWER(appointment_made_by) IN ('lily','lily harpham') THEN 'Lily'
+                WHEN LOWER(appointment_made_by) IN ('sue','susan england') THEN 'Sue'
+                WHEN LOWER(appointment_made_by) IN ('alicja','alicja aleksiuk') THEN 'Alicja Aleksiuk'
+                WHEN LOWER(appointment_made_by) IN ('alisha','alisha moore') THEN 'Alisha'
+                ELSE appointment_made_by
+              END AS agent_name,
+              COUNT(*) AS pre_appt
+            FROM `{PROJECT}.silver.silver_sharpspring_leads`
+            WHERE appointment_booked = 'Yes'
+              AND appointment_made_by IS NOT NULL
+              AND appointment_date BETWEEN '{d0}' AND '{d1}'
+              AND DATE(SAFE_CAST(appointment_booked_at AS TIMESTAMP), 'Europe/London') < '{d0}'
+              AND LOWER(COALESCE(appointment_status, '')) NOT IN ('appointment cancelled','cancelled','cancel','appointment cancel')
+            GROUP BY agent_name
+            HAVING agent_name IN ('{agents_list}')
+        """)
+    except Exception:
+        return pd.DataFrame()
+
 def _ga4_sessions(d0, d1):
     # GA4 Data API returns dates as YYYYMMDD strings (no dashes).
     d0g = d0.replace('-',''); d1g = d1.replace('-','')
@@ -431,6 +460,7 @@ def _load_all(d0s, d1s):
         'ts':         (f'ts:{d0s}:{d1s}',    lambda: _telesales(d0s, d1s)),
         'ts_prev':    (f'ts:{p0s}:{p1s}',    lambda: _telesales(p0s, p1s)),
         'ts_day':     (f'tsd:{d0s}:{d1s}',   lambda: _ts_daily(d0s, d1s)),
+        'ts_pre':     (f'tspre:{d0s}:{d1s}', lambda: _telesales_pre_appt(d0s, d1s)),
         'pipeline':   ('pipeline',            _pipeline),
         'reg_leads':   (f'regl:{d0s}:{d1s}',   lambda: _regional_leads(d0s, d1s)),
         'reg_spend':   (f'regs:{d0s}:{d1s}',   lambda: _regional_spend(d0s, d1s)),
@@ -459,6 +489,7 @@ def _load_all(d0s, d1s):
     df_ts        = results['ts']
     df_ts_prev   = results['ts_prev']
     df_ts_day    = results['ts_day']
+    df_ts_pre    = results['ts_pre']
     df_stg, df_rec   = results['pipeline']
     df_reg_leads     = results['reg_leads']
     df_reg_spend     = results['reg_spend']
@@ -558,7 +589,17 @@ def _load_all(d0s, d1s):
             # qual_convos now uses >=30s threshold to roughly match her manually-
             # marked "Conversation = Yes" tracking.
             conv_per_appt = round(qual/appts, 2) if appts > 0 else None
-            agents.append({'name':str(r['agent_name']),'total_calls':int(r['total_calls']) if pd.notna(r['total_calls']) else 0,'outbound':outb,'inbound':int(r['inbound_calls']) if pd.notna(r['inbound_calls']) else 0,'missed':int(r['missed_calls']) if pd.notna(r['missed_calls']) else 0,'unique_leads':int(r['unique_leads']) if pd.notna(r['unique_leads']) else 0,'avg_talk':int(r['avg_talk_time']) if pd.notna(r['avg_talk_time']) else 0,'qual_convos':qual,'appts':appts,'appts_booked':appts_bookd,'appts_sat':appts_sat,'appts_sold':appts_sold,'sales':sales,'deal_value':float(r['deal_value']) if pd.notna(r['deal_value']) else 0,'on_target':(conv_per_appt is not None and conv_per_appt <= 3),'calls_per_appt':round(outb/appts,1) if appts>0 else None,'conv_per_appt':conv_per_appt})
+            agents.append({'name':str(r['agent_name']),'total_calls':int(r['total_calls']) if pd.notna(r['total_calls']) else 0,'outbound':outb,'inbound':int(r['inbound_calls']) if pd.notna(r['inbound_calls']) else 0,'missed':int(r['missed_calls']) if pd.notna(r['missed_calls']) else 0,'unique_leads':int(r['unique_leads']) if pd.notna(r['unique_leads']) else 0,'avg_talk':int(r['avg_talk_time']) if pd.notna(r['avg_talk_time']) else 0,'qual_convos':qual,'appts':appts,'appts_booked':appts_bookd,'appts_sat':appts_sat,'appts_sold':appts_sold,'sales':sales,'deal_value':float(r['deal_value']) if pd.notna(r['deal_value']) else 0,'on_target':(conv_per_appt is not None and conv_per_appt <= 3),'calls_per_appt':round(outb/appts,1) if appts>0 else None,'conv_per_appt':conv_per_appt,'pre_appt':0})
+
+    # Merge in pre_appt (appointments with sit-date in period but booked before period started)
+    pre_by_agent = {}
+    if not df_ts_pre.empty:
+        for _, r in df_ts_pre.iterrows():
+            pre_by_agent[str(r['agent_name'])] = int(r['pre_appt'])
+    for a in agents:
+        a['pre_appt'] = pre_by_agent.get(a['name'], 0)
+        a['new_appt'] = max(0, a['appts'] - a['pre_appt'])  # New = All - Pre
+        a['conv_per_new_appt'] = round(a['qual_convos'] / a['new_appt'], 2) if a['new_appt'] > 0 else None
 
     ts_out = sum(a['outbound'] for a in agents); ts_ap = sum(a['appts'] for a in agents)
     ts_sa  = sum(a['sales'] for a in agents);   ts_on = sum(1 for a in agents if a['on_target'])
@@ -589,7 +630,50 @@ def _load_all(d0s, d1s):
          'rate': _safe(r['rate'])}
         for _, r in df_duration.iterrows()
     ] if not df_duration.empty else []
-    telesales = {'agents':agents,'daily':ts_daily_list,'totals':{'outbound':ts_out,'appts':ts_ap,'sales':ts_sa,'on_target_count':ts_on,'on_target_pct':round(ts_on/len(agents)*100) if agents else 0,'l2a':round(ts_ap/ts_out*100,1) if ts_out else 0,'a2s':round(ts_sa/ts_ap*100,1) if ts_ap else 0,'cpa':cpa},'prev_totals':prev_telesales_totals,'speed_to_call':speed_to_call,'heatmap':heatmap,'duration_buckets':duration_buckets}
+    # Team totals — these are what the headline KPI cards show.
+    # Conv/Appt target = 3 (industry standard, matches her xlsx).
+    # Pace to target = team appts / (4 agents × 85 monthly target).
+    ts_conv = sum(a['qual_convos'] for a in agents)
+    ts_pre  = sum(a['pre_appt'] for a in agents)
+    ts_new  = sum(a['new_appt'] for a in agents)
+    monthly_target_per_agent = 85
+    team_target = monthly_target_per_agent * len(TELESALES_AGENTS)
+
+    # Detect whether the selected period is a "monthly" view — used by the
+    # frontend to decide whether the Pre/New freshness table makes sense.
+    is_monthly = False
+    try:
+        d0_dt = date.fromisoformat(d0s)
+        d1_dt = date.fromisoformat(d1s)
+        # Monthly = period starts on the 1st AND spans at least 15 days
+        # (covers Month-to-date and Last Month, excludes Today/Yesterday/7d)
+        is_monthly = d0_dt.day == 1 and (d1_dt - d0_dt).days >= 14
+    except Exception:
+        pass
+
+    telesales = {
+        'agents': agents,
+        'daily': ts_daily_list,
+        'is_monthly': is_monthly,
+        'team_target_per_agent': monthly_target_per_agent,
+        'team_target': team_target,
+        'totals': {
+            'outbound': ts_out, 'appts': ts_ap, 'sales': ts_sa,
+            'on_target_count': ts_on,
+            'on_target_pct': round(ts_on/len(agents)*100) if agents else 0,
+            'l2a': round(ts_ap/ts_out*100,1) if ts_out else 0,
+            'a2s': round(ts_sa/ts_ap*100,1) if ts_ap else 0,
+            'cpa': cpa,
+            'conv': ts_conv,
+            'conv_per_appt': round(ts_conv/ts_ap, 2) if ts_ap else None,
+            'pre_appt': ts_pre,
+            'new_appt': ts_new,
+            'conv_per_new_appt': round(ts_conv/ts_new, 2) if ts_new else None,
+            'pace_pct': round(ts_ap/team_target*100, 1) if team_target else 0,
+        },
+        'prev_totals': prev_telesales_totals,
+        'speed_to_call': speed_to_call, 'heatmap': heatmap, 'duration_buckets': duration_buckets,
+    }
 
     stages = [{'stage':str(r['stage']),'count':int(r['count']),'total_value':float(r['total_value']) if pd.notna(r['total_value']) else 0,'weighted_value':float(r['weighted_value']) if pd.notna(r['weighted_value']) else 0,'won_count':int(r['won_count']) if pd.notna(r['won_count']) else 0,'won_value':float(r['won_value']) if pd.notna(r['won_value']) else 0,'avg_age_days':int(r['avg_age_days']) if pd.notna(r.get('avg_age_days')) else None} for _,r in df_stg.iterrows()]
     recent = []

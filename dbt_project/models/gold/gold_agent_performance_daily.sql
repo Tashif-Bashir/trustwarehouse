@@ -58,6 +58,12 @@ appointments_scheduled as (
     where appointment_booked = 'Yes'
       and appointment_made_by is not null
       and appointment_date is not null
+      -- The telesales manager's xlsx excludes cancelled appointments from
+      -- the monthly count (only the "Appointment" outcome is counted, not
+      -- "Appointment Cancelled"). Mirror that here.
+      and lower(coalesce(appointment_status, '')) not in (
+        'appointment cancelled', 'cancelled', 'cancel', 'appointment cancel'
+      )
     group by agent_name, appointment_date
 ),
 
@@ -100,8 +106,13 @@ call_metrics as (
         count(distinct remote_phone)                                                as unique_leads_contacted,
         sum(talk_time_seconds)                                                      as total_talk_time_seconds,
         round(avg(talk_time_seconds), 0)                                            as avg_talk_time_seconds,
-        COUNTIF(talk_time_seconds >= 120)                                           as qualified_conversations,
-        COUNTIF(talk_time_seconds >= 120 and direction = 'OUTBOUND')               as qualified_outbound_conversations
+        -- Threshold lowered to 30s to better match the telesales manager's
+        -- "Conversation = Yes" subjective count. >=120s was too strict —
+        -- many real Trust calls are 30-90s ("Hi, I'm calling about your
+        -- enquiry, can I book you in?"). 30s filters out misdials/voicemail
+        -- pickup while keeping real conversations.
+        COUNTIF(talk_time_seconds >= 30)                                            as qualified_conversations,
+        COUNTIF(talk_time_seconds >= 30 and direction = 'OUTBOUND')                 as qualified_outbound_conversations
     from calls
     group by call_date, colleague_name, colleague_department
 ),

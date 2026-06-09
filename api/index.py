@@ -541,7 +541,13 @@ def _load_all(d0s, d1s):
             appts_sat   = int(r['appts_sat'])    if pd.notna(r.get('appts_sat'))    else 0
             appts_sold  = int(r['appts_sold'])   if pd.notna(r.get('appts_sold'))   else 0
             appts_bookd = int(r['appts_booked']) if pd.notna(r.get('appts_booked')) else 0
-            agents.append({'name':str(r['agent_name']),'total_calls':int(r['total_calls']) if pd.notna(r['total_calls']) else 0,'outbound':outb,'inbound':int(r['inbound_calls']) if pd.notna(r['inbound_calls']) else 0,'missed':int(r['missed_calls']) if pd.notna(r['missed_calls']) else 0,'unique_leads':int(r['unique_leads']) if pd.notna(r['unique_leads']) else 0,'avg_talk':int(r['avg_talk_time']) if pd.notna(r['avg_talk_time']) else 0,'qual_convos':int(r['qual_convos']) if pd.notna(r['qual_convos']) else 0,'appts':appts,'appts_booked':appts_bookd,'appts_sat':appts_sat,'appts_sold':appts_sold,'sales':sales,'deal_value':float(r['deal_value']) if pd.notna(r['deal_value']) else 0,'on_target':(outb/appts<=15) if appts>0 else False,'calls_per_appt':round(outb/appts,1) if appts>0 else None})
+            qual        = int(r['qual_convos'])  if pd.notna(r['qual_convos'])      else 0
+            # Telesales manager's headline ratio = Conversations / Appointments,
+            # target <= 3 (industry standard for warm-lead outbound telesales).
+            # qual_convos now uses >=30s threshold to roughly match her manually-
+            # marked "Conversation = Yes" tracking.
+            conv_per_appt = round(qual/appts, 2) if appts > 0 else None
+            agents.append({'name':str(r['agent_name']),'total_calls':int(r['total_calls']) if pd.notna(r['total_calls']) else 0,'outbound':outb,'inbound':int(r['inbound_calls']) if pd.notna(r['inbound_calls']) else 0,'missed':int(r['missed_calls']) if pd.notna(r['missed_calls']) else 0,'unique_leads':int(r['unique_leads']) if pd.notna(r['unique_leads']) else 0,'avg_talk':int(r['avg_talk_time']) if pd.notna(r['avg_talk_time']) else 0,'qual_convos':qual,'appts':appts,'appts_booked':appts_bookd,'appts_sat':appts_sat,'appts_sold':appts_sold,'sales':sales,'deal_value':float(r['deal_value']) if pd.notna(r['deal_value']) else 0,'on_target':(conv_per_appt is not None and conv_per_appt <= 3),'calls_per_appt':round(outb/appts,1) if appts>0 else None,'conv_per_appt':conv_per_appt})
 
     ts_out = sum(a['outbound'] for a in agents); ts_ap = sum(a['appts'] for a in agents)
     ts_sa  = sum(a['sales'] for a in agents);   ts_on = sum(1 for a in agents if a['on_target'])

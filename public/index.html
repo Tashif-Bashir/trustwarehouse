@@ -825,7 +825,7 @@ function DateRangePicker({ onApply }) {
 }
 
 /* ── Topbar ──────────────────────────────────────────── */
-function Topbar({ title, period, setPeriod, refreshedAt, onRefresh, onCustomDate, lastPoll }) {
+function Topbar({ title, period, setPeriod, refreshedAt, onRefresh, onCustomDate, lastPoll, hidePicker = false }) {
   // "Live" pulse — show seconds since the last successful poll. Updates every 5s.
   const [, force] = React.useState(0);
   React.useEffect(() => { const id = setInterval(() => force(x => x + 1), 5000); return () => clearInterval(id); }, []);
@@ -836,13 +836,18 @@ function Topbar({ title, period, setPeriod, refreshedAt, onRefresh, onCustomDate
     <div className="topbar">
       <div className="topbar-left">
         <div className="page-title">{title}</div>
+        {hidePicker && (
+          <span style={{ marginLeft: 12, fontSize: 12, color: 'var(--muted)' }}>
+            Month to date · target 85 per agent
+          </span>
+        )}
       </div>
       <div className="topbar-right">
         <span className="live-pulse" title={`Auto-refreshing every 30s · last update ${label}`}>
           <span className={`live-dot ${fresh ? 'is-fresh' : 'is-stale'}`}/> Live · {label}
         </span>
-        <PeriodPicker value={period} onChange={setPeriod} />
-        <DateRangePicker onApply={onCustomDate} />
+        {!hidePicker && <PeriodPicker value={period} onChange={setPeriod} />}
+        {!hidePicker && <DateRangePicker onApply={onCustomDate} />}
         <button className="icon-btn" onClick={onRefresh} title="Force refresh">{Ic.refresh}</button>
       </div>
     </div>
@@ -2571,11 +2576,16 @@ function App() {
 
   const t = TWEAK_DEFAULTS;
 
-  /* Resolve preset id → actual dates (custom periods carry d0/d1 directly) */
+  /* Resolve preset id → actual dates (custom periods carry d0/d1 directly).
+   * Telesales is fundamentally a monthly target view (85 per agent per month),
+   * so we always feed it Month-to-date regardless of the user's picker choice
+   * elsewhere. The picker is hidden on the Telesales tab so the two stay
+   * consistent. */
+  const effectivePeriod = activeTab === 'Telesales' ? { id: 'mtd' } : period;
   const { d0, d1 } = React.useMemo(() => {
-    if (period.id === 'custom') return { d0: period.d0, d1: period.d1 };
-    return periodDates(period.id);
-  }, [period.id, period.d0, period.d1]);
+    if (effectivePeriod.id === 'custom') return { d0: effectivePeriod.d0, d1: effectivePeriod.d1 };
+    return periodDates(effectivePeriod.id);
+  }, [effectivePeriod.id, effectivePeriod.d0, effectivePeriod.d1]);
 
   /* Fetch from local API — bust server cache first when explicitly refreshed */
   React.useEffect(() => {
@@ -2639,6 +2649,7 @@ function App() {
           period={period} setPeriod={(p) => { setPeriod(p); setRefreshKey(k => k + 1); }}
           refreshedAt={refreshedAt}
           lastPoll={lastPoll}
+          hidePicker={activeTab === 'Telesales'}
           onRefresh={() => { setBustCache(true); setRefreshKey(k => k + 1); }}
           onCustomDate={(d0, d1) => {
             setPeriod({ id: 'custom', label: fmtRangeLabel(d0, d1), d0, d1 });

@@ -2328,11 +2328,16 @@ function TelesalesView({ data }) {
        Week / This Month, INDEPENDENT of the dashboard's period picker. */
 function TelesalesWhiteboardTable({ agents, totals: T, tgtPerAgent, teamTarget }) {
   const cell = { textAlign: 'right' };
+  // Current month name, picked at render so the title rolls forward
+  // automatically on July 1st. Matches the team's office whiteboard
+  // header which they manually rewrite each month.
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const monthName = MONTHS[new Date().getMonth()];
   return (
     <div className="card">
       <div className="sec-head">
         <div>
-          <div className="sec-title">June @ Telesales — appointments</div>
+          <div className="sec-title">{monthName} @ Telesales — appointments</div>
           <div className="sec-sub">Sits in the diary · Daily / This week / This month (matches the office whiteboard)</div>
         </div>
       </div>

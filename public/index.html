@@ -1402,7 +1402,8 @@ function AgentBars({ agents, topAgentName = null }) {
             </div>
             <div className="agent-bar-nums">
               <span>{a.qual_convos} conv</span>
-              <span style={{ color: '#1FA77F', fontWeight: 600 }}>{a.appts} / 85 appt</span>
+              <span style={{ color: '#1FA77F', fontWeight: 600 }} title="Appointments scheduled to sit in period (vs monthly target of 85)">{a.appts} / 85 sits</span>
+              <span style={{ color: '#9AA0B4', fontWeight: 600 }} title="New bookings created in period (sit date can be future)">{a.appts_booked} booked</span>
               <span style={{
                 color: a.conv_per_appt == null ? 'var(--muted)' : a.conv_per_appt <= 3 ? '#1FA77F' : 'var(--rose)',
                 fontWeight: 600,
@@ -1429,12 +1430,14 @@ function TsTrendChart({ daily }) {
   const W = 680, H = 200, P = { t: 16, r: 14, b: 26, l: 32 };
   const cw = W - P.l - P.r, ch = H - P.t - P.b;
   const maxC = Math.max(...daily.map(d => d.calls), 1);
-  const maxA = Math.max(...daily.map(d => d.appts), 1);
+  // Right axis covers both sits and bookings so the lines share a scale.
+  const maxA = Math.max(...daily.map(d => Math.max(d.appts || 0, d.appts_booked || 0)), 1);
   const x = (i) => P.l + (i / (daily.length - 1 || 1)) * cw;
   const yC = (v) => P.t + ch - (v / maxC) * ch;
   const yA = (v) => P.t + ch - (v / maxA) * ch;
   const pathC = daily.map((d, i) => (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ' ' + yC(d.calls).toFixed(1)).join(' ');
   const pathA = daily.map((d, i) => (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ' ' + yA(d.appts).toFixed(1)).join(' ');
+  const pathB = daily.map((d, i) => (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ' ' + yA(d.appts_booked || 0).toFixed(1)).join(' ');
   const areaC = pathC + ` L ${x(daily.length - 1).toFixed(1)} ${(P.t + ch).toFixed(1)} L ${P.l} ${(P.t + ch).toFixed(1)} Z`;
   const step = Math.max(1, Math.ceil(daily.length / 5));
   const fmtD = (d) => { const p = d.split('-'); return p[2] + '/' + p[1]; };
@@ -1443,11 +1446,12 @@ function TsTrendChart({ daily }) {
       <div className="sec-head">
         <div>
           <div className="sec-title">Daily call activity</div>
-          <div className="sec-sub">Calls (left axis) · Appointments (right axis)</div>
+          <div className="sec-sub">Calls (left axis) · Sits + Bookings (right axis)</div>
         </div>
         <div className="legend-bar">
           <span className="lg"><span className="lg-dot" style={{ background: '#5B6CFF' }}/>Calls</span>
-          <span className="lg"><span className="lg-dot" style={{ background: '#F5B544' }}/>Appts</span>
+          <span className="lg"><span className="lg-dot" style={{ background: '#F5B544' }}/>Sits (sit date this day)</span>
+          <span className="lg"><span className="lg-dot" style={{ background: '#22C55E' }}/>Booked (created this day)</span>
         </div>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ overflow: 'visible' }}>
@@ -1472,6 +1476,7 @@ function TsTrendChart({ daily }) {
         <path d={areaC} fill="url(#gtsc)"/>
         <path d={pathC} fill="none" stroke="#5B6CFF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="svg-line"/>
         <path d={pathA} fill="none" stroke="#F5B544" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="svg-line" style={{ animationDelay: '.3s' }}/>
+        <path d={pathB} fill="none" stroke="#22C55E" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 3" className="svg-line" style={{ animationDelay: '.5s' }}/>
       </svg>
     </div>
   );
@@ -1726,7 +1731,8 @@ function AgentTable({ agents, topAgentName = null }) {
             <th>Agent</th>
             <th style={{ textAlign: 'right' }}>Outbound</th>
             <th style={{ textAlign: 'right' }}>Conv</th>
-            <th style={{ textAlign: 'right' }}>Appts / 85</th>
+            <th style={{ textAlign: 'right' }} title="Appointments scheduled to sit in period">Sits / 85</th>
+            <th style={{ textAlign: 'right' }} title="New bookings created in period (sit date can be future)">Booked</th>
             <th style={{ textAlign: 'right' }}>Conv/Appt</th>
             <th style={{ textAlign: 'right' }}>Avg Talk</th>
             <th>Status</th>
@@ -1741,6 +1747,7 @@ function AgentTable({ agents, topAgentName = null }) {
                 <td style={{ textAlign: 'right' }}>{fmt(a.outbound)}</td>
                 <td style={{ textAlign: 'right' }}>{fmt(a.qual_convos)}</td>
                 <td style={{ textAlign: 'right', color: 'var(--ink)', fontWeight: 600 }}>{fmt(a.appts)} / 85</td>
+                <td style={{ textAlign: 'right', color: 'var(--muted)' }}>{fmt(a.appts_booked)}</td>
                 <td style={{
                   textAlign: 'right',
                   color: a.conv_per_appt == null ? 'var(--muted)' : a.conv_per_appt <= 3 ? '#1FA77F' : 'var(--rose)',

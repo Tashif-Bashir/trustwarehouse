@@ -310,6 +310,7 @@ def _ts_daily(d0, d1):
         return _q(f"""
             SELECT date, SUM(total_calls) as calls, SUM(outbound_calls) as outbound,
                    SUM(appointments_scheduled) as appts,
+                   SUM(appointments_booked) as appts_booked,
                    SUM(appointments_sat) as appts_sat,
                    SUM(sales_confirmed) as sales
             FROM `{PROJECT}.gold.gold_agent_performance_daily`
@@ -561,7 +562,7 @@ def _load_all(d0s, d1s):
 
     ts_out = sum(a['outbound'] for a in agents); ts_ap = sum(a['appts'] for a in agents)
     ts_sa  = sum(a['sales'] for a in agents);   ts_on = sum(1 for a in agents if a['on_target'])
-    ts_daily_list = [{'date':str(r['date']),'calls':int(r['calls']) if pd.notna(r['calls']) else 0,'outbound':int(r['outbound']) if pd.notna(r['outbound']) else 0,'appts':int(r['appts']) if pd.notna(r['appts']) else 0,'sales':int(r['sales']) if pd.notna(r['sales']) else 0} for _,r in df_ts_day.iterrows()]
+    ts_daily_list = [{'date':str(r['date']),'calls':int(r['calls']) if pd.notna(r['calls']) else 0,'outbound':int(r['outbound']) if pd.notna(r['outbound']) else 0,'appts':int(r['appts']) if pd.notna(r['appts']) else 0,'appts_booked':int(r['appts_booked']) if pd.notna(r.get('appts_booked')) else 0,'sales':int(r['sales']) if pd.notna(r['sales']) else 0} for _,r in df_ts_day.iterrows()]
     prev_telesales_totals = None
     if not df_ts_prev.empty:
         p_out  = int(df_ts_prev['outbound_calls'].sum())

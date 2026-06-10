@@ -157,9 +157,7 @@ def _geo_daily_resource(lookback_days: int | None = None, start_date: str | None
             date_filter=_date_filter(lookback_days=lookback_days, start_date=start_date)
         )
         for row in search_stream(query):
-            # location_type enum can't be filtered in GAQL — filter in Python instead
-            if row.geographic_view.location_type.name == "USER_LOCATION":
-                yield _row_geo(row)
+            yield _row_geo(row)
     return geo_daily
 
 

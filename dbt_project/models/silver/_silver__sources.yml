@@ -12,7 +12,6 @@ sources:
       - name: wildix_calls
       - name: wildix_colleagues
       - name: google_ads_api_campaign_daily
-      - name: google_ads_api_geographic_daily
       - name: google_ads_api_geo_target_constants
       - name: meta_api_campaign_daily
       - name: meta_api_geographic_daily

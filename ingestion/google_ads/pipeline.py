@@ -208,7 +208,6 @@ def run_pipeline(lookback_days: int | None = 30, start_date: str | None = None) 
     )
     load_info = pipeline.run([
         _campaign_daily_resource(lookback_days=lookback_days, start_date=start_date)(),
-        _geo_daily_resource(lookback_days=lookback_days, start_date=start_date)(),
         _geo_target_resource()(),
     ])
     print(load_info)

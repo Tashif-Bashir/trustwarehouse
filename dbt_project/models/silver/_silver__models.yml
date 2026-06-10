@@ -108,22 +108,6 @@ models:
         tests:
           - not_null
 
-  - name: silver_google_ads_geographic
-    description: >
-      Daily Google Ads performance by actual user location (USER_LOCATION only).
-      Criterion IDs joined to human-readable city and region names.
-      rep_territory maps Google region names to the company's rep coverage areas.
-    columns:
-      - name: date
-        tests:
-          - not_null
-      - name: campaign_id
-        tests:
-          - not_null
-      - name: rep_territory
-        tests:
-          - not_null
-
   - name: silver_meta_geographic
     description: >
       Daily Meta campaign performance broken down by UK region from the

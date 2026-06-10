@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 _BASE_URL = "https://api.sharpspring.com/pubapi/v1.2/"
-_MAX_RPS = 8  # stay under the ~10 req/sec limit
+_MAX_RPS = 4  # SharpSpring documented limit: 4 req/sec
 _MIN_INTERVAL = 1.0 / _MAX_RPS
 
 

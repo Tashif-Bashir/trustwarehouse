@@ -19,23 +19,11 @@ def _client() -> SharpSpringClient:
     write_disposition="merge",
     primary_key="id",
 )
-def leads_resource(
-    updated_since: dlt.sources.incremental[str] = dlt.sources.incremental(
-        "updateTimestamp",
-        initial_value="2020-01-01 00:00:00",
-    ),
-):
-    """Incremental leads sync — only pulls records updated since last run.
-    Falls back to full load on first run (initial_value covers all history).
-    Merges on id so unchanged records are not re-written."""
-    since_dt = None
-    if updated_since.last_value:
-        from datetime import datetime
-        try:
-            since_dt = datetime.strptime(updated_since.last_value, "%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            pass
-    yield from _client().get_all_leads(updated_since=since_dt)
+def leads_resource():
+    """Full paginated load of all leads, merged on id (upsert).
+    SharpSpring getLeads where clause only accepts id/emailAddress — updateTimestamp
+    filtering is not supported server-side, so we always fetch all records."""
+    yield from _client().get_all_leads()
 
 
 @dlt.resource(name="sharpspring_campaigns", write_disposition="replace")

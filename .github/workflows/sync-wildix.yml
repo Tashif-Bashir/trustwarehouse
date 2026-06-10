@@ -1,9 +1,7 @@
 name: Sync Wildix
 
 on:
-  schedule:
-    - cron: "0 */2 * * *"   # every 2 hours — backup only. Primary sync runs on OCI VM via systemd timer (every 60s).
-  workflow_dispatch:
+  workflow_dispatch:  # manual trigger only — primary sync runs on OCI VM every 60s
 
 jobs:
   sync:

@@ -359,6 +359,7 @@ def _telesales_whiteboard():
                (this is what the 85/agent monthly target is measured
                against). Mixed axis is intentional — matches the office
                whiteboard one-for-one."""
+    agents_list = "', '".join(TELESALES_AGENTS)
     try:
         return _q(f"""
             SELECT
@@ -367,7 +368,7 @@ def _telesales_whiteboard():
                 WHEN LOWER(appointment_made_by) IN ('sue','susan england') THEN 'Sue'
                 WHEN LOWER(appointment_made_by) IN ('alicja','alicja aleksiuk') THEN 'Alicja Aleksiuk'
                 WHEN LOWER(appointment_made_by) IN ('alisha','alisha moore') THEN 'Alisha'
-                ELSE COALESCE(appointment_made_by, 'Unattributed')
+                ELSE appointment_made_by
               END AS agent_name,
               -- today/week: count by WHEN it was booked (productivity)
               COUNTIF(appointment_booked_at IS NOT NULL
@@ -384,9 +385,11 @@ def _telesales_whiteboard():
                       AND appointment_date BETWEEN DATE_TRUNC(CURRENT_DATE('Europe/London'), MONTH)
                           AND LAST_DAY(CURRENT_DATE('Europe/London'))) AS month_appts
             FROM `{PROJECT}.silver.silver_sharpspring_leads`
-            WHERE (appointment_booked_at IS NOT NULL OR appointment_date IS NOT NULL)
+            WHERE appointment_made_by IS NOT NULL
+              AND (appointment_booked_at IS NOT NULL OR appointment_date IS NOT NULL)
               AND LOWER(COALESCE(appointment_status, '')) NOT IN ('appointment cancelled','cancelled','cancel','appointment cancel')
             GROUP BY agent_name
+            HAVING agent_name IN ('{agents_list}')
         """)
     except Exception:
         return pd.DataFrame()
@@ -709,12 +712,9 @@ def _load_all(d0s, d1s):
     ts_conv = sum(a['qual_convos'] for a in agents)
     ts_pre  = sum(a['pre_appt'] for a in agents)
     ts_new  = sum(a['new_appt'] for a in agents)
-    # Whiteboard totals come from ALL rows (no agent filter) so they match
-    # bronze and the physical office whiteboard exactly — mislabeled or
-    # blank appointment_made_by entries are still the team's appointments.
-    ts_today = int(df_ts_wb['today_appts'].sum()) if not df_ts_wb.empty else 0
-    ts_week  = int(df_ts_wb['week_appts'].sum())  if not df_ts_wb.empty else 0
-    ts_month = int(df_ts_wb['month_appts'].sum()) if not df_ts_wb.empty else 0
+    ts_today = sum(a['today_appts'] for a in agents)
+    ts_week  = sum(a['week_appts']  for a in agents)
+    ts_month = sum(a['month_appts'] for a in agents)
     monthly_target_per_agent = MONTHLY_TARGET_PER_AGENT
     team_target = monthly_target_per_agent * len(TELESALES_AGENTS)
     ts_togo = max(0, team_target - ts_month)

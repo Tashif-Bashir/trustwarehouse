@@ -7,6 +7,9 @@ SOURCE="$1"
 cd "$HOME/trustwarehouse"
 export PATH="$HOME/.local/bin:$PATH"
 
+# Pull latest model changes from git before building.
+git pull --ff-only origin main 2>&1 | tail -3 || echo "git pull failed (non-fatal)"
+
 # 1. Sync the source data into bronze.
 # Direct-API ingestions (google_ads, meta, ga4) need a --run flag; dlt-based
 # ones (wildix, sharpspring) just default to running their pipeline.

@@ -121,7 +121,8 @@ cleaned as (
         coalesce(
             REGEXP_CONTAINS(LOWER(COALESCE(description, '')), r'^responseiq:')
             AND (gclid1_66dad68843cd4 IS NULL OR TRIM(gclid1_66dad68843cd4) = '')
-            AND (tracking_id IS NULL OR TRIM(tracking_id) = ''),
+            AND (tracking_id IS NULL OR TRIM(tracking_id) = '')
+            AND (campaign_id IS NULL OR TRIM(campaign_id) = ''),
             false
         )                                                                   as is_tracking_artifact
 

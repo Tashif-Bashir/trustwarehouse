@@ -120,8 +120,8 @@ cleaned as (
         -- captured in Wildix CDR.
         coalesce(
             REGEXP_CONTAINS(LOWER(COALESCE(description, '')), r'^responseiq:')
-            AND (gclid IS NULL OR gclid = '')
-            AND (tracking_id IS NULL OR tracking_id = ''),
+            AND (gclid1_66dad68843cd4 IS NULL OR TRIM(gclid1_66dad68843cd4) = '')
+            AND (tracking_id IS NULL OR TRIM(tracking_id) = ''),
             false
         )                                                                   as is_tracking_artifact
 

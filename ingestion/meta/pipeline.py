@@ -20,6 +20,18 @@ from ingestion.meta.client import MetaClient
 load_dotenv()
 
 
+_GEO_FIELDS = [
+    "campaign_id",
+    "campaign_name",
+    "spend",
+    "impressions",
+    "clicks",
+    "reach",
+    "date_start",
+    "date_stop",
+]
+
+
 def _row_campaign_daily(row: dict) -> dict:
     def _f(key: str, default=None):
         v = row.get(key)
@@ -84,6 +96,38 @@ def _campaign_daily_resource(since: str, until: str):
     return campaign_daily
 
 
+def _geographic_daily_resource(since: str, until: str):
+    @dlt.resource(
+        name="meta_api_geographic_daily",
+        write_disposition="merge",
+        primary_key=["date", "campaign_id", "region"],
+    )
+    def geographic_daily():
+        client = MetaClient()
+        for chunk_since, chunk_until in _chunk_dates(since, until, chunk_days=90):
+            print(f"  Meta geo chunk: {chunk_since} -> {chunk_until}")
+            for row in client.insights(
+                level="campaign",
+                breakdowns=["region"],
+                fields=_GEO_FIELDS,
+                since=chunk_since,
+                until=chunk_until,
+                time_increment=1,
+            ):
+                region = row.get("region") or ""
+                yield {
+                    "date": row.get("date_start"),
+                    "campaign_id": row.get("campaign_id"),
+                    "campaign_name": row.get("campaign_name"),
+                    "region": region if region else None,
+                    "spend_gbp": float(row.get("spend") or 0),
+                    "impressions": int(float(row.get("impressions") or 0)),
+                    "clicks": int(float(row.get("clicks") or 0)),
+                    "reach": int(float(row.get("reach") or 0)),
+                }
+    return geographic_daily
+
+
 def run_pipeline(lookback_days: int | None = 7, start_date: str | None = None) -> None:
     """Pull Meta campaign-level daily insights into bronze.
 
@@ -105,5 +149,8 @@ def run_pipeline(lookback_days: int | None = 7, start_date: str | None = None) -
         destination=dlt.destinations.bigquery(location="europe-west2"),
         dataset_name="bronze",
     )
-    load_info = pipeline.run(_campaign_daily_resource(since, until)())
+    load_info = pipeline.run([
+        _campaign_daily_resource(since, until)(),
+        _geographic_daily_resource(since, until)(),
+    ])
     print(load_info)

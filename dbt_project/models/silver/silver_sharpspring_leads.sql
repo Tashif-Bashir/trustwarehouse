@@ -88,6 +88,28 @@ cleaned as (
         nullif(trim(exact_marketing_url_64d0bebced518), '')                as marketing_url,
         nullif(trim(gclid1_66dad68843cd4), '')                             as gclid,
 
+        -- utm parameters parsed from landing page url
+        regexp_extract(
+            nullif(trim(exact_marketing_url_64d0bebced518), ''),
+            r'[?&]utm_source=([^&#]+)'
+        )                                                                  as utm_source,
+        regexp_extract(
+            nullif(trim(exact_marketing_url_64d0bebced518), ''),
+            r'[?&]utm_medium=([^&#]+)'
+        )                                                                  as utm_medium,
+        regexp_extract(
+            nullif(trim(exact_marketing_url_64d0bebced518), ''),
+            r'[?&]utm_campaign=([^&#]+)'
+        )                                                                  as utm_campaign,
+        regexp_extract(
+            nullif(trim(exact_marketing_url_64d0bebced518), ''),
+            r'[?&]utm_content=([^&#]+)'
+        )                                                                  as utm_content,
+        regexp_extract(
+            nullif(trim(exact_marketing_url_64d0bebced518), ''),
+            r'[?&]utm_term=([^&#]+)'
+        )                                                                  as utm_term,
+
         -- lead metadata
         nullif(trim(salutation_5af592e1e2374), '')                         as salutation,
         nullif(trim(job_role_5b10173f73ab9), '')                           as job_role,
@@ -167,7 +189,7 @@ enriched as (
 
     from cleaned c
     left join postcode_lookup pc
-        on regexp_extract(upper(c.postcode), r'^([A-Z]+)') = pc.postcode_area
+        on regexp_extract(upper(coalesce(c.postcode, c.postcode_raw)), r'^([A-Z]+)') = pc.postcode_area
 )
 
 select * from enriched

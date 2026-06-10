@@ -33,10 +33,10 @@ case "$SOURCE" in
     SELECTOR="silver_sharpspring_leads silver_sharpspring_campaigns silver_sharpspring_opportunities silver_sharpspring_deal_stages silver_google_ads_spend silver_meta_spend silver_bing_spend gold_lead_activity gold_campaign_attribution gold_agent_performance_daily gold_pipeline_opportunities"
     ;;
   google_ads)
-    SELECTOR="silver_google_ads_spend gold_google_ads_spend_by_region gold_campaign_attribution"
+    SELECTOR="silver_google_ads_spend silver_google_ads_geographic gold_google_ads_spend_by_region gold_campaign_attribution gold_leads_by_region"
     ;;
   meta)
-    SELECTOR="silver_meta_spend gold_campaign_attribution"
+    SELECTOR="silver_meta_spend silver_meta_geographic gold_campaign_attribution gold_leads_by_region"
     ;;
   ga4)
     SELECTOR=""  # no dbt step

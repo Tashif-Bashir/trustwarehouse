@@ -2289,9 +2289,9 @@ function TelesalesView({ data }) {
 
   // Headline KPI cards — match the four numbers the team reads off the
   // office whiteboard every morning:
-  //   - Today's appointments (sits in the diary for today)
-  //   - This week's appointments (Mon-Sun current week)
-  //   - This month's appointments (full calendar month, including future sits)
+  //   - Today's appointments (booked today, any sit date)
+  //   - This week's appointments (booked Mon-Sun this week, any sit date)
+  //   - This month's appointments (scheduled to sit this calendar month)
   //   - To go (team target 340 minus this month's sits)
   return (
     <>
@@ -2334,7 +2334,7 @@ function TelesalesWhiteboardTable({ agents, totals: T, tgtPerAgent, teamTarget }
       <div className="sec-head">
         <div>
           <div className="sec-title">{monthName} @ Telesales — appointments</div>
-          <div className="sec-sub">Sits in the diary · Daily / This week / This month (matches the office whiteboard)</div>
+          <div className="sec-sub">Appointments booked · Daily = booked today · Weekly = booked this Mon–Sun · Month = sits scheduled this calendar month</div>
         </div>
       </div>
       <div className="tbl-scroll">

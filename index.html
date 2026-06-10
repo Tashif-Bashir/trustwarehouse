@@ -844,7 +844,7 @@ function Topbar({ title, period, setPeriod, refreshedAt, onRefresh, onCustomDate
       </div>
       <div className="topbar-right">
         <span className="live-pulse" title={`Auto-refreshing every 30s · last update ${label}`}>
-          <span className={`live-dot ${fresh ? 'is-fresh' : 'is-stale'}`}/> Live · {label}
+          <span className={`live-dot ${fresh ? 'is-fresh' : 'is-stale'}`}/> Synced every 30 min · {label}
         </span>
         {!hidePicker && <PeriodPicker value={period} onChange={setPeriod} />}
         {!hidePicker && <DateRangePicker onApply={onCustomDate} />}

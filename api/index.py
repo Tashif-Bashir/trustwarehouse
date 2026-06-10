@@ -374,7 +374,7 @@ def _telesales_whiteboard():
                       = CURRENT_DATE('Europe/London')) AS today_appts,
               COUNTIF(DATE(SAFE_CAST(appointment_booked_at AS TIMESTAMP), 'Europe/London')
                       BETWEEN DATE_TRUNC(CURRENT_DATE('Europe/London'), WEEK(MONDAY))
-                      AND DATE_ADD(DATE_TRUNC(CURRENT_DATE('Europe/London'), WEEK(MONDAY)), INTERVAL 6 DAY)) AS week_appts,
+                      AND DATE_ADD(DATE_TRUNC(CURRENT_DATE('Europe/London'), WEEK(MONDAY)), INTERVAL 4 DAY)) AS week_appts,
               COUNTIF(appointment_date BETWEEN DATE_TRUNC(CURRENT_DATE('Europe/London'), MONTH)
                                           AND LAST_DAY(CURRENT_DATE('Europe/London'))) AS month_appts
             FROM `{PROJECT}.silver.silver_sharpspring_leads`

@@ -58,7 +58,6 @@ GEO_DAILY_GAQL = """
     FROM geographic_view
     WHERE {date_filter}
       AND geographic_view.country_criterion_id = 2826
-      AND geographic_view.location_type = 'USER_LOCATION'
 """
 
 GEO_TARGET_GAQL = """
@@ -158,7 +157,9 @@ def _geo_daily_resource(lookback_days: int | None = None, start_date: str | None
             date_filter=_date_filter(lookback_days=lookback_days, start_date=start_date)
         )
         for row in search_stream(query):
-            yield _row_geo(row)
+            # location_type enum can't be filtered in GAQL — filter in Python instead
+            if row.geographic_view.location_type.name == "USER_LOCATION":
+                yield _row_geo(row)
     return geo_daily
 
 

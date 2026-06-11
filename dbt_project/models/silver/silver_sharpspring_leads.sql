@@ -178,6 +178,9 @@ enriched as (
         c.*,
         pc.uk_region as derived_region,
 
+        -- phone area code → region (landlines only; mobiles 447xxx have no geographic coding)
+        {{ phone_region('c.phone', 'c.mobile') }}                               as phone_region,
+
         -- UK-local date when the appointment is scheduled to sit. The
         -- previous version parsed `appointment_datetime_text` (the __v_text
         -- variant) which SharpSpring leaves empty — so this column was NULL

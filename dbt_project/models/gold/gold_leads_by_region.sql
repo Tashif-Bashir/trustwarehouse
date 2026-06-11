@@ -4,6 +4,7 @@ with leads as (
         sl.lead_id,
         sl.derived_region,
         sl.sharpspring_region,
+        sl.phone_region,
         sl.region,
         sl.postcode,
         sl.marketing_url,
@@ -73,9 +74,12 @@ final as (
             sharpspring_region,
             -- 3. utm campaign name (campaign-level inference)
             utm_region,
-            -- 4. sharpspring state field — whitelisted valid UK regions only
-            --    (free-text, can contain city names, so only accept known values)
+            -- 4. phone area code → region (UK landlines are geographically coded)
+            phone_region,
+            -- 5. sharpspring state field — region names, county names, and city names
+            --    (free-text; explicitly flag OOA entries; skip anything too ambiguous)
             case region
+                -- official region names
                 when 'North East'                  then 'North East'
                 when 'North West'                  then 'North West'
                 when 'Yorkshire and the Humber'    then 'Yorkshire'
@@ -93,6 +97,84 @@ final as (
                 when 'Scotland'                    then 'Scotland'
                 when 'Northern Ireland'            then 'Northern Ireland'
                 when 'Northern England'            then 'Northern England'
+                -- typo fixes
+                when 'Northen Ireland'             then 'Northern Ireland'
+                when 'East of Englands'            then 'East of England'
+                -- cities
+                when 'Manchester'                  then 'North West'
+                when 'Liverpool'                   then 'North West'
+                when 'Rochdale'                    then 'North West'
+                when 'Glasgow'                     then 'Scotland'
+                when 'Birmingham'                  then 'Midlands'
+                when 'Coventry'                    then 'Midlands'
+                when 'Stoke-on-Trent'              then 'Midlands'
+                when 'West Bromwich'               then 'Midlands'
+                when 'Leeds'                       then 'Yorkshire'
+                when 'Bradford'                    then 'Yorkshire'
+                when 'Sheffield'                   then 'Yorkshire'
+                when 'Wakefield'                   then 'Yorkshire'
+                when 'Hull'                        then 'Yorkshire'
+                when 'Stockton-on-Tees'            then 'North East'
+                when 'Bristol'                     then 'South West'
+                when 'Norwich'                     then 'East of England'
+                when 'Luton'                       then 'East of England'
+                when 'Swansea'                     then 'Wales'
+                when 'North Wales'                 then 'Wales'
+                when 'Tonbridge'                   then 'South East'
+                when 'Croydon'                     then 'Greater London'
+                when 'Hounslow'                    then 'Greater London'
+                when 'Lambeth'                     then 'Greater London'
+                when 'Brent'                       then 'Greater London'
+                -- counties / historic counties
+                when 'Devon'                       then 'South West'
+                when 'Dorset'                      then 'South West'
+                when 'Somerset'                    then 'South West'
+                when 'Wiltshire'                   then 'South West'
+                when 'Gloucestershire'             then 'South West'
+                when 'Cornwall'                    then 'South West'
+                when 'Kent'                        then 'South East'
+                when 'Essex'                       then 'East of England'
+                when 'Hertfordshire'               then 'East of England'
+                when 'Bedfordshire'                then 'East of England'
+                when 'Cambridgeshire'              then 'East of England'
+                when 'Norfolk'                     then 'East of England'
+                when 'Suffolk'                     then 'East of England'
+                when 'Hampshire'                   then 'South East'
+                when 'Surrey'                      then 'South East'
+                when 'Berkshire'                   then 'South East'
+                when 'Buckinghamshire'             then 'South East'
+                when 'Oxfordshire'                 then 'South East'
+                when 'East Sussex'                 then 'South East'
+                when 'West Sussex'                 then 'South East'
+                when 'Sussex'                      then 'South East'
+                when 'Derbyshire'                  then 'Midlands'
+                when 'Nottinghamshire'             then 'Midlands'
+                when 'Lincolnshire'                then 'Midlands'
+                when 'Leicestershire'              then 'Midlands'
+                when 'Northamptonshire'            then 'Midlands'
+                when 'Warwickshire'                then 'Midlands'
+                when 'Worcestershire'              then 'Midlands'
+                when 'Staffordshire'               then 'Midlands'
+                when 'Shropshire'                  then 'Midlands'
+                when 'Glossop'                     then 'Midlands'
+                when 'West Yorkshire'              then 'Yorkshire'
+                when 'South Yorkshire'             then 'Yorkshire'
+                when 'North Yorkshire'             then 'Yorkshire'
+                when 'East Yorkshire'              then 'Yorkshire'
+                when 'Lancashire'                  then 'North West'
+                when 'Cumbria'                     then 'North West'
+                when 'Cheshire'                    then 'North West'
+                when 'Greater Manchester'          then 'North West'
+                when 'Merseyside'                  then 'North West'
+                when 'Tyne and Wear'               then 'North East'
+                when 'County Durham'               then 'North East'
+                when 'Northumberland'              then 'North East'
+                -- out of area — flag explicitly rather than treating as unknown
+                when 'Ireland'                     then 'Outside UK'
+                when 'Republic of Ireland'         then 'Outside UK'
+                when 'ROI'                         then 'Outside UK'
+                when 'Isle of Man'                 then 'Outside UK'
+                when 'Isle of Mann'                then 'Outside UK'
             end,
             'Unknown'
         )                                                   as region,

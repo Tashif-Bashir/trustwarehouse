@@ -3,6 +3,8 @@ with leads as (
         DATE(sl.created_at, 'Europe/London')    as created_date,
         sl.lead_id,
         sl.derived_region,
+        sl.sharpspring_region,
+        sl.region,
         sl.postcode,
         sl.marketing_url,
         m.platform,
@@ -56,12 +58,41 @@ final as (
         -- priority: 1) UTM campaign region, 2) postcode-derived region, 3) Unknown
         -- normalise postcode regions to match UTM naming (West/East Midlands → Midlands)
         coalesce(
-            utm_region,
+            -- 1. postcode-derived region (actual address — most accurate)
             case derived_region
-                when 'West Midlands'  then 'Midlands'
-                when 'East Midlands'  then 'Midlands'
-                when 'Greater London' then 'Greater London'
+                when 'Yorkshire and The Humber'    then 'Yorkshire'
+                when 'Yorkshire and the Humber'    then 'Yorkshire'
+                when 'Yorkshire and Humber'        then 'Yorkshire'
+                when 'West Midlands'               then 'Midlands'
+                when 'East Midlands'               then 'Midlands'
+                when 'Greater London'              then 'Greater London'
+                when 'London'                      then 'Greater London'
                 else derived_region
+            end,
+            -- 2. sharpspring region dropdown (~97% coverage since Aug 2025)
+            sharpspring_region,
+            -- 3. utm campaign name (campaign-level inference)
+            utm_region,
+            -- 4. sharpspring state field — whitelisted valid UK regions only
+            --    (free-text, can contain city names, so only accept known values)
+            case region
+                when 'North East'                  then 'North East'
+                when 'North West'                  then 'North West'
+                when 'Yorkshire and the Humber'    then 'Yorkshire'
+                when 'Yorkshire and The Humber'    then 'Yorkshire'
+                when 'Yorkshire'                   then 'Yorkshire'
+                when 'East Midlands'               then 'Midlands'
+                when 'West Midlands'               then 'Midlands'
+                when 'Midlands'                    then 'Midlands'
+                when 'East of England'             then 'East of England'
+                when 'London'                      then 'Greater London'
+                when 'Greater London'              then 'Greater London'
+                when 'South East'                  then 'South East'
+                when 'South West'                  then 'South West'
+                when 'Wales'                       then 'Wales'
+                when 'Scotland'                    then 'Scotland'
+                when 'Northern Ireland'            then 'Northern Ireland'
+                when 'Northern England'            then 'Northern England'
             end,
             'Unknown'
         )                                                   as region,
@@ -73,6 +104,8 @@ final as (
               then lead_id end)                             as sales,
         count(distinct case when postcode is not null
               then lead_id end)                             as leads_with_postcode,
+        count(distinct case when sharpspring_region is not null
+              then lead_id end)                             as leads_with_ss_region,
 
         round(
             count(distinct case when appointment_booked = 'Yes'

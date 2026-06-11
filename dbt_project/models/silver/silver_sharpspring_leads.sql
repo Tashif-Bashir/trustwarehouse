@@ -81,6 +81,23 @@ cleaned as (
         nullif(trim(electrician_needed_606ef17b0c8ea), '')                 as electrician_needed,
         nullif(trim(installed_by_66e44119364b0), '')                       as installed_by,
 
+        -- geography (sharpspring region dropdown — high coverage since Aug 2025)
+        case nullif(trim(location_6349396e4a08d), '')
+            when 'North East'                  then 'North East'
+            when 'North West'                  then 'North West'
+            when 'Yorkshire and the Humber'    then 'Yorkshire'
+            when 'East Midlands'               then 'Midlands'
+            when 'West Midlands'               then 'Midlands'
+            when 'East of England'             then 'East of England'
+            when 'London'                      then 'Greater London'
+            when 'South East'                  then 'South East'
+            when 'South West'                  then 'South West'
+            when 'Wales'                       then 'Wales'
+            when 'Scotland'                    then 'Scotland'
+            when 'Northern Ireland'            then 'Northern Ireland'
+            -- 'England' and 'Ireland' are too broad — treat as null
+        end                                                                as sharpspring_region,
+
         -- attribution
         nullif(trim(campaign_id), '')                                      as campaign_id,
         nullif(trim(tracking_id), '')                                      as tracking_id,
@@ -159,10 +176,7 @@ postcode_lookup as (
 enriched as (
     select
         c.*,
-        coalesce(
-            pc.uk_region,
-            c.region
-        ) as derived_region,
+        pc.uk_region as derived_region,
 
         -- UK-local date when the appointment is scheduled to sit. The
         -- previous version parsed `appointment_datetime_text` (the __v_text

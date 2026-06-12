@@ -379,6 +379,54 @@ enriched as (
         on regexp_extract(upper(coalesce(c.postcode, c.postcode_raw)), r'^([A-Z]+)') = pc.postcode_area
     left join domain_city_lookup dcm
         on lower(regexp_extract(c.email, r'@(.+)$')) = dcm.email_domain
+),
+
+-- region consistent with the resolved city: when a lead has a city, the city
+-- decides the region (a Leeds postcode beats a "North West" dropdown choice).
+-- Only leads with no city fall back to the declared/derived region signals.
+final as (
+    select
+        e.*,
+        case
+            when e.city_resolved in (
+                'Manchester', 'Liverpool', 'Bolton', 'Oldham', 'Stockport',
+                'Warrington', 'Chester', 'Preston', 'Blackburn', 'Blackpool',
+                'Lancaster', 'Carlisle', 'Crewe', 'Wigan', 'Rochdale', 'Burnley',
+                'Bury', 'Southport', 'St Helens', 'Macclesfield', 'Kendal',
+                'Wilmslow', 'Altrincham', 'Sale', 'Accrington', 'Chorley',
+                'Skelmersdale', 'Barrow-in-Furness'
+            ) then 'North West'
+            when e.city_resolved in (
+                'Leeds', 'Bradford', 'Sheffield', 'York', 'Harrogate', 'Hull',
+                'Doncaster', 'Huddersfield', 'Wakefield', 'Rotherham',
+                'Barnsley', 'Halifax'
+            ) then 'Yorkshire'
+            else coalesce(
+                e.sharpspring_region,
+                e.derived_region,
+                e.phone_region,
+                -- raw free-text region/state field as last resort
+                case e.region
+                    when 'North West'               then 'North West'
+                    when 'North West England'       then 'North West'
+                    when 'Greater Manchester'       then 'North West'
+                    when 'Merseyside'               then 'North West'
+                    when 'Lancashire'               then 'North West'
+                    when 'Cheshire'                 then 'North West'
+                    when 'Cumbria'                  then 'North West'
+                    when 'Manchester'               then 'North West'
+                    when 'Liverpool'                then 'North West'
+                    when 'Yorkshire'                then 'Yorkshire'
+                    when 'Yorkshire and the Humber' then 'Yorkshire'
+                    when 'Yorkshire and The Humber' then 'Yorkshire'
+                    when 'West Yorkshire'           then 'Yorkshire'
+                    when 'South Yorkshire'          then 'Yorkshire'
+                    when 'North Yorkshire'          then 'Yorkshire'
+                    when 'East Yorkshire'           then 'Yorkshire'
+                end
+            )
+        end as region_resolved
+    from enriched e
 )
 
-select * from enriched
+select * from final

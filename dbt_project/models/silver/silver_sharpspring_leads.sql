@@ -269,6 +269,46 @@ enriched as (
                 when 'WILMSLOW'       then 'Wilmslow'
                 when 'ALTRINCHAM'     then 'Altrincham'
                 when 'SALE'           then 'Sale'
+                when 'DARWEN'         then 'Blackburn'
+                when 'NELSON'         then 'Burnley'
+                when 'FLEETWOOD'      then 'Blackpool'
+                when 'LYTHAM ST. ANNES' then 'Blackpool'
+                when 'LYTHAM ST ANNES'  then 'Blackpool'
+                when 'THORNTON-CLEVELEYS' then 'Blackpool'
+                when 'CLEVELEYS'      then 'Blackpool'
+                when 'LEYLAND'        then 'Preston'
+                when 'ORMSKIRK'       then 'Liverpool'
+                when 'PENRITH'        then 'Carlisle'
+                when 'WORKINGTON'     then 'Carlisle'
+                when 'WHITEHAVEN'     then 'Carlisle'
+                when 'KNUTSFORD'      then 'Warrington'
+                when 'NORTHWICH'      then 'Crewe'
+                when 'WINSFORD'       then 'Crewe'
+                when 'NANTWICH'       then 'Crewe'
+                when 'CONGLETON'      then 'Crewe'
+                when 'CHEADLE'        then 'Stockport'
+                when 'CHEADLE HULME'  then 'Stockport'
+                when 'HYDE'           then 'Stockport'
+                when 'GLOSSOP'        then 'Stockport'
+                when 'ASHTON-UNDER-LYNE' then 'Oldham'
+                when 'STALYBRIDGE'    then 'Oldham'
+                when 'PRESTWICH'      then 'Manchester'
+                when 'SWINTON'        then 'Manchester'
+                when 'WALKDEN'        then 'Manchester'
+                when 'FAILSWORTH'     then 'Manchester'
+                when 'DENTON'         then 'Manchester'
+                when 'KIRKBY'         then 'Liverpool'
+                when 'PRESCOT'        then 'Liverpool'
+                when 'WALLASEY'       then 'Chester'
+                when 'BIRKENHEAD'     then 'Chester'
+                when 'BEBINGTON'      then 'Chester'
+                when 'HESWALL'        then 'Chester'
+                when 'WIRRAL'         then 'Chester'
+                when 'RADCLIFFE'      then 'Bury'
+                when 'RAMSBOTTOM'     then 'Bury'
+                when 'WESTHOUGHTON'   then 'Bolton'
+                when 'HORWICH'        then 'Bolton'
+                when 'FARNWORTH'      then 'Bolton'
             end,
             case regexp_extract(upper(coalesce(c.postcode, c.postcode_raw)), r'^([A-Z]+)')
                 when 'LS' then 'Leeds'      when 'BD' then 'Bradford'
@@ -308,6 +348,29 @@ enriched as (
                 when regexp_contains(coalesce(c.phone, c.mobile), r'^441744') then 'St Helens'
                 when regexp_contains(coalesce(c.phone, c.mobile), r'^441704') then 'Southport'
                 when regexp_contains(coalesce(c.phone, c.mobile), r'^441229') then 'Barrow-in-Furness'
+            end,
+            -- last resort: full UK postcode buried in free text (the raw city
+            -- field often holds a complete address, e.g. "...Blackpool FY4 4NA")
+            case regexp_extract(
+                regexp_extract(
+                    upper(coalesce(c.city, '') || ' ' || coalesce(c.street, '') || ' '
+                          || coalesce(c.form_message, '') || ' ' || coalesce(c.notes, '')),
+                    r'\b([A-Z]{1,2}[0-9][0-9A-Z]?)\s*[0-9][A-Z]{2}\b'
+                ),
+                r'^([A-Z]+)'
+            )
+                when 'LS' then 'Leeds'      when 'BD' then 'Bradford'
+                when 'S'  then 'Sheffield'  when 'DN' then 'Doncaster'
+                when 'WF' then 'Wakefield'  when 'HD' then 'Huddersfield'
+                when 'HX' then 'Halifax'    when 'HG' then 'Harrogate'
+                when 'HU' then 'Hull'       when 'YO' then 'York'
+                when 'M'  then 'Manchester' when 'L'  then 'Liverpool'
+                when 'WN' then 'Wigan'      when 'BL' then 'Bolton'
+                when 'OL' then 'Oldham'     when 'SK' then 'Stockport'
+                when 'WA' then 'Warrington' when 'CH' then 'Chester'
+                when 'PR' then 'Preston'    when 'BB' then 'Blackburn'
+                when 'FY' then 'Blackpool'  when 'LA' then 'Lancaster'
+                when 'CA' then 'Carlisle'   when 'CW' then 'Crewe'
             end
         )                                                                       as city_resolved
 

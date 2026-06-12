@@ -172,11 +172,16 @@ postcode_lookup as (
     select * from {{ ref('postcode_area_region') }}
 ),
 
+domain_city_lookup as (
+    select * from {{ ref('domain_city_mapping') }}
+),
+
 -- derived classifications that depend on columns computed in cleaned
 enriched as (
     select
         c.*,
         pc.uk_region as derived_region,
+        dcm.ch_city,
 
         -- phone area code → region (landlines only; mobiles 447xxx have no geographic coding)
         {{ phone_region('c.phone', 'c.mobile') }}                               as phone_region,
@@ -202,11 +207,115 @@ enriched as (
         -- coalesce handles NULL appointment_status → false, never NULL
         coalesce(appointment_status in (
             'sold', 'sold on site', 'sold in office', 'chc sold'
-        ), false)                                                               as is_sold
+        ), false)                                                               as is_sold,
+
+        -- best-effort city: city field → postcode prefix → Companies House → phone area code
+        coalesce(
+            case upper(trim(c.city))
+                when 'LEEDS'          then 'Leeds'
+                when 'BRADFORD'       then 'Bradford'
+                when 'SHEFFIELD'      then 'Sheffield'
+                when 'YORK'           then 'York'
+                when 'HARROGATE'      then 'Harrogate'
+                when 'HULL'           then 'Hull'
+                when 'DONCASTER'      then 'Doncaster'
+                when 'HUDDERSFIELD'   then 'Huddersfield'
+                when 'WAKEFIELD'      then 'Wakefield'
+                when 'ROTHERHAM'      then 'Rotherham'
+                when 'BARNSLEY'       then 'Barnsley'
+                when 'HALIFAX'        then 'Halifax'
+                when 'MORLEY'         then 'Leeds'
+                when 'PUDSEY'         then 'Leeds'
+                when 'OTLEY'          then 'Leeds'
+                when 'MANCHESTER'     then 'Manchester'
+                when 'SALFORD'        then 'Manchester'
+                when 'STRETFORD'      then 'Manchester'
+                when 'ECCLES'         then 'Manchester'
+                when 'URMSTON'        then 'Manchester'
+                when 'LIVERPOOL'      then 'Liverpool'
+                when 'BOOTLE'         then 'Liverpool'
+                when 'CROSBY'         then 'Liverpool'
+                when 'HUYTON'         then 'Liverpool'
+                when 'BOLTON'         then 'Bolton'
+                when 'OLDHAM'         then 'Oldham'
+                when 'STOCKPORT'      then 'Stockport'
+                when 'WARRINGTON'     then 'Warrington'
+                when 'CHESTER'        then 'Chester'
+                when 'ELLESMERE PORT' then 'Chester'
+                when 'PRESTON'        then 'Preston'
+                when 'BLACKBURN'      then 'Blackburn'
+                when 'BLACKPOOL'      then 'Blackpool'
+                when 'LANCASTER'      then 'Lancaster'
+                when 'MORECAMBE'      then 'Lancaster'
+                when 'CARLISLE'       then 'Carlisle'
+                when 'CREWE'          then 'Crewe'
+                when 'WIGAN'          then 'Wigan'
+                when 'LEIGH'          then 'Wigan'
+                when 'ROCHDALE'       then 'Rochdale'
+                when 'BURNLEY'        then 'Burnley'
+                when 'BURY'           then 'Bury'
+                when 'WIDNES'         then 'Warrington'
+                when 'RUNCORN'        then 'Warrington'
+                when 'MACCLESFIELD'   then 'Macclesfield'
+                when 'KENDAL'         then 'Kendal'
+                when 'SOUTHPORT'      then 'Southport'
+                when 'ST HELENS'      then 'St Helens'
+                when 'SAINT HELENS'   then 'St Helens'
+                when 'BARROW'         then 'Barrow-in-Furness'
+                when 'BARROW IN FURNESS' then 'Barrow-in-Furness'
+                when 'ACCRINGTON'     then 'Accrington'
+                when 'CHORLEY'        then 'Chorley'
+                when 'SKELMERSDALE'   then 'Skelmersdale'
+                when 'WILMSLOW'       then 'Wilmslow'
+                when 'ALTRINCHAM'     then 'Altrincham'
+                when 'SALE'           then 'Sale'
+            end,
+            case regexp_extract(upper(coalesce(c.postcode, c.postcode_raw)), r'^([A-Z]+)')
+                when 'LS' then 'Leeds'      when 'BD' then 'Bradford'
+                when 'S'  then 'Sheffield'  when 'DN' then 'Doncaster'
+                when 'WF' then 'Wakefield'  when 'HD' then 'Huddersfield'
+                when 'HX' then 'Halifax'    when 'HG' then 'Harrogate'
+                when 'HU' then 'Hull'       when 'YO' then 'York'
+                when 'M'  then 'Manchester' when 'L'  then 'Liverpool'
+                when 'WN' then 'Wigan'      when 'BL' then 'Bolton'
+                when 'OL' then 'Oldham'     when 'SK' then 'Stockport'
+                when 'WA' then 'Warrington' when 'CH' then 'Chester'
+                when 'PR' then 'Preston'    when 'BB' then 'Blackburn'
+                when 'FY' then 'Blackpool'  when 'LA' then 'Lancaster'
+                when 'CA' then 'Carlisle'   when 'CW' then 'Crewe'
+            end,
+            dcm.ch_city,
+            case
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^44113') then 'Leeds'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^44114') then 'Sheffield'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^44274') then 'Bradford'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^44482') then 'Hull'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^44161') then 'Manchester'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^44151') then 'Liverpool'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^441942') then 'Wigan'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^441204') then 'Bolton'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^441706') then 'Rochdale'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^441925') then 'Warrington'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^441244') then 'Chester'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^441772') then 'Preston'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^441254') then 'Blackburn'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^441253') then 'Blackpool'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^441524') then 'Lancaster'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^441228') then 'Carlisle'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^441270') then 'Crewe'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^441282') then 'Burnley'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^441257') then 'Chorley'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^441744') then 'St Helens'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^441704') then 'Southport'
+                when regexp_contains(coalesce(c.phone, c.mobile), r'^441229') then 'Barrow-in-Furness'
+            end
+        )                                                                       as city_resolved
 
     from cleaned c
     left join postcode_lookup pc
         on regexp_extract(upper(coalesce(c.postcode, c.postcode_raw)), r'^([A-Z]+)') = pc.postcode_area
+    left join domain_city_lookup dcm
+        on lower(regexp_extract(c.email, r'@(.+)$')) = dcm.email_domain
 )
 
 select * from enriched

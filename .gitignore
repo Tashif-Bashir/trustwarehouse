@@ -1,5 +1,6 @@
 .venv/
 .env
+*_key.json
 *.duckdb
 *.duckdb.wal
 __pycache__/

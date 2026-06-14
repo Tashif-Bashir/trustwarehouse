@@ -1,0 +1,17 @@
+[Unit]
+Description=Unleashed API -> BigQuery bronze sync (once daily)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/trustwarehouse
+EnvironmentFile=/home/ubuntu/trustwarehouse/.env
+ExecStart=/home/ubuntu/trustwarehouse/scripts/sync-and-build.sh unleashed
+TimeoutStartSec=900
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

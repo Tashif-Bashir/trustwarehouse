@@ -1,9 +1,7 @@
 name: Sync Unleashed
 
 on:
-  schedule:
-    - cron: "0 * * * *"  # every hour
-  workflow_dispatch:
+  workflow_dispatch:  # manual trigger only — primary sync runs on OCI VM daily at 07:00 London
 
 jobs:
   sync:

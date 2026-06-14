@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: sync-and-build.sh <wildix|sharpspring|google_ads|meta|ga4>
+# Usage: sync-and-build.sh <wildix|sharpspring|google_ads|meta|ga4|unleashed>
 # Runs the ingestion module, dbt-builds the relevant downstream silver+gold,
 # then busts the dashboard cache. Uses flock to serialize the dbt step.
 set -euo pipefail
@@ -40,6 +40,9 @@ case "$SOURCE" in
     ;;
   ga4)
     SELECTOR=""  # no dbt step
+    ;;
+  unleashed)
+    SELECTOR="silver_unleashed_customers silver_unleashed_products silver_unleashed_sales_orders silver_unleashed_stock_on_hand gold_sales_orders"
     ;;
 esac
 

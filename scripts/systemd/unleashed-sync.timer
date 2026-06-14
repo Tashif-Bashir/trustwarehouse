@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Unleashed sync once daily at 07:00 London time
+
+[Timer]
+OnCalendar=*-*-* 07:00:00 Europe/London
+Persistent=true
+Unit=unleashed-sync.service
+
+[Install]
+WantedBy=timers.target

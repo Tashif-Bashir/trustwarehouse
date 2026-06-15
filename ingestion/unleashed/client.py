@@ -85,16 +85,21 @@ class UnleashedClient:
     def paginate(self, endpoint: str, extra_params: str = "") -> Generator[dict, None, None]:
         """Yield every item from a paginated Unleashed endpoint.
 
+        Unleashed paginates by PATH segment (e.g. /Customers/2), NOT a `pageNumber`
+        query param — sending pageNumber in the query string is silently ignored and
+        returns page 1 every time. The HMAC signature is computed over the query
+        string only (pageSize + any filters), so the page number in the path is unsigned.
+
         Each item is tagged with `_modified_ms` (epoch ms parsed from LastModifiedOn)
-        so dlt can use it as an incremental cursor.
+        for incremental watermark tracking.
         """
         page = 1
         while True:
-            query = f"pageSize={_PAGE_SIZE}&pageNumber={page}"
+            query = f"pageSize={_PAGE_SIZE}"
             if extra_params:
                 query += f"&{extra_params}"
 
-            data = self._get(endpoint, query)
+            data = self._get(f"{endpoint}/{page}", query)
             for item in data.get("Items", []):
                 item["_modified_ms"] = _parse_ms(item.get("LastModifiedOn"))
                 yield item

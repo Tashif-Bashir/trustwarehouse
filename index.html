@@ -2315,7 +2315,67 @@ function TelesalesView({ data }) {
 
       {!noAgents && <TelesalesWhiteboardTable agents={agents} totals={T} tgtPerAgent={tgtPerAgent} teamTarget={teamTarget}/>}
       {!noAgents && <TelesalesTopTable agents={agents} totals={T} tgtPerAgent={tgtPerAgent} teamTarget={teamTarget}/>}
+      {!noAgents && <TelesalesPeriodScorecards scorecards={data.period_scorecards}/>}
     </>
+  );
+}
+
+/* ── Rolling-period conversation scorecards — Yesterday / Last 7 days /
+   Last 30 days, per agent + team. Conversation = 2-min+ talk time; ratio =
+   conversations ÷ appointments booked (target ≤ 3). Always relative to today,
+   independent of the page's Month-to-date pinning, so it refreshes daily. */
+function TelesalesPeriodScorecards({ scorecards }) {
+  if (!scorecards || !scorecards.last30d) return null;
+  const cell = { textAlign: 'right' };
+  const ratioColor = (r) => r == null ? 'var(--muted)' : (r <= 3 ? '#1FA77F' : 'var(--rose)');
+  const blocks = [
+    { key: 'yesterday', label: 'Yesterday' },
+    { key: 'last7d',    label: 'Last 7 days' },
+    { key: 'last30d',   label: 'Last 30 days' },
+  ];
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+      {blocks.map(b => {
+        const sc = scorecards[b.key] || { agents: [], team: {} };
+        const team = sc.team || {};
+        return (
+          <div className="card" key={b.key}>
+            <div className="sec-head">
+              <div>
+                <div className="sec-title">{b.label}</div>
+                <div className="sec-sub">2-min+ conversations · Conv/Appt target ≤ 3</div>
+              </div>
+            </div>
+            <div className="tbl-scroll">
+              <table className="tbl">
+                <thead><tr>
+                  <th>Agent</th>
+                  <th style={cell}>Conv</th>
+                  <th style={cell}>Appts</th>
+                  <th style={cell}>Conv/Appt</th>
+                </tr></thead>
+                <tbody>
+                  {(sc.agents || []).map(a => (
+                    <tr key={a.name}>
+                      <td style={{ color: 'var(--ink)', fontWeight: 600 }}>{a.name}</td>
+                      <td style={cell}>{fmt(a.conv)}</td>
+                      <td style={cell}>{fmt(a.appts)}</td>
+                      <td style={{ ...cell, color: ratioColor(a.ratio), fontWeight: 600 }}>{a.ratio == null ? '—' : a.ratio}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ borderTop: '2px solid var(--line)', fontWeight: 700, background: 'var(--surface-2)' }}>
+                    <td style={{ color: 'var(--ink)' }}>TEAM</td>
+                    <td style={cell}>{fmt(team.conv)}</td>
+                    <td style={cell}>{fmt(team.appts)}</td>
+                    <td style={{ ...cell, color: ratioColor(team.ratio) }}>{team.ratio == null ? '—' : team.ratio}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

@@ -494,6 +494,35 @@ def _prev_period(d0s, d1s):
     prev_d0 = prev_d1 - timedelta(days=length - 1)
     return prev_d0.isoformat(), prev_d1.isoformat()
 
+def _ts_period_scorecards():
+    """Per-agent conversations / appointments / ratio for rolling periods
+    (Yesterday, Last 7 days, Last 30 days), always relative to CURRENT_DATE
+    (Europe/London) and INDEPENDENT of the page's Month-to-date pinning, so it
+    refreshes every day. Conversation = talk_time >= 120s (gold
+    qualified_conversations); ratio = conversations / appointments_booked
+    (telesales target <= 3 conversations per appointment)."""
+    agents_list = "','".join(TELESALES_AGENTS)
+    return _q(f"""
+        WITH base AS (
+          SELECT agent_name, date,
+                 qualified_conversations AS conv,
+                 appointments_booked      AS appt
+          FROM `{PROJECT}.gold.gold_agent_performance_daily`
+          WHERE agent_name IN ('{agents_list}')
+            AND date BETWEEN DATE_SUB(CURRENT_DATE('Europe/London'), INTERVAL 30 DAY)
+                         AND DATE_SUB(CURRENT_DATE('Europe/London'), INTERVAL 1 DAY)
+        )
+        SELECT agent_name,
+          SUM(IF(date  = DATE_SUB(CURRENT_DATE('Europe/London'), INTERVAL 1 DAY), conv, 0)) AS y_conv,
+          SUM(IF(date  = DATE_SUB(CURRENT_DATE('Europe/London'), INTERVAL 1 DAY), appt, 0)) AS y_appt,
+          SUM(IF(date >= DATE_SUB(CURRENT_DATE('Europe/London'), INTERVAL 7 DAY), conv, 0)) AS w_conv,
+          SUM(IF(date >= DATE_SUB(CURRENT_DATE('Europe/London'), INTERVAL 7 DAY), appt, 0)) AS w_appt,
+          SUM(conv) AS m_conv,
+          SUM(appt) AS m_appt
+        FROM base GROUP BY agent_name
+    """)
+
+
 def _load_all(d0s, d1s):
     p0s, p1s = _prev_period(d0s, d1s)
 
@@ -507,6 +536,7 @@ def _load_all(d0s, d1s):
         'ts_day':     (f'tsd:{d0s}:{d1s}',   lambda: _ts_daily(d0s, d1s)),
         'ts_pre':     (f'tspre:{d0s}:{d1s}', lambda: _telesales_pre_appt(d0s, d1s)),
         'ts_wb':      ('tswb',                 _telesales_whiteboard),
+        'ts_periods': (f'tsper:{date.today().isoformat()}', _ts_period_scorecards),
         'pipeline':   ('pipeline',            _pipeline),
         'reg_leads':   (f'regl:{d0s}:{d1s}',   lambda: _regional_leads(d0s, d1s)),
         'reg_spend':   (f'regs:{d0s}:{d1s}',   lambda: _regional_spend(d0s, d1s)),
@@ -537,6 +567,7 @@ def _load_all(d0s, d1s):
     df_ts_day    = results['ts_day']
     df_ts_pre    = results['ts_pre']
     df_ts_wb     = results['ts_wb']
+    df_ts_per    = results['ts_periods']
     df_stg, df_rec   = results['pipeline']
     df_reg_leads     = results['reg_leads']
     df_reg_spend     = results['reg_spend']
@@ -737,8 +768,29 @@ def _load_all(d0s, d1s):
     except Exception:
         pass
 
+    # Rolling-period scorecards (Yesterday / Last 7d / Last 30d) — per agent +
+    # team, refreshed daily, independent of the MTD pinning.
+    def _scard(cc, ac):
+        rows = []; tc = 0; ta = 0
+        for _, r in df_ts_per.iterrows():
+            c = int(r[cc]) if pd.notna(r[cc]) else 0
+            a = int(r[ac]) if pd.notna(r[ac]) else 0
+            tc += c; ta += a
+            rows.append({'name': str(r['agent_name']), 'conv': c, 'appts': a,
+                         'ratio': round(c / a, 2) if a > 0 else None})
+        rows.sort(key=lambda x: -x['conv'])
+        return {'agents': rows,
+                'team': {'conv': tc, 'appts': ta,
+                         'ratio': round(tc / ta, 2) if ta > 0 else None}}
+    period_scorecards = {} if df_ts_per.empty else {
+        'yesterday': _scard('y_conv', 'y_appt'),
+        'last7d':    _scard('w_conv', 'w_appt'),
+        'last30d':   _scard('m_conv', 'm_appt'),
+    }
+
     telesales = {
         'agents': agents,
+        'period_scorecards': period_scorecards,
         'daily': ts_daily_list,
         'is_monthly': is_monthly,
         'team_target_per_agent': monthly_target_per_agent,

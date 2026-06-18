@@ -387,7 +387,11 @@ def _telesales_whiteboard():
             FROM `{PROJECT}.silver.silver_sharpspring_leads`
             WHERE appointment_made_by IS NOT NULL
               AND (appointment_booked_at IS NOT NULL OR appointment_date IS NOT NULL)
-              AND LOWER(COALESCE(appointment_status, '')) NOT IN ('appointment cancelled','cancelled','cancel','appointment cancel')
+              -- Count only ACTIVE appointments by the team's field, Domestic Lead
+              -- Status: 'Appointment' + 'WhatsApp Appointment'. This excludes
+              -- 'Appointment Cancelled' (the real cancel flag) — appointment_status
+              -- never holds cancellations, so the old filter did nothing.
+              AND LOWER(COALESCE(domestic_appointment_status, '')) IN ('appointment', 'whatsapp appointment')
             GROUP BY agent_name
             HAVING agent_name IN ('{agents_list}')
         """)

@@ -51,6 +51,11 @@ cleaned as (
         nullif(trim(appointment_booked_5ae8cb01a35c6), '')                 as appointment_booked,
         nullif(trim(type_of_appointment_606ee2f254f4d), '')                as appointment_type,
         nullif(trim(appointment_status_637f8d6fa1096), '')                 as appointment_status,
+        -- SharpSpring "Domestic Lead Status" — the field the telesales team
+        -- counts appointments by: Appointment / WhatsApp Appointment = active,
+        -- "Appointment Cancelled" = excluded. (Distinct from appointment_status
+        -- above, which only holds sat/follow-up/sold outcomes, never cancelled.)
+        nullif(trim(status_633ae6f6ac6fe), '')                             as domestic_appointment_status,
         nullif(trim(date_time_appointment_booked_687fabb701341), '')       as appointment_booked_at,
 
         -- sales

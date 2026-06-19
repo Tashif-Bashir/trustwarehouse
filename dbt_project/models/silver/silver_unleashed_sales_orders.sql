@@ -9,12 +9,12 @@ cleaned as (
         order_number,
 
         -- dates
-        SAFE_CAST(order_date AS DATE)                                   as order_date,
-        SAFE_CAST(required_date AS DATE)                                as required_date,
-        SAFE_CAST(completed_date AS DATE)                               as completed_date,
-        SAFE_CAST(payment_due_date AS DATE)                             as payment_due_date,
-        SAFE_CAST(created_on AS TIMESTAMP)                              as created_at,
-        SAFE_CAST(last_modified_on AS TIMESTAMP)                        as last_modified_at,
+        {{ parse_unleashed_date('order_date') }}                        as order_date,
+        {{ parse_unleashed_date('required_date') }}                     as required_date,
+        {{ parse_unleashed_date('completed_date') }}                    as completed_date,
+        {{ parse_unleashed_date('payment_due_date') }}                  as payment_due_date,
+        {{ parse_unleashed_timestamp('created_on') }}                   as created_at,
+        {{ parse_unleashed_timestamp('last_modified_on') }}             as last_modified_at,
 
         -- status
         nullif(trim(order_status), '')                                  as order_status,

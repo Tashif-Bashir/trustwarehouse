@@ -29,7 +29,7 @@ cleaned as (
         days_since_last_sale,
 
         -- audit
-        SAFE_CAST(last_modified_on AS TIMESTAMP)                        as last_modified_at
+        {{ parse_unleashed_timestamp('last_modified_on') }}             as last_modified_at
 
     from source
 )

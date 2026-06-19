@@ -40,8 +40,8 @@ cleaned as (
         nullif(trim(sales_person__email), '')                           as sales_person_email,
 
         -- audit
-        SAFE_CAST(created_on AS TIMESTAMP)                              as created_at,
-        SAFE_CAST(last_modified_on AS TIMESTAMP)                        as last_modified_at,
+        {{ parse_unleashed_timestamp('created_on') }}                   as created_at,
+        {{ parse_unleashed_timestamp('last_modified_on') }}             as last_modified_at,
         nullif(trim(created_by), '')                                    as created_by,
         nullif(trim(last_modified_by), '')                              as last_modified_by
 

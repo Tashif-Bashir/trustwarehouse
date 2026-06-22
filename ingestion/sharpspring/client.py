@@ -146,3 +146,16 @@ class SharpSpringClient:
         """Fetch all deal/pipeline stages (e.g. Appointment Booked, Appointment Done)."""
         result = self._call("getDealStages", {"where": {}, "limit": 500, "offset": 0})
         return result.get("dealStage", []) if result else []
+
+    def get_contact_notes(self, lead_id: str) -> list[dict]:
+        """Fetch all notes for a single lead, paginated."""
+        all_notes: list[dict] = []
+        offset = 0
+        while True:
+            result = self._call("getContactNotes", {"id": str(lead_id), "limit": 500, "offset": offset})
+            page = result if isinstance(result, list) else []
+            all_notes.extend(page)
+            if len(page) < 500:
+                break
+            offset += 500
+        return all_notes

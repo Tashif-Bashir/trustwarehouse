@@ -1,6 +1,7 @@
 """dlt pipeline — loads SharpSpring data into BigQuery bronze dataset."""
 
 import os
+from datetime import datetime, timedelta
 
 import dlt
 from dotenv import load_dotenv
@@ -50,6 +51,45 @@ def deal_stages_resource():
     yield from _client().get_deal_stages()
 
 
+@dlt.resource(
+    name="sharpspring_notes",
+    write_disposition="merge",
+    primary_key="id",
+)
+def notes_resource():
+    """Notes for leads with appointments, fetched incrementally via dlt state.
+
+    On first run fetches notes for all appointment leads updated in the last 90 days.
+    On subsequent runs only processes leads updated since the previous run.
+    Set SHARPSPRING_NOTES_FULL_BACKFILL=1 to fetch all appointment leads regardless of age.
+    """
+    state = dlt.current.resource_state()
+    full_backfill = os.getenv("SHARPSPRING_NOTES_FULL_BACKFILL", "").strip() == "1"
+
+    if full_backfill:
+        lead_cutoff = "2000-01-01 00:00:00"
+    else:
+        lead_cutoff = state.get(
+            "last_lead_update_seen",
+            (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d %H:%M:%S"),
+        )
+
+    client = _client()
+    max_update_seen = lead_cutoff
+
+    for lead in client.get_all_leads():
+        if lead.get("appointment_booked_5ae8cb01a35c6") != "Yes":
+            continue
+        updated = lead.get("updateTimestamp", "")
+        if updated < lead_cutoff:
+            continue
+        if updated > max_update_seen:
+            max_update_seen = updated
+        yield from client.get_contact_notes(str(lead["id"]))
+
+    state["last_lead_update_seen"] = max_update_seen
+
+
 @dlt.source(name="sharpspring")
 def sharpspring_source():
     return [
@@ -58,6 +98,7 @@ def sharpspring_source():
         opportunities_resource(),
         fields_resource(),
         deal_stages_resource(),
+        notes_resource(),
     ]
 
 

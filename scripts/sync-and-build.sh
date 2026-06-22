@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Usage: sync-and-build.sh <wildix|sharpspring|google_ads|meta|ga4|unleashed>
+# Usage: sync-and-build.sh <wildix|sharpspring|sharpspring_notes|google_ads|meta|ga4|unleashed>
 # Runs the ingestion module, dbt-builds the relevant downstream silver+gold,
 # then busts the dashboard cache. Uses flock to serialize the dbt step.
+# Sources with no dbt selector (e.g. sharpspring_notes) just land bronze data.
 set -euo pipefail
 SOURCE="$1"
 cd "$HOME/trustwarehouse"

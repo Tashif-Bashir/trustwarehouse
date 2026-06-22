@@ -1,0 +1,10 @@
+[Unit]
+Description=Run SharpSpring notes sync once daily at 05:30 London time
+
+[Timer]
+OnCalendar=*-*-* 05:30:00 Europe/London
+Persistent=true
+Unit=sharpspring-notes-sync.service
+
+[Install]
+WantedBy=timers.target

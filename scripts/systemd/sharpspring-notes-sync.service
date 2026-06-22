@@ -1,0 +1,17 @@
+[Unit]
+Description=SharpSpring lead notes -> BigQuery bronze sync (once daily, slow)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/trustwarehouse
+EnvironmentFile=/home/ubuntu/trustwarehouse/.env
+ExecStart=/home/ubuntu/trustwarehouse/scripts/sync-and-build.sh sharpspring_notes
+TimeoutStartSec=3600
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

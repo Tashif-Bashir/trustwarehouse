@@ -9,6 +9,7 @@ sources:
       - name: sharpspring_campaigns
       - name: sharpspring_deal_stages
       - name: sharpspring_opportunities
+      - name: sharpspring_notes
       - name: wildix_calls
       - name: wildix_colleagues
       - name: google_ads_api_campaign_daily
@@ -18,6 +19,7 @@ sources:
       - name: bing_adscampaign_performance_report_daily
       - name: bing_adsaccount_performance_report_daily
       - name: unleashed_sales_orders
+      - name: unleashed_sales_orders__sales_order_lines
       - name: unleashed_customers
       - name: unleashed_products
       - name: unleashed_stock_on_hand

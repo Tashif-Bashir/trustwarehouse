@@ -66,6 +66,7 @@ cleaned as (
         nullif(trim(product_bought_5b75a2394323e), '')                     as product_bought,
         nullif(trim(sale_month_690b6f96accc2), '')                         as sale_month,
         nullif(trim(appt_amount_6911cfa5427cc), '')                        as appt_amount,
+        nullif(trim(appointment_amount___1___6a1ea45f715d6), '')           as appt_amount_water,
         nullif(trim(amount_688886934080a), '')                             as deal_amount,
         nullif(trim(finance_option_69f4ab5abb7ea), '')                     as finance_option,
         nullif(trim(in_out_hours_68c7d2ea31742), '')                       as in_out_hours,

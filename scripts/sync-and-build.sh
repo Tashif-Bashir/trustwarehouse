@@ -31,7 +31,7 @@ case "$SOURCE" in
     SELECTOR="silver_wildix_calls silver_wildix_colleagues gold_lead_activity gold_lead_calls gold_agent_performance_daily"
     ;;
   sharpspring)
-    SELECTOR="silver_sharpspring_leads silver_sharpspring_campaigns silver_sharpspring_opportunities silver_sharpspring_deal_stages silver_google_ads_spend silver_meta_spend silver_bing_spend gold_lead_activity gold_campaign_attribution gold_agent_performance_daily gold_pipeline_opportunities"
+    SELECTOR="sales_rep_mapping silver_sharpspring_leads silver_sharpspring_campaigns silver_sharpspring_opportunities silver_sharpspring_deal_stages silver_sharpspring_notes silver_google_ads_spend silver_meta_spend silver_bing_spend gold_lead_activity gold_campaign_attribution gold_agent_performance_daily gold_pipeline_opportunities gold_sales_reconciled"
     ;;
   google_ads)
     SELECTOR="silver_google_ads_spend gold_google_ads_spend_by_region gold_campaign_attribution gold_leads_by_region"
@@ -43,7 +43,7 @@ case "$SOURCE" in
     SELECTOR=""  # no dbt step
     ;;
   unleashed)
-    SELECTOR="silver_unleashed_customers silver_unleashed_products silver_unleashed_sales_orders silver_unleashed_stock_on_hand gold_sales_orders"
+    SELECTOR="silver_unleashed_customers silver_unleashed_products silver_unleashed_sales_orders silver_unleashed_stock_on_hand gold_sales_orders gold_sales_reconciled"
     ;;
 esac
 

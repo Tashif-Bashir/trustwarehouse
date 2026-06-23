@@ -2,6 +2,23 @@ with source as (
     select * from {{ source('bronze', 'unleashed_sales_orders') }}
 ),
 
+-- Water vs heating at the order level: an order is a water sale if any of its
+-- product lines belong to the Unleashed "Water Heating" group (Ocean Stream /
+-- Flow / Endless cylinders). Heating orders are "Neos" radiators. This is the
+-- authoritative water signal that drives the £1,334-per-water-sale deduction.
+order_water as (
+    select
+        b.guid                                                          as order_guid,
+        max(case when p.product_group__group_name = 'Water Heating'
+                 then true else false end)                             as is_water_order
+    from {{ source('bronze', 'unleashed_sales_orders') }} b
+    join {{ source('bronze', 'unleashed_sales_orders__sales_order_lines') }} l
+        on l._dlt_parent_id = b._dlt_id
+    left join {{ source('bronze', 'unleashed_products') }} p
+        on p.guid = l.product__guid
+    group by 1
+),
+
 cleaned as (
     select
         -- primary key
@@ -65,4 +82,8 @@ cleaned as (
     from source
 )
 
-select * from cleaned
+select
+    cleaned.*,
+    coalesce(ow.is_water_order, false)                                  as is_water_order
+from cleaned
+left join order_water ow on ow.order_guid = cleaned.order_guid

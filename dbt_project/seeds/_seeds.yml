@@ -13,3 +13,29 @@ seeds:
         description: "Platform name: Google, Meta, or Bing"
         tests:
           - not_null
+
+  - name: sales_rep_mapping
+    description: >
+      Single source of truth for sales-advisor identity. Maps each advisor's
+      SharpSpring owner_id and Unleashed sales_person_name to one canonical rep
+      name + team, for the sales scorecard. Confirmed against the notes
+      author→name lookup and modal Unleashed salesperson per owner.
+    columns:
+      - name: canonical_name
+        description: "Canonical rep name used everywhere downstream (matches the sheet's Rep column)"
+        tests:
+          - unique
+          - not_null
+      - name: team
+        description: "Team Fiona, Team Scott, or Standalone"
+        tests:
+          - not_null
+      - name: sharpspring_owner_id
+        description: "SharpSpring lead owner_id for this rep (the assigned advisor)"
+        tests:
+          - unique
+          - not_null
+      - name: unleashed_sales_person_name
+        description: "Unleashed sales_person full name for this rep (used only for Unleashed-only sales)"
+        tests:
+          - not_null

@@ -2,6 +2,36 @@ version: 2
 
 models:
 
+  - name: silver_sharpspring_notes
+    description: >
+      One row per SharpSpring lead note. Notes are the team's running commentary
+      (telesales script, callbacks, visit outcomes, deposits). The deposit/payment
+      notes are the canonical "a sale happened" event used by gold_sales_reconciled.
+    columns:
+      - name: note_id
+        description: SharpSpring note ID — primary key
+        tests:
+          - unique
+          - not_null
+      - name: lead_id
+        description: SharpSpring lead the note belongs to (who_id)
+        tests:
+          - not_null
+      - name: note_date
+        description: UK-local date the note was written
+      - name: is_payment_event
+        description: True when the note records an opening deposit/payment (£ + deposit action, not a final balance)
+        tests:
+          - not_null
+      - name: is_balance_payment
+        description: True when the note is a later balance/installment payment (not the sale-opening event)
+        tests:
+          - not_null
+      - name: amount_mentioned
+        description: First £ amount in the note text (the deposit value), null if none
+      - name: pct_mentioned
+        description: Deposit percentage stated in the note (e.g. 50), null if none
+
   - name: silver_sharpspring_leads
     description: >
       One row per lead from SharpSpring bronze. Typed, cleaned, and enriched with

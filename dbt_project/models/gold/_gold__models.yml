@@ -277,3 +277,52 @@ models:
           - not_null
       - name: mins_to_appt_after_call
         description: Minutes from this call to the appointment booking. NULL if no appointment or appointment preceded the call.
+
+  - name: gold_sales_reconciled
+    description: >
+      One row per genuine sale, normalised across CRM (SharpSpring), ERP (Unleashed)
+      and the deposit notes — the trustworthy sales ledger that reproduces the team's
+      manual sales sheet. A sale = the first deposit payment (from the notes), dated to
+      its deposit month; amount = the name-matched Unleashed ex-VAT sub_total when
+      available, else a provisional figure; attribution = the CRM lead owner → canonical
+      rep. Validated against the June 2026 sheet (Michael/Rhiannon excluded, Karen/Pat
+      included, Visa unattributed).
+    columns:
+      - name: customer_name
+        description: Customer name (from the CRM lead or, for Unleashed-only sales, the order)
+      - name: rep
+        description: Canonical sales rep from sales_rep_mapping. NULL when the sale is not attributable to a tracked advisor (see is_unattributed).
+      - name: team
+        description: Team Fiona, Team Scott, or Standalone — from the rep mapping
+      - name: sale_date
+        description: Date the sale was opened (first deposit date, or Unleashed order date for Unleashed-only sales)
+      - name: sale_month
+        description: First day of the month the sale counts in — use this for monthly scorecards
+        tests:
+          - not_null
+      - name: amount_ex_vat
+        description: Ex-VAT sale value (Unleashed sub_total when confirmed, else provisional)
+        tests:
+          - not_null
+      - name: is_water
+        description: True if a water-cylinder sale (Unleashed "Water Heating" product group)
+        tests:
+          - not_null
+      - name: amount_to_target
+        description: amount_ex_vat minus £1,334 for water sales — the revenue-to-target contribution
+        tests:
+          - not_null
+      - name: source
+        description: "Provenance: crm+unleashed, crm_only, or unleashed_only"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['crm+unleashed', 'crm_only', 'unleashed_only']
+      - name: is_provisional
+        description: True when the amount is not yet confirmed by an Unleashed order (CRM/deposit-derived)
+        tests:
+          - not_null
+      - name: is_unattributed
+        description: True when no canonical rep could be assigned (e.g. closer/non-advisor owner like Visa Nallathamby)
+        tests:
+          - not_null

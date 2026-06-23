@@ -326,3 +326,30 @@ models:
         description: True when no canonical rep could be assigned (e.g. closer/non-advisor owner like Visa Nallathamby)
         tests:
           - not_null
+
+  - name: gold_sales_exceptions
+    description: >
+      QA review list for the sales ledger (a view) — rows where the reconciliation
+      is uncertain or sources disagree, scoped to ~the last 4 months. Four types:
+      pending_no_unleashed (deposit logged, ERP not caught up), unattributed (sale
+      with no tracked advisor — usually a closer), attribution_conflict (CRM owner vs
+      Unleashed salesperson disagree), and sold_no_money (lead flagged sold with a
+      recent appointment but no deposit note and no Unleashed order — quote-as-sold
+      or deposit not yet logged). Surfaces edges for human review instead of guessing.
+    columns:
+      - name: exception_type
+        description: "pending_no_unleashed | unattributed | attribution_conflict | sold_no_money"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['pending_no_unleashed', 'unattributed', 'attribution_conflict', 'sold_no_money']
+      - name: customer_name
+        description: Customer the exception relates to
+      - name: rep
+        description: Canonical rep where known (null for unattributed sales)
+      - name: sale_month
+        description: Month the sale would count in (deposit month, or appointment month for sold_no_money)
+      - name: amount_ex_vat
+        description: Ex-VAT amount where known; null for sold_no_money (no money evidence yet)
+      - name: detail
+        description: Human-readable explanation of the exception

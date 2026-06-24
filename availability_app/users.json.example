@@ -1,0 +1,16 @@
+{
+  "users": [
+    {
+      "username": "admin",
+      "password_hash": "pbkdf2:sha256:REPLACE_WITH_REAL_HASH",
+      "role": "admin",
+      "name": "Admin"
+    },
+    {
+      "username": "telesales",
+      "password_hash": "pbkdf2:sha256:REPLACE_WITH_REAL_HASH",
+      "role": "user",
+      "name": "Telesales"
+    }
+  ]
+}

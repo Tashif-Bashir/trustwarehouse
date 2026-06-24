@@ -12,6 +12,9 @@ dbt_project/logs/
 .DS_Store
 node_modules/
 
+# Availability app — user store has hashed passwords, never commit
+availability_app/users.json
+
 # Local run scripts (contain tokens)
 _run_*.bat
 
@@ -30,6 +33,9 @@ Architecture.md
 # Ad-hoc query files and generated charts
 _adhoc_query.py
 *.png
+
+# Local analysis CSV exports (contain customer PII — never commit)
+analysis_exports/
 
 # Dashboards (run locally, not part of the public sync repo)
 *_dashboard.py

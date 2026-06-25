@@ -148,9 +148,39 @@
   .slot.free:hover{background:#bdf2df;transform:translateY(-1px)}
   .slot.booked{background:var(--line);color:var(--muted);cursor:default}
   .slot.off{background:var(--rose-soft);color:#c0392b;cursor:default}
-  .slot-copy{font-size:10px;display:block;margin-top:2px;color:#27ae60;font-weight:500}
-  .copied-toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:#171A2B;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:var(--shadow-lg);z-index:999;animation:toast .15s ease-out}
-  @keyframes toast{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+  .slot.sel-range{background:#DBEAFE;color:#1D4ED8;outline:1px solid #93C5FD;cursor:pointer}
+  .slot.sel-range:hover{background:#BFDBFE}
+  .slot.sel-start{background:var(--indigo);color:#fff;box-shadow:0 2px 8px rgba(91,108,255,.4);cursor:pointer}
+  .slot.sel-start:hover{background:var(--indigo);opacity:.9}
+  .slot.sel-end{background:var(--indigo);color:#fff;box-shadow:0 2px 8px rgba(91,108,255,.4);cursor:pointer}
+  .slot.sel-end:hover{background:var(--indigo);opacity:.9}
+  .slot-copy{font-size:10px;display:block;margin-top:2px;font-weight:500}
+  /* Booking form */
+  .booking-form{background:var(--bg);border-radius:12px;padding:16px 18px;margin-top:18px;border:1.5px solid var(--line)}
+  .booking-range-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .booking-range-label{font-size:13px;font-weight:600;color:var(--ink)}
+  .booking-range-badge{background:var(--indigo-soft);color:var(--indigo);font-size:12px;font-weight:700;padding:3px 10px;border-radius:6px}
+  .booking-hint{font-size:12px;color:var(--muted);font-weight:400}
+  .booking-fields{display:flex;flex-direction:column;gap:10px}
+  .booking-field label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:4px}
+  .booking-field input{width:100%;padding:8px 12px;border-radius:8px;border:1.5px solid var(--line);background:var(--panel);font-family:inherit;font-size:13px;color:var(--ink);outline:none;transition:border-color .15s}
+  .booking-field input:focus{border-color:var(--indigo)}
+  .booking-actions{display:flex;gap:8px;margin-top:14px;align-items:center;justify-content:flex-end}
+  .conflict-notice{background:var(--rose-soft);color:#c0392b;font-size:12px;font-weight:600;padding:8px 12px;border-radius:8px;margin-top:10px}
+  /* Confirm modal */
+  .confirm-overlay{position:fixed;inset:0;background:rgba(20,23,40,.45);display:flex;align-items:center;justify-content:center;z-index:200;animation:fadeIn .15s ease-out}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  .confirm-box{background:var(--panel);border-radius:18px;padding:28px;max-width:400px;width:90%;box-shadow:var(--shadow-lg)}
+  .confirm-title{font-size:16px;font-weight:700;letter-spacing:-.2px;margin-bottom:12px}
+  .confirm-detail{font-size:13.5px;color:var(--ink2);line-height:1.7;margin-bottom:22px}
+  .confirm-actions{display:flex;gap:10px;justify-content:flex-end}
+  .dry-run-badge{display:inline-block;background:var(--amber-soft);color:#8a6200;font-size:10px;font-weight:700;padding:1px 7px;border-radius:5px;margin-left:6px;vertical-align:middle;text-transform:uppercase;letter-spacing:.4px}
+  /* Booking result */
+  .booking-result{border-radius:10px;padding:14px 16px;margin-top:16px}
+  .booking-result.ok{background:var(--mint-soft);color:#1a7a5a}
+  .booking-result.err{background:var(--rose-soft);color:#c0392b}
+  .booking-result .result-title{font-size:13px;font-weight:700;margin-bottom:4px}
+  .booking-result .result-detail{font-size:12px;opacity:.85}
 
   /* Loading / error */
   .loader{display:flex;flex-direction:column;align-items:center;justify-content:center;height:160px;gap:12px;color:var(--muted)}
@@ -289,8 +319,75 @@ function DayCell({ slots, onClick, selected, dayIso, compact }) {
   );
 }
 
-/* ── Slot drawer ── */
-function SlotDrawer({ rep, dayIso, slots, onClose, onCopy }) {
+/* ── Slot drawer with booking ── */
+function SlotDrawer({ rep, dayIso, slots, onClose }) {
+  const [selStart, setSelStart] = useState(null);
+  const [selEnd,   setSelEnd]   = useState(null);
+  const [custName,  setCustName]  = useState('');
+  const [custEmail, setCustEmail] = useState('');
+  const [notes,     setNotes]     = useState('');
+  const [confirming, setConfirming] = useState(false);
+  const [booking,    setBooking]    = useState(false);
+  const [result,     setResult]     = useState(null);
+
+  function addMins(t, m) {
+    const [h, min] = t.split(':').map(Number);
+    const tot = h * 60 + min + m;
+    return `${String(Math.floor(tot / 60)).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
+  }
+
+  const bookingEnd = selEnd ? addMins(selEnd, 30) : null;
+
+  function inRange(time) {
+    if (!selStart) return false;
+    return time >= selStart && time <= (selEnd || selStart);
+  }
+
+  const rangeSlots  = slots.filter(s => inRange(s.time));
+  const hasConflict = rangeSlots.some(s => s.status !== 'free');
+  const canBook     = !!(selStart && selEnd && custName.trim() && !hasConflict && !result);
+
+  function handleSlotClick(slot) {
+    if (result || slot.status !== 'free') return;
+    if (!selStart) {
+      setSelStart(slot.time); setSelEnd(null);
+    } else if (!selEnd) {
+      if (slot.time === selStart) { setSelStart(null); }          // deselect
+      else if (slot.time > selStart) { setSelEnd(slot.time); }    // set end
+      else { setSelStart(slot.time); setSelEnd(null); }            // reset to earlier
+    } else {
+      setSelStart(slot.time); setSelEnd(null);                     // start new range
+    }
+  }
+
+  function clearSelection() {
+    setSelStart(null); setSelEnd(null); setCustName(''); setCustEmail(''); setNotes('');
+  }
+
+  async function handleBook() {
+    setBooking(true);
+    try {
+      const resp = await fetch('/api/book', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rep: rep.name, date: dayIso,
+          start: selStart, end: bookingEnd,
+          customer_name: custName.trim(),
+          customer_email: custEmail.trim(),
+          notes: notes.trim(),
+        }),
+      });
+      const data = await resp.json();
+      setResult(data);
+    } catch (e) {
+      setResult({ ok: false, message: String(e) });
+    } finally {
+      setBooking(false);
+      setConfirming(false);
+    }
+  }
+
   return (
     <div className="drawer">
       <div className="drawer-header">
@@ -300,18 +397,123 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onCopy }) {
         </div>
         <button className="btn btn-ghost btn-sm" onClick={onClose}>{Ic.close}</button>
       </div>
+
+      {/* Instruction hint */}
+      {!result && (
+        <div style={{fontSize:12,color: selStart ? 'var(--indigo)' : 'var(--muted)',fontWeight: selStart ? 600 : 400,marginBottom:10}}>
+          {!selStart && 'Click a free slot to start selecting a time range.'}
+          {selStart && !selEnd && `${selStart} selected — click the last slot of the appointment.`}
+          {selStart && selEnd && `${selStart} – ${bookingEnd} selected. Fill in the form below.`}
+        </div>
+      )}
+
+      {/* Slot grid */}
       <div className="slot-grid">
-        {slots.map(slot => (
-          <div key={slot.time} className={`slot ${slot.status}`}
-            onClick={() => slot.status === 'free' && onCopy(`${rep.name} · ${fmtDate(dayIso)} · ${slot.time}`)}>
-            {slot.time}
-            {slot.status === 'booked' && slot.subject && (
-              <span className="slot-copy" style={{color:'var(--muted)'}} title={slot.subject}>booked</span>
-            )}
-            {slot.status === 'free' && <span className="slot-copy">tap to copy</span>}
-          </div>
-        ))}
+        {slots.map(slot => {
+          const isStart  = slot.time === selStart;
+          const isEnd    = !!(selEnd && slot.time === selEnd);
+          const inSel    = inRange(slot.time);
+          let cls = `slot ${slot.status}`;
+          if (slot.status === 'free') {
+            if (isStart) cls = 'slot sel-start';
+            else if (isEnd) cls = 'slot sel-end';
+            else if (inSel) cls = 'slot sel-range';
+          }
+          const labelColor = (isStart || isEnd) ? 'rgba(255,255,255,0.8)' : undefined;
+          const label = slot.status !== 'free'
+            ? (slot.status === 'booked' ? 'booked' : 'off')
+            : isStart && !selEnd ? '× cancel'
+            : isStart ? 'start'
+            : isEnd ? 'end'
+            : inSel ? '✓'
+            : !selStart ? 'tap'
+            : '';
+          return (
+            <div key={slot.time} className={cls} onClick={() => handleSlotClick(slot)}
+              title={slot.status === 'booked' && slot.subject ? slot.subject : undefined}>
+              <span style={{display:'block',fontWeight:700}}>{slot.time}</span>
+              <span className="slot-copy" style={labelColor ? {color:labelColor} : {}}>{label}</span>
+            </div>
+          );
+        })}
       </div>
+
+      {/* Booking form */}
+      {selStart && !result && (
+        <div className="booking-form">
+          <div className="booking-range-row">
+            <span className="booking-range-label">Appointment:</span>
+            <span className="booking-range-badge">{fmtDate(dayIso)} · {selStart} – {selEnd ? bookingEnd : '?'}</span>
+            {!selEnd && <span className="booking-hint">select end time above</span>}
+          </div>
+          <div className="booking-fields">
+            <div className="booking-field">
+              <label>Customer name *</label>
+              <input type="text" placeholder="e.g. John Smith" value={custName} onChange={e => setCustName(e.target.value)} />
+            </div>
+            <div className="booking-field">
+              <label>Customer email (optional)</label>
+              <input type="email" placeholder="customer@email.com" value={custEmail} onChange={e => setCustEmail(e.target.value)} />
+            </div>
+            <div className="booking-field">
+              <label>Postcode / notes</label>
+              <input type="text" placeholder="e.g. LS1 2AB" value={notes} onChange={e => setNotes(e.target.value)} />
+            </div>
+          </div>
+          {hasConflict && (
+            <div className="conflict-notice">⚠ Range includes a booked or off slot — adjust end time.</div>
+          )}
+          <div className="booking-actions">
+            <button className="btn btn-ghost btn-sm" onClick={clearSelection}>Clear</button>
+            <button className="btn btn-primary" disabled={!canBook} onClick={() => setConfirming(true)}>
+              {Ic.calendar} Book Appointment
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Result card */}
+      {result && (
+        <div className={`booking-result ${result.ok ? 'ok' : 'err'}`}>
+          <div className="result-title">
+            {result.ok ? '✓ Submitted' : '✗ Error'}
+            {result.ok && result.dry_run && <span className="dry-run-badge">DRY RUN — not saved to calendar</span>}
+          </div>
+          <div className="result-detail">{result.message}</div>
+          {result.ok && (
+            <button className="btn btn-ghost btn-sm" style={{marginTop:10}} onClick={() => { setResult(null); clearSelection(); }}>
+              Book another
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Confirm modal */}
+      {confirming && (
+        <div className="confirm-overlay" onClick={e => e.target === e.currentTarget && setConfirming(false)}>
+          <div className="confirm-box">
+            <div className="confirm-title">Confirm booking</div>
+            <div className="confirm-detail">
+              <strong>{rep.name}</strong><br/>
+              {fmtDate(dayIso)} · <strong>{selStart} – {bookingEnd}</strong>
+              <br/><br/>
+              Customer: <strong>{custName}</strong>
+              {custEmail && <><br/>Email: {custEmail}</>}
+              {notes && <><br/>Ref: {notes}</>}
+              <br/><br/>
+              <span style={{fontSize:11,color:'var(--amber)',fontWeight:700}}>
+                ⚠ DRY RUN — no calendar invite will be sent yet
+              </span>
+            </div>
+            <div className="confirm-actions">
+              <button className="btn btn-ghost" onClick={() => setConfirming(false)} disabled={booking}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleBook} disabled={booking}>
+                {booking ? 'Submitting…' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -329,7 +531,6 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null); // {repName, day}
-  const [copied, setCopied] = useState(null);
   const [lastRefresh, setLastRefresh] = useState(null);
   const [tick, setTick] = useState(0);
   useEffect(() => { const id = setInterval(() => setTick(t => t+1), 30000); return () => clearInterval(id); }, []);
@@ -379,12 +580,6 @@ function App() {
         .then(d => { setGrid(d); setLastRefresh(new Date()); })
         .finally(() => setLoading(false));
     });
-  }
-
-  function handleCopy(text) {
-    navigator.clipboard.writeText(text).catch(() => {});
-    setCopied(text);
-    setTimeout(() => setCopied(null), 2200);
   }
 
   const dates = grid?.dates || [];
@@ -533,7 +728,6 @@ function App() {
                 dayIso={selected.day}
                 slots={selectedSlots}
                 onClose={() => setSelected(null)}
-                onCopy={handleCopy}
               />
             )}
 
@@ -636,7 +830,6 @@ function App() {
           </>
         )}
 
-        {copied && <div className="copied-toast">Copied: {copied}</div>}
       </main>
     </div>
   );

@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from calendar_analysis.availability import (
     fetch_events, build_grid, region_from_postcode,
-    region_from_city, all_regions, reps_for_region,
+    region_from_city, all_regions, reps_for_region, REP_EMAIL,
 )
 
 app = Flask(__name__)
@@ -204,6 +204,63 @@ def api_refresh():
     with _avail_lock:
         _avail_cache.clear()
     return jsonify({"ok": True})
+
+
+@app.route("/api/book", methods=["POST"])
+@login_required
+def api_book():
+    """Dry-run booking endpoint — builds the Graph payload but does NOT write to calendar."""
+    data = request.get_json(silent=True) or {}
+    rep_name     = (data.get("rep") or "").strip()
+    date_iso     = (data.get("date") or "").strip()
+    start_time   = (data.get("start") or "").strip()
+    end_time     = (data.get("end") or "").strip()
+    customer     = (data.get("customer_name") or "").strip()
+    cust_email   = (data.get("customer_email") or "").strip()
+    notes        = (data.get("notes") or "").strip()
+
+    if not all([rep_name, date_iso, start_time, end_time, customer]):
+        return jsonify({"ok": False, "message": "Missing required fields (rep, date, start, end, customer_name)"}), 400
+
+    rep_email = REP_EMAIL.get(rep_name)
+    if not rep_email:
+        return jsonify({"ok": False, "message": f"No email found for rep: {rep_name}"}), 400
+
+    # Build the event subject matching the existing naming pattern: "POSTCODE - Customer Name"
+    subject = f"{notes} - {customer}" if notes else customer
+
+    # Build full MS Graph event payload (for inspection — NOT sent to Graph yet)
+    would_create = {
+        "subject": subject,
+        "start": {"dateTime": f"{date_iso}T{start_time}:00", "timeZone": "Europe/London"},
+        "end":   {"dateTime": f"{date_iso}T{end_time}:00",   "timeZone": "Europe/London"},
+        "attendees": [
+            {"emailAddress": {"address": rep_email, "name": rep_name}, "type": "required"},
+        ],
+        "body": {"contentType": "Text", "content": notes},
+        "showAs": "busy",
+        "isReminderOn": True,
+        "reminderMinutesBeforeStart": 60,
+    }
+    if cust_email:
+        would_create["attendees"].append({
+            "emailAddress": {"address": cust_email, "name": customer},
+            "type": "required",
+        })
+
+    import json as _json
+    app.logger.info("[DRY RUN] Would create Graph event:\n%s", _json.dumps(would_create, indent=2))
+
+    message = (
+        f"DRY RUN — would book {rep_name} on {date_iso} "
+        f"{start_time}–{end_time} for {customer}"
+    )
+    return jsonify({
+        "ok": True,
+        "dry_run": True,
+        "message": message,
+        "would_create": would_create,
+    })
 
 
 # ---------------------------------------------------------------------------

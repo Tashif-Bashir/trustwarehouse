@@ -43,8 +43,12 @@ FALLBACK_REPS: list[str] = ["Scott Conor", "Josh Barron"]
 # Freelance / Ambivo reps — shown in their region but badged separately
 FREELANCER_REPS: set[str] = {"Chris Cash", "Keith Wiggins", "Chris Southworth"}
 
-# Reps who work Saturdays
-SAT_REPS: set[str] = {"Kris Noorouzi"}
+# Weekend working — rep → set of weekday numbers they work (5=Sat, 6=Sun)
+# Add any rep here to enable weekend slots for them
+WEEKEND_WORK: dict[str, set[int]] = {
+    "Kris Noorouzi":    {5},        # Saturday only
+    "Chris Southworth": {5, 6},     # Saturday and Sunday
+}
 
 # email local-part (before @) → canonical name  (Trust staff only)
 EMAIL_TO_REP: dict[str, str] = {
@@ -376,11 +380,9 @@ def _working_days(from_date: date, days: int) -> list[date]:
 
 def _slots_for_day(d: date, rep: str) -> list[str]:
     """Return list of 30-min slot start times for a rep on a given day."""
-    if d.weekday() == 5:  # Saturday
-        if rep not in SAT_REPS:
+    if d.weekday() in (5, 6):  # weekend
+        if d.weekday() not in WEEKEND_WORK.get(rep, set()):
             return []
-    elif d.weekday() == 6:  # Sunday
-        return []
     slots = []
     t = datetime(d.year, d.month, d.day, 9, 0)
     end = datetime(d.year, d.month, d.day, 17, 0)
@@ -427,12 +429,12 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10, st
     """
     actual_today = date.today()
     from_date = start_date if start_date else actual_today
-    # build date list from from_date, including Saturdays (for Kris)
+    # build date list from from_date — include all 7 days so weekend-working
+    # reps (Kris=Sat, Chris Southworth=Sat+Sun) get their slots shown
     all_dates: list[date] = []
     d = from_date
     while len([x for x in all_dates if x.weekday() < 5]) < days:
-        if d.weekday() < 6:  # Mon–Sat
-            all_dates.append(d)
+        all_dates.append(d)
         d += timedelta(days=1)
 
     # determine which reps to include

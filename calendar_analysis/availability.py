@@ -297,17 +297,21 @@ def _load_env() -> dict[str, str]:
     return env
 
 
-def fetch_events(days: int = 14) -> list[dict]:
-    """Pull all events from the shared calendar for the next `days` days."""
+def fetch_events(days: int = 14, start_date: date | None = None) -> list[dict]:
+    """Pull all events from the shared calendar for `days` days starting from `start_date` (default today)."""
     token = _get_token()
     headers = {
         "Authorization": f"Bearer {token}",
         "Prefer": 'outlook.timezone="Europe/London"',
     }
-    from datetime import timezone
-    now = datetime.now(timezone.utc)
-    start = now.strftime("%Y-%m-%dT00:00:00Z")
-    end = (now + timedelta(days=days)).strftime("%Y-%m-%dT23:59:59Z")
+    if start_date:
+        start = f"{start_date.isoformat()}T00:00:00Z"
+        end = f"{(start_date + timedelta(days=days)).isoformat()}T23:59:59Z"
+    else:
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
+        start = now.strftime("%Y-%m-%dT00:00:00Z")
+        end = (now + timedelta(days=days)).strftime("%Y-%m-%dT23:59:59Z")
     url = (
         f"https://graph.microsoft.com/v1.0/users/{_MAILBOX}/calendarView"
         f"?startDateTime={start}&endDateTime={end}"
@@ -365,7 +369,7 @@ def _parse_dt(event: dict, key: str) -> datetime | None:
 # Main grid builder
 # ---------------------------------------------------------------------------
 
-def build_grid(events: list[dict], region: str | None = None, days: int = 10) -> dict:
+def build_grid(events: list[dict], region: str | None = None, days: int = 10, start_date: date | None = None) -> dict:
     """
     Build the availability grid.
 
@@ -389,11 +393,11 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10) ->
           ]
         }
     """
-    today = date.today()
-    working_dates = _working_days(today, days)
-    # also include Saturday if Kris is in scope
+    actual_today = date.today()
+    from_date = start_date if start_date else actual_today
+    # build date list from from_date, including Saturdays (for Kris)
     all_dates: list[date] = []
-    d = today
+    d = from_date
     while len([x for x in all_dates if x.weekday() < 5]) < days:
         if d.weekday() < 6:  # Mon–Sat
             all_dates.append(d)
@@ -417,7 +421,6 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10) ->
         day = start_dt.date()
         rep_events[rep].setdefault(day, []).append(event)
 
-    today_str = today.isoformat()
     result_reps = []
 
     all_output_reps = regional_reps + FALLBACK_REPS
@@ -425,7 +428,7 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10) ->
         rep_regions = REP_REGION.get(rep, ["Any"])
         is_fallback = rep in FALLBACK_REPS
         today_count = len([
-            e for e in rep_events.get(rep, {}).get(today, [])
+            e for e in rep_events.get(rep, {}).get(actual_today, [])
             if not _is_time_off(e)
         ])
 
@@ -525,6 +528,9 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10) ->
 def region_from_postcode(postcode: str) -> str | None:
     """Return region for a UK postcode prefix. Accepts full or partial postcode."""
     clean = postcode.strip().upper().replace(" ", "")
+    # pure letters = city name, not a postcode
+    if not any(c.isdigit() for c in clean):
+        return None
     # try longest prefix first (2 chars), then 1 char
     for length in (2, 1):
         prefix = "".join(c for c in clean[:length] if c.isalpha())

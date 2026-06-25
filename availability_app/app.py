@@ -10,7 +10,7 @@ import secrets
 import sys
 import time
 import threading
-from datetime import timedelta
+from datetime import date, timedelta
 from functools import wraps
 from pathlib import Path
 
@@ -96,14 +96,14 @@ _avail_lock = threading.Lock()
 _AVAIL_TTL = 300  # 5 min
 
 
-def _get_grid(region: str | None, days: int) -> dict:
-    key = f"{region}:{days}"
+def _get_grid(region: str | None, days: int, start_date=None) -> dict:
+    key = f"{region}:{days}:{start_date or 'today'}"
     with _avail_lock:
         cached = _avail_cache.get(key)
         if cached and time.time() - cached["ts"] < _AVAIL_TTL:
             return cached["data"]
-    events = fetch_events(days=days + 2)
-    grid = build_grid(events, region=region, days=days)
+    events = fetch_events(days=days + 2, start_date=start_date)
+    grid = build_grid(events, region=region, days=days, start_date=start_date)
     with _avail_lock:
         _avail_cache[key] = {"data": grid, "ts": time.time()}
     return grid
@@ -166,14 +166,22 @@ def api_regions():
 @login_required
 def api_availability():
     region = request.args.get("region") or None
-    days = min(int(request.args.get("days", 10)), 21)
+    days = min(int(request.args.get("days", 10)), 40)
     location = request.args.get("location") or None
+    start_date_str = request.args.get("start_date") or None
 
     if location and not region:
         region = region_from_postcode(location) or region_from_city(location)
 
+    start_date = None
+    if start_date_str:
+        try:
+            start_date = date.fromisoformat(start_date_str)
+        except ValueError:
+            pass
+
     try:
-        grid = _get_grid(region, days)
+        grid = _get_grid(region, days, start_date=start_date)
         return jsonify(grid)
     except Exception as ex:
         return jsonify({"error": str(ex)}), 500

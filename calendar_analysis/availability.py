@@ -35,6 +35,7 @@ REP_REGION: dict[str, list[str]] = {
     "Chris Southworth":  ["South East"],
     "Chris Cash":        ["Yorkshire & Humber"],
     "Keith Wiggins":     ["Yorkshire & Humber"],
+    "Samuel Hamilton":   ["Scotland"],
 }
 
 # Fallback reps — shown only when no regional rep is free
@@ -63,8 +64,8 @@ EMAIL_TO_REP: dict[str, str] = {
     "paul":        "Paul Slade",
     "scott":       "Scott Conor",
     "josh":        "Josh Barron",
+    "samuel":      "Samuel Hamilton",
     # extras observed in diagnosis
-    "samuel":      "Samantha Doyle",
     "merv":        "Merv",
     "victoria":    "Victoria",
     "gia":         "Gia",
@@ -84,6 +85,7 @@ REP_EMAIL: dict[str, str] = {
     "Paul Slade":       "paul@trustelectricheating.co.uk",
     "Scott Conor":      "scott@trustelectricheating.co.uk",
     "Josh Barron":      "josh@trustelectricheating.co.uk",
+    "Samuel Hamilton":  "samuel@trustelectricheating.co.uk",
     # Freelancers — confirmed personal/business emails
     "Chris Cash":       "chris.cash@ambivo.co.uk",
     "Keith Wiggins":    "keith.wiggins1@ntlworld.com",
@@ -101,7 +103,6 @@ CATEGORY_TO_REP: dict[str, str] = {
     "sam":             "Sam Chapman",
     "sam chapman":     "Sam Chapman",
     "sammy":           "Samantha Doyle",
-    "samuel":          "Samantha Doyle",
     "samantha doyle":  "Samantha Doyle",
     "niall devenish":  "Niall Devanish",
     "niall devanish":  "Niall Devanish",
@@ -117,6 +118,8 @@ CATEGORY_TO_REP: dict[str, str] = {
     "scott":           "Scott Conor",
     "josh":            "Josh Barron",
     "josh barron":     "Josh Barron",
+    "samuel":          "Samuel Hamilton",
+    "samuel hamilton": "Samuel Hamilton",
 }
 
 GENERIC_EMAILS: set[str] = {
@@ -176,6 +179,13 @@ POSTCODE_TO_REGION: dict[str, str] = {
     # Wales
     "CF": "Wales", "SA": "Wales", "NP": "Wales",
     "LL": "Wales", "SY": "Wales", "LD": "Wales",
+    # Scotland
+    "AB": "Scotland", "DD": "Scotland", "DG": "Scotland",
+    "EH": "Scotland", "FK": "Scotland", "G":  "Scotland",
+    "HS": "Scotland", "IV": "Scotland", "KA": "Scotland",
+    "KW": "Scotland", "KY": "Scotland", "ML": "Scotland",
+    "PA": "Scotland", "PH": "Scotland", "TD": "Scotland",
+    "ZE": "Scotland",
 }
 
 # ---------------------------------------------------------------------------
@@ -241,6 +251,14 @@ CITY_TO_REGION: dict[str, str] = {
     "wrexham": "Wales", "bangor": "Wales", "aberystwyth": "Wales",
     "caerphilly": "Wales", "merthyr tydfil": "Wales",
     "bridgend": "Wales", "neath": "Wales",
+    # Scotland
+    "edinburgh": "Scotland", "glasgow": "Scotland", "aberdeen": "Scotland",
+    "dundee": "Scotland", "inverness": "Scotland", "stirling": "Scotland",
+    "perth": "Scotland", "paisley": "Scotland", "east kilbride": "Scotland",
+    "livingston": "Scotland", "hamilton": "Scotland", "dunfermline": "Scotland",
+    "ayr": "Scotland", "kilmarnock": "Scotland", "cumbernauld": "Scotland",
+    "motherwell": "Scotland", "falkirk": "Scotland", "dumfries": "Scotland",
+    "greenock": "Scotland", "fort william": "Scotland",
 }
 
 # ---------------------------------------------------------------------------

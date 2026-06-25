@@ -163,8 +163,9 @@
   .booking-hint{font-size:12px;color:var(--muted);font-weight:400}
   .booking-fields{display:flex;flex-direction:column;gap:10px}
   .booking-field label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:4px}
-  .booking-field input{width:100%;padding:8px 12px;border-radius:8px;border:1.5px solid var(--line);background:var(--panel);font-family:inherit;font-size:13px;color:var(--ink);outline:none;transition:border-color .15s}
-  .booking-field input:focus{border-color:var(--indigo)}
+  .booking-field input,.booking-field textarea{width:100%;padding:8px 12px;border-radius:8px;border:1.5px solid var(--line);background:var(--panel);font-family:inherit;font-size:13px;color:var(--ink);outline:none;transition:border-color .15s}
+  .booking-field input:focus,.booking-field textarea:focus{border-color:var(--indigo)}
+  .booking-field textarea{resize:vertical;min-height:72px}
   .booking-actions{display:flex;gap:8px;margin-top:14px;align-items:center;justify-content:flex-end}
   .conflict-notice{background:var(--rose-soft);color:#c0392b;font-size:12px;font-weight:600;padding:8px 12px;border-radius:8px;margin-top:10px}
   /* Confirm modal */
@@ -181,6 +182,13 @@
   .booking-result.err{background:var(--rose-soft);color:#c0392b}
   .booking-result .result-title{font-size:13px;font-weight:700;margin-bottom:4px}
   .booking-result .result-detail{font-size:12px;opacity:.85}
+  /* Teams toggle */
+  .toggle-row{display:flex;align-items:center;gap:10px;padding:6px 0;cursor:pointer;user-select:none}
+  .toggle-pill{width:36px;height:20px;border-radius:20px;background:var(--line2);position:relative;transition:background .2s;flex-shrink:0}
+  .toggle-pill.on{background:var(--indigo)}
+  .toggle-knob{position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:transform .2s}
+  .toggle-pill.on .toggle-knob{transform:translateX(16px)}
+  .toggle-label{font-size:13px;font-weight:500;color:var(--ink2)}
 
   /* Loading / error */
   .loader{display:flex;flex-direction:column;align-items:center;justify-content:center;height:160px;gap:12px;color:var(--muted)}
@@ -323,9 +331,12 @@ function DayCell({ slots, onClick, selected, dayIso, compact }) {
 function SlotDrawer({ rep, dayIso, slots, onClose }) {
   const [selStart, setSelStart] = useState(null);
   const [selEnd,   setSelEnd]   = useState(null);
-  const [custName,  setCustName]  = useState('');
-  const [custEmail, setCustEmail] = useState('');
-  const [notes,     setNotes]     = useState('');
+  const [custName,     setCustName]     = useState('');
+  const [custEmail,    setCustEmail]    = useState('');
+  const [postcode,     setPostcode]     = useState('');
+  const [ccEmail,      setCcEmail]      = useState('');
+  const [notes,        setNotes]        = useState('');
+  const [teamsEnabled, setTeamsEnabled] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [booking,    setBooking]    = useState(false);
   const [result,     setResult]     = useState(null);
@@ -345,7 +356,7 @@ function SlotDrawer({ rep, dayIso, slots, onClose }) {
 
   const rangeSlots  = slots.filter(s => inRange(s.time));
   const hasConflict = rangeSlots.some(s => s.status !== 'free');
-  const canBook     = !!(selStart && selEnd && custName.trim() && !hasConflict && !result);
+  const canBook     = !!(selStart && selEnd && custName.trim() && postcode.trim() && !hasConflict && !result);
 
   function handleSlotClick(slot) {
     if (result || slot.status !== 'free') return;
@@ -361,7 +372,8 @@ function SlotDrawer({ rep, dayIso, slots, onClose }) {
   }
 
   function clearSelection() {
-    setSelStart(null); setSelEnd(null); setCustName(''); setCustEmail(''); setNotes('');
+    setSelStart(null); setSelEnd(null);
+    setCustName(''); setCustEmail(''); setPostcode(''); setCcEmail(''); setNotes(''); setTeamsEnabled(false);
   }
 
   async function handleBook() {
@@ -375,7 +387,10 @@ function SlotDrawer({ rep, dayIso, slots, onClose }) {
           start: selStart, end: bookingEnd,
           customer_name: custName.trim(),
           customer_email: custEmail.trim(),
+          postcode: postcode.trim().toUpperCase(),
+          cc_email: ccEmail.trim(),
           notes: notes.trim(),
+          teams_meeting: teamsEnabled,
         }),
       });
       const data = await resp.json();
@@ -444,20 +459,44 @@ function SlotDrawer({ rep, dayIso, slots, onClose }) {
           <div className="booking-range-row">
             <span className="booking-range-label">Appointment:</span>
             <span className="booking-range-badge">{fmtDate(dayIso)} · {selStart} – {selEnd ? bookingEnd : '?'}</span>
+            {postcode && <span className="booking-range-badge" style={{background:'var(--mint-soft)',color:'#1a7a5a'}}>{postcode}</span>}
             {!selEnd && <span className="booking-hint">select end time above</span>}
           </div>
           <div className="booking-fields">
-            <div className="booking-field">
-              <label>Customer name *</label>
-              <input type="text" placeholder="e.g. John Smith" value={custName} onChange={e => setCustName(e.target.value)} />
+            {/* Row 1: name + postcode side by side */}
+            <div style={{display:'flex',gap:10}}>
+              <div className="booking-field" style={{flex:2}}>
+                <label>Customer name *</label>
+                <input type="text" placeholder="e.g. Susan Barber" value={custName} onChange={e => setCustName(e.target.value)} />
+              </div>
+              <div className="booking-field" style={{flex:1}}>
+                <label>Postcode *</label>
+                <input type="text" placeholder="YO16 6XY" value={postcode}
+                  onChange={e => setPostcode(e.target.value.toUpperCase())}
+                  style={{textTransform:'uppercase',letterSpacing:'.5px'}} />
+              </div>
             </div>
+            {/* Customer email */}
             <div className="booking-field">
               <label>Customer email (optional)</label>
               <input type="email" placeholder="customer@email.com" value={custEmail} onChange={e => setCustEmail(e.target.value)} />
             </div>
+            {/* CC — second rep or manager */}
             <div className="booking-field">
-              <label>Postcode / notes</label>
-              <input type="text" placeholder="e.g. LS1 2AB" value={notes} onChange={e => setNotes(e.target.value)} />
+              <label>CC — second rep / manager (optional)</label>
+              <input type="email" placeholder="e.g. chrisk@trustelectricheating.co.uk" value={ccEmail} onChange={e => setCcEmail(e.target.value)} />
+            </div>
+            {/* Notes → body */}
+            <div className="booking-field">
+              <label>Notes (goes in body)</label>
+              <textarea
+                placeholder="Customer details, property info, heating notes…"
+                value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
+            </div>
+            {/* Teams toggle */}
+            <div className="toggle-row" onClick={() => setTeamsEnabled(t => !t)}>
+              <div className={`toggle-pill${teamsEnabled ? ' on' : ''}`}><div className="toggle-knob"/></div>
+              <span className="toggle-label">Add Teams meeting link</span>
             </div>
           </div>
           {hasConflict && (
@@ -494,12 +533,12 @@ function SlotDrawer({ rep, dayIso, slots, onClose }) {
           <div className="confirm-box">
             <div className="confirm-title">Confirm booking</div>
             <div className="confirm-detail">
-              <strong>{rep.name}</strong><br/>
-              {fmtDate(dayIso)} · <strong>{selStart} – {bookingEnd}</strong>
-              <br/><br/>
-              Customer: <strong>{custName}</strong>
-              {custEmail && <><br/>Email: {custEmail}</>}
-              {notes && <><br/>Ref: {notes}</>}
+              <strong>{postcode} — {custName}</strong><br/>
+              {rep.name} · {fmtDate(dayIso)} · <strong>{selStart} – {bookingEnd}</strong>
+              {ccEmail && <><br/>CC: {ccEmail}</>}
+              {custEmail && <><br/>Customer: {custEmail}</>}
+              {teamsEnabled && <><br/>📹 Teams link will be added</>}
+              {notes && <><br/><span style={{fontSize:12,color:'var(--muted)'}}>{notes}</span></>}
               <br/><br/>
               <span style={{fontSize:11,color:'var(--amber)',fontWeight:700}}>
                 ⚠ DRY RUN — no calendar invite will be sent yet

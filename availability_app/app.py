@@ -211,49 +211,66 @@ def api_refresh():
 def api_book():
     """Dry-run booking endpoint — builds the Graph payload but does NOT write to calendar."""
     data = request.get_json(silent=True) or {}
-    rep_name     = (data.get("rep") or "").strip()
-    date_iso     = (data.get("date") or "").strip()
-    start_time   = (data.get("start") or "").strip()
-    end_time     = (data.get("end") or "").strip()
-    customer     = (data.get("customer_name") or "").strip()
-    cust_email   = (data.get("customer_email") or "").strip()
-    notes        = (data.get("notes") or "").strip()
+    rep_name   = (data.get("rep") or "").strip()
+    date_iso   = (data.get("date") or "").strip()
+    start_time = (data.get("start") or "").strip()
+    end_time   = (data.get("end") or "").strip()
+    customer   = (data.get("customer_name") or "").strip()
+    postcode   = (data.get("postcode") or "").strip().upper()
+    cust_email = (data.get("customer_email") or "").strip()
+    cc_email   = (data.get("cc_email") or "").strip()
+    notes      = (data.get("notes") or "").strip()
+    teams      = bool(data.get("teams_meeting", False))
 
-    if not all([rep_name, date_iso, start_time, end_time, customer]):
-        return jsonify({"ok": False, "message": "Missing required fields (rep, date, start, end, customer_name)"}), 400
+    if not all([rep_name, date_iso, start_time, end_time, customer, postcode]):
+        return jsonify({"ok": False, "message": "Missing required fields (rep, date, start, end, customer_name, postcode)"}), 400
 
     rep_email = REP_EMAIL.get(rep_name)
     if not rep_email:
         return jsonify({"ok": False, "message": f"No email found for rep: {rep_name}"}), 400
 
-    # Build the event subject matching the existing naming pattern: "POSTCODE - Customer Name"
-    subject = f"{notes} - {customer}" if notes else customer
+    # Subject: "YO16 6XY - Susan Barber" — matching existing Outlook naming pattern
+    subject = f"{postcode} - {customer}"
+
+    # Category = rep's first name — drives the "Kelly" tag in Outlook and our attribution engine
+    rep_first = rep_name.split()[0] if rep_name else ""
+
+    attendees = [
+        {"emailAddress": {"address": rep_email, "name": rep_name}, "type": "required"},
+    ]
+    if cust_email:
+        attendees.append({
+            "emailAddress": {"address": cust_email, "name": customer},
+            "type": "optional",
+        })
+    if cc_email:
+        attendees.append({
+            "emailAddress": {"address": cc_email, "name": cc_email},
+            "type": "optional",
+        })
 
     # Build full MS Graph event payload (for inspection — NOT sent to Graph yet)
     would_create = {
         "subject": subject,
+        "categories": [rep_first] if rep_first else [],
         "start": {"dateTime": f"{date_iso}T{start_time}:00", "timeZone": "Europe/London"},
         "end":   {"dateTime": f"{date_iso}T{end_time}:00",   "timeZone": "Europe/London"},
-        "attendees": [
-            {"emailAddress": {"address": rep_email, "name": rep_name}, "type": "required"},
-        ],
+        "attendees": attendees,
         "body": {"contentType": "Text", "content": notes},
         "showAs": "busy",
+        "isOnlineMeeting": teams,
         "isReminderOn": True,
         "reminderMinutesBeforeStart": 60,
     }
-    if cust_email:
-        would_create["attendees"].append({
-            "emailAddress": {"address": cust_email, "name": customer},
-            "type": "required",
-        })
+    if teams:
+        would_create["onlineMeetingProvider"] = "teamsForBusiness"
 
     import json as _json
     app.logger.info("[DRY RUN] Would create Graph event:\n%s", _json.dumps(would_create, indent=2))
 
     message = (
         f"DRY RUN — would book {rep_name} on {date_iso} "
-        f"{start_time}–{end_time} for {customer}"
+        f"{start_time}–{end_time} for {customer} ({postcode})"
     )
     return jsonify({
         "ok": True,

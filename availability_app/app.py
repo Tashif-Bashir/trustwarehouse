@@ -23,7 +23,7 @@ from flask import (
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from calendar_analysis.availability import (
-    fetch_events, build_grid, region_from_postcode,
+    fetch_events, build_grid, build_rep_diary, region_from_postcode,
     region_from_city, all_regions, reps_for_region, REP_EMAIL,
     reload_reps,
 )
@@ -112,6 +112,8 @@ def admin_required(f):
 
 _avail_cache: dict = {}
 _avail_lock = threading.Lock()
+_diary_cache: dict = {}
+_diary_lock = threading.Lock()
 _AVAIL_TTL = 300  # 5 min
 
 
@@ -311,6 +313,50 @@ def api_book():
         "message": message,
         "would_create": would_create,
     })
+
+
+# ---------------------------------------------------------------------------
+# Routes — rep diary
+# ---------------------------------------------------------------------------
+
+@app.route("/reps")
+@login_required
+def rep_diary():
+    return render_template(
+        "reps.html",
+        username=session.get("name"),
+        role=session.get("role"),
+        user_email=session.get("email", ""),
+    )
+
+
+@app.route("/api/reps/diary")
+@login_required
+def api_rep_diary():
+    days_back = min(int(request.args.get("days_back", 30)), 90)
+    days_forward = 60  # fixed look-ahead
+    key = f"diary:{days_back}"
+    with _diary_lock:
+        cached = _diary_cache.get(key)
+        if cached and time.time() - cached["ts"] < _AVAIL_TTL:
+            return jsonify(cached["data"])
+    try:
+        start = date.today() - timedelta(days=days_back)
+        events = fetch_events(days=days_back + days_forward, start_date=start)
+        data = build_rep_diary(events)
+        with _diary_lock:
+            _diary_cache[key] = {"data": data, "ts": time.time()}
+        return jsonify(data)
+    except Exception as ex:
+        return jsonify({"error": str(ex)}), 500
+
+
+@app.route("/api/reps/diary/refresh")
+@login_required
+def api_diary_refresh():
+    with _diary_lock:
+        _diary_cache.clear()
+    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------------

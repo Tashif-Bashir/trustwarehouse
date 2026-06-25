@@ -148,6 +148,8 @@
   .slot.free:hover{background:#bdf2df;transform:translateY(-1px)}
   .slot.booked{background:var(--line);color:var(--muted);cursor:default}
   .slot.off{background:var(--rose-soft);color:#c0392b;cursor:default}
+  .slot.free.past-slot{background:var(--line);color:var(--muted2);cursor:default}
+  .day-cell.past-day{opacity:.6}
   .slot.sel-range{background:#DBEAFE;color:#1D4ED8;outline:1px solid #93C5FD;cursor:pointer}
   .slot.sel-range:hover{background:#BFDBFE}
   .slot.sel-start{background:var(--indigo);color:#fff;box-shadow:0 2px 8px rgba(91,108,255,.4);cursor:pointer}
@@ -223,6 +225,7 @@ const Ic = {
   close: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 5l10 10M15 5L5 15"/></svg>,
   locate: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="10" cy="9" r="3"/><path d="M10 2v2M10 15v3M17 9h2M1 9h2M15.6 4.4l-1.4 1.4M5.8 14.2l-1.4 1.4M15.6 13.6l-1.4-1.4M5.8 5.8L4.4 4.4"/></svg>,
   team: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="6.5" cy="7" r="2.5"/><path d="M1 16c0-2.8 2.4-5 5.5-5"/><circle cx="13.5" cy="6" r="2.5"/><path d="M9 16c0-2.8 2.4-5 5.5-5s5.5 2.2 5.5 5"/></svg>,
+  list: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M7 5h10M7 10h10M7 15h10M3 5h.01M3 10h.01M3 15h.01"/></svg>,
 };
 
 const TODAY_ISO = new Date().toISOString().slice(0, 10);
@@ -272,6 +275,10 @@ function Sidebar() {
         {Ic.calendar}
         <span>Who's Free</span>
       </a>
+      <a href="/reps" className="nav-link">
+        {Ic.list}
+        <span>Rep Diary</span>
+      </a>
       {ROLE === 'admin' && (
         <>
           <div className="nav-section">Admin</div>
@@ -300,7 +307,7 @@ function Sidebar() {
 }
 
 /* ── Day cell ── */
-function DayCell({ slots, onClick, selected, dayIso, compact }) {
+function DayCell({ slots, onClick, selected, dayIso, compact, isPast }) {
   const compactCls = compact ? ' compact' : '';
   if (isWeekend(dayIso) && (!slots || slots.length === 0)) {
     return (
@@ -311,30 +318,36 @@ function DayCell({ slots, onClick, selected, dayIso, compact }) {
       </td>
     );
   }
-  if (!slots || slots.length === 0) return <td><div className={`day-cell full${compactCls}`}><div className="day-count">—</div></div></td>;
+  if (!slots || slots.length === 0) return <td><div className={`day-cell full${compactCls}${isPast ? ' past-day' : ''}`}><div className="day-count">—</div></div></td>;
   const free   = slots.filter(s => s.status === 'free').length;
   const booked = slots.filter(s => s.status === 'booked').length;
   const off    = slots.every(s => s.status === 'off');
   let cls = 'day-cell';
-  if (off)             { cls += ' off'; }
-  else if (free === 0) { cls += ' full'; }
-  else if (free < 4)   { cls += ' partial'; }
-  else                 { cls += ' free'; }
+  if (off)                      { cls += ' off'; }
+  else if (isPast && booked > 0){ cls += ' partial'; }
+  else if (free === 0)          { cls += ' full'; }
+  else if (free < 4)            { cls += ' partial'; }
+  else                          { cls += ' free'; }
+  if (isPast)    cls += ' past-day';
   if (selected)  cls += ' selected';
   if (compact)   cls += ' compact';
+  const displayNum   = isPast ? booked : free;
+  const displayLabel = isPast
+    ? (booked > 0 ? `${booked} booked` : 'none booked')
+    : `${free} free${booked ? ` · ${booked} bkd` : ''}`;
   const title = `${free} free · ${booked} booked — click to see slots`;
   return (
     <td>
       <div className={cls} onClick={onClick} title={title}>
-        <div className="day-count">{off ? '—' : free}</div>
-        {!compact && <div className="day-label">{off ? 'Off' : `${free} free${booked ? ` · ${booked} bkd` : ''}`}</div>}
+        <div className="day-count">{off ? '—' : displayNum}</div>
+        {!compact && <div className="day-label">{off ? 'Off' : displayLabel}</div>}
       </div>
     </td>
   );
 }
 
 /* ── Slot drawer with booking ── */
-function SlotDrawer({ rep, dayIso, slots, onClose }) {
+function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
   const [selStart, setSelStart] = useState(null);
   const [selEnd,   setSelEnd]   = useState(null);
   const [custName,     setCustName]     = useState('');
@@ -362,10 +375,10 @@ function SlotDrawer({ rep, dayIso, slots, onClose }) {
 
   const rangeSlots  = slots.filter(s => inRange(s.time));
   const hasConflict = rangeSlots.some(s => s.status !== 'free');
-  const canBook     = !!(selStart && selEnd && custName.trim() && postcode.trim() && !hasConflict && !result);
+  const canBook     = !!(selStart && selEnd && custName.trim() && postcode.trim() && !hasConflict && !result && !dayIsPast);
 
   function handleSlotClick(slot) {
-    if (result || slot.status !== 'free') return;
+    if (result || slot.status !== 'free' || dayIsPast) return;
     if (!selStart) {
       setSelStart(slot.time); setSelEnd(null);
     } else if (!selEnd) {
@@ -413,18 +426,23 @@ function SlotDrawer({ rep, dayIso, slots, onClose }) {
     <div className="drawer">
       <div className="drawer-header">
         <div>
-          <div className="drawer-title">{rep.name} · {fmtDate(dayIso)}</div>
+          <div className="drawer-title">{rep.name} · {fmtDate(dayIso)}{dayIsPast ? ' · Past' : ''}</div>
           <div className="drawer-sub">{rep.regions?.join(', ')}</div>
         </div>
         <button className="btn btn-ghost btn-sm" onClick={onClose}>{Ic.close}</button>
       </div>
 
       {/* Instruction hint */}
-      {!result && (
+      {!result && !dayIsPast && (
         <div style={{fontSize:12,color: selStart ? 'var(--indigo)' : 'var(--muted)',fontWeight: selStart ? 600 : 400,marginBottom:10}}>
           {!selStart && 'Click a free slot to start selecting a time range.'}
           {selStart && !selEnd && `${selStart} selected — click the last slot of the appointment.`}
           {selStart && selEnd && `${selStart} – ${bookingEnd} selected. Fill in the form below.`}
+        </div>
+      )}
+      {!result && dayIsPast && (
+        <div style={{fontSize:12,color:'var(--muted)',marginBottom:10}}>
+          Past date — view only. Booked appointments are shown; free slots were unused.
         </div>
       )}
 
@@ -435,7 +453,9 @@ function SlotDrawer({ rep, dayIso, slots, onClose }) {
           const isEnd    = !!(selEnd && slot.time === selEnd);
           const inSel    = inRange(slot.time);
           let cls = `slot ${slot.status}`;
-          if (slot.status === 'free') {
+          if (slot.status === 'free' && dayIsPast) {
+            cls = 'slot free past-slot';
+          } else if (slot.status === 'free') {
             if (isStart) cls = 'slot sel-start';
             else if (isEnd) cls = 'slot sel-end';
             else if (inSel) cls = 'slot sel-range';
@@ -635,6 +655,15 @@ function App() {
     });
   }
 
+  function stepDays(n) {
+    const base = startDate || TODAY_ISO;
+    const d = new Date(base + 'T00:00:00');
+    d.setDate(d.getDate() + n);
+    const iso = d.toISOString().slice(0, 10);
+    setStartDate(iso === TODAY_ISO ? '' : iso);
+    setSelected(null);
+  }
+
   const dates = grid?.dates || [];
   const reps = grid?.reps || [];
   const regionalReps = reps.filter(r => !r.is_fallback);
@@ -675,14 +704,15 @@ function App() {
                 Month
               </button>
             </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => stepDays(-7)} title="Previous week">←</button>
             <input
               type="date"
               className={`date-btn${startDate ? ' date-active' : ''}`}
-              min={TODAY_ISO}
               value={startDate}
-              title="Jump to a specific date"
+              title="Jump to a specific start date"
               onChange={e => { setStartDate(e.target.value); setSelected(null); }}
             />
+            <button className="btn btn-ghost btn-sm" onClick={() => stepDays(7)} title="Next week">→</button>
             {startDate && (
               <button className="btn btn-ghost btn-sm" onClick={() => setStartDate('')} title="Back to today">
                 × Today
@@ -780,6 +810,7 @@ function App() {
                 rep={selectedRep}
                 dayIso={selected.day}
                 slots={selectedSlots}
+                dayIsPast={selected.day < TODAY_ISO}
                 onClose={() => setSelected(null)}
               />
             )}
@@ -833,6 +864,7 @@ function App() {
                         <DayCell
                           key={d}
                           dayIso={d}
+                          isPast={d < TODAY_ISO}
                           compact={view === 'month'}
                           slots={rep.days?.[d]}
                           selected={selected?.repName === rep.name && selected?.day === d}
@@ -864,6 +896,7 @@ function App() {
                             <DayCell
                               key={d}
                               dayIso={d}
+                              isPast={d < TODAY_ISO}
                               compact={view === 'month'}
                               slots={rep.days?.[d]}
                               selected={selected?.repName === rep.name && selected?.day === d}

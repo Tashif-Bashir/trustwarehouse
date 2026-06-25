@@ -597,6 +597,54 @@ def all_regions() -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Rep diary (per-rep appointment history + upcoming)
+# ---------------------------------------------------------------------------
+
+def build_rep_diary(events: list[dict]) -> dict:
+    """Build a per-rep appointment list from a pre-fetched event set.
+
+    Returns past + upcoming appointments grouped by rep, suitable for
+    the /reps diary page.
+    """
+    today = date.today()
+    all_reps = list(REP_REGION.keys()) + FALLBACK_REPS
+
+    rep_appts: dict[str, list[dict]] = {r: [] for r in all_reps}
+
+    for event in events:
+        if _is_time_off(event):
+            continue
+        rep = _resolve_rep(event)
+        if not rep or rep not in rep_appts:
+            continue
+        start_dt = _parse_dt(event, "start")
+        end_dt   = _parse_dt(event, "end")
+        if start_dt is None:
+            continue
+        rep_appts[rep].append({
+            "date":     start_dt.date().isoformat(),
+            "start":    start_dt.strftime("%H:%M"),
+            "end":      end_dt.strftime("%H:%M") if end_dt else "",
+            "subject":  (event.get("subject") or "").strip(),
+            "is_past":  start_dt.date() < today,
+            "is_today": start_dt.date() == today,
+        })
+
+    result = []
+    for rep in all_reps:
+        appts = sorted(rep_appts[rep], key=lambda a: (a["date"], a["start"]))
+        result.append({
+            "name":         rep,
+            "regions":      REP_REGION.get(rep, []),
+            "is_fallback":  rep in FALLBACK_REPS,
+            "is_freelancer": rep in FREELANCER_REPS,
+            "appointments": appts,
+        })
+
+    return {"today": today.isoformat(), "reps": result}
+
+
+# ---------------------------------------------------------------------------
 # CLI smoke test
 # ---------------------------------------------------------------------------
 

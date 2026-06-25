@@ -479,7 +479,7 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10, st
                 booked_event = next(
                     (ev for s, e in booked_intervals
                      for ev in [{"s": s, "e": e}]
-                     if s <= slot_dt < e),
+                     if s <= slot_dt <= e),
                     None,
                 )
                 # also check the 90-min window is clear

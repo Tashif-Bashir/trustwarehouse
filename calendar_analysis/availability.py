@@ -296,6 +296,7 @@ def _resolve_rep(event: dict) -> str | None:
 # ---------------------------------------------------------------------------
 
 _MAILBOX = "info@trustelectricheating.co.uk"
+CALENDAR_MAILBOX = _MAILBOX          # public alias for use in app.py
 _token_cache: dict[str, Any] = {}
 
 
@@ -335,6 +336,11 @@ def _load_env() -> dict[str, str]:
         if key in os.environ:
             env[key] = os.environ[key]
     return env
+
+
+def get_graph_token() -> str:
+    """Return a valid MS Graph bearer token (cached for token lifetime)."""
+    return _get_token()
 
 
 def fetch_events(days: int = 14, start_date: date | None = None) -> list[dict]:

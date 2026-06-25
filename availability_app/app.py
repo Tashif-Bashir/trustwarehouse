@@ -10,6 +10,8 @@ import secrets
 import sys
 import time
 import threading
+
+import requests
 from datetime import date, timedelta
 from functools import wraps
 from pathlib import Path
@@ -25,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from calendar_analysis.availability import (
     fetch_events, build_grid, build_rep_diary, region_from_postcode,
     region_from_city, all_regions, reps_for_region, REP_EMAIL,
-    reload_reps,
+    reload_reps, get_graph_token, CALENDAR_MAILBOX,
 )
 
 app = Flask(__name__)
@@ -299,20 +301,40 @@ def api_book():
     if teams:
         would_create["onlineMeetingProvider"] = "teamsForBusiness"
 
-    import json as _json
-    app.logger.info("[DRY RUN] Would create Graph event:\n%s", _json.dumps(would_create, indent=2))
+    try:
+        token = get_graph_token()
+        graph_resp = requests.post(
+            f"https://graph.microsoft.com/v1.0/users/{CALENDAR_MAILBOX}/events",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "Prefer": 'outlook.timezone="Europe/London"',
+            },
+            json=would_create,
+            timeout=30,
+        )
+        if not graph_resp.ok:
+            err = graph_resp.json().get("error", {})
+            err_msg = err.get("message") or graph_resp.text[:300]
+            app.logger.error("Graph booking error %s: %s", graph_resp.status_code, err_msg)
+            return jsonify({"ok": False, "message": f"Calendar error ({graph_resp.status_code}): {err_msg}"}), 500
 
-    booked_by = f" — booked by {booker_name}" if booker_email else ""
-    message = (
-        f"DRY RUN — would book {rep_name} on {date_iso} "
-        f"{start_time}–{end_time} for {customer} ({postcode}){booked_by}"
-    )
-    return jsonify({
-        "ok": True,
-        "dry_run": True,
-        "message": message,
-        "would_create": would_create,
-    })
+        # Clear both caches so the grid and rep diary pick up the new event immediately
+        with _avail_lock:
+            _avail_cache.clear()
+        with _diary_lock:
+            _diary_cache.clear()
+
+        booked_by = f" — booked by {booker_name}" if booker_email else ""
+        message = (
+            f"Booked: {rep_name} · {date_iso} · {start_time}–{end_time} "
+            f"· {customer} ({postcode}){booked_by}"
+        )
+        return jsonify({"ok": True, "dry_run": False, "message": message})
+
+    except Exception as ex:
+        app.logger.exception("Booking request failed")
+        return jsonify({"ok": False, "message": f"Booking failed: {ex}"}), 500
 
 
 # ---------------------------------------------------------------------------

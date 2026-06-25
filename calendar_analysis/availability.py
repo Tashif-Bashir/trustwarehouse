@@ -43,7 +43,7 @@ FALLBACK_REPS: list[str] = ["Scott Conor", "Josh Barron"]
 # Reps who work Saturdays
 SAT_REPS: set[str] = {"Kris Noorouzi"}
 
-# email local-part (before @) → canonical name
+# email local-part (before @) → canonical name  (Trust staff only)
 EMAIL_TO_REP: dict[str, str] = {
     "kelly":       "Kelly Miller",
     "rob":         "Rob Chapman",
@@ -54,17 +54,33 @@ EMAIL_TO_REP: dict[str, str] = {
     "chrism":      "Chris Mannix",
     "niall":       "Niall Devanish",
     "paul":        "Paul Slade",
-    "chriss":      "Chris Southworth",
-    "chriscash":   "Chris Cash",
-    "keith":       "Keith Wiggins",
     "scott":       "Scott Conor",
     "josh":        "Josh Barron",
     # extras observed in diagnosis
-    "samuel":      "Samantha Doyle",   # sammy alias — check actual email
+    "samuel":      "Samantha Doyle",
     "merv":        "Merv",
     "victoria":    "Victoria",
     "gia":         "Gia",
     "paula":       "Paula",
+}
+
+# Full email for every rep — used for sending booking invites
+REP_EMAIL: dict[str, str] = {
+    "Kelly Miller":     "kelly@trustelectricheating.co.uk",
+    "Rob Chapman":      "rob@trustelectricheating.co.uk",
+    "Chris Krammer":    "chrisk@trustelectricheating.co.uk",
+    "Sam Chapman":      "samchapman@trustelectricheating.co.uk",
+    "Samantha Doyle":   "samantha@trustelectricheating.co.uk",
+    "Kris Noorouzi":    "kris@trustelectricheating.co.uk",
+    "Chris Mannix":     "chrism@trustelectricheating.co.uk",
+    "Niall Devanish":   "niall@trustelectricheating.co.uk",
+    "Paul Slade":       "paul@trustelectricheating.co.uk",
+    "Scott Conor":      "scott@trustelectricheating.co.uk",
+    "Josh Barron":      "josh@trustelectricheating.co.uk",
+    # Freelancers — confirmed personal/business emails
+    "Chris Cash":       "chris.cash@ambivo.co.uk",
+    "Keith Wiggins":    "keith.wiggins1@ntlworld.com",
+    "Chris Southworth": "chris@nautilussussex.com",
 }
 
 # category text (lowercase) → canonical name
@@ -99,6 +115,13 @@ CATEGORY_TO_REP: dict[str, str] = {
 GENERIC_EMAILS: set[str] = {
     "info@trustelectricheating.co.uk",
     "telesales@trustelectricheating.co.uk",
+}
+
+# Full email → rep for freelancers who don't have @trustelectricheating.co.uk addresses
+FREELANCER_EMAIL_TO_REP: dict[str, str] = {
+    "chris.cash@ambivo.co.uk":      "Chris Cash",
+    "keith.wiggins1@ntlworld.com":  "Keith Wiggins",
+    "chris@nautilussussex.com":     "Chris Southworth",
 }
 
 # ---------------------------------------------------------------------------
@@ -240,7 +263,13 @@ def _resolve_rep(event: dict) -> str | None:
     """Return canonical rep name from attendee email (primary) or category (fallback)."""
     for attendee in event.get("attendees", []):
         addr = (attendee.get("emailAddress", {}).get("address") or "").lower()
-        if addr.endswith("@trustelectricheating.co.uk") and addr not in GENERIC_EMAILS:
+        if addr in GENERIC_EMAILS:
+            continue
+        # freelancer personal / business emails
+        if addr in FREELANCER_EMAIL_TO_REP:
+            return FREELANCER_EMAIL_TO_REP[addr]
+        # Trust staff emails
+        if addr.endswith("@trustelectricheating.co.uk"):
             local = addr.split("@")[0]
             if local in EMAIL_TO_REP:
                 return EMAIL_TO_REP[local]

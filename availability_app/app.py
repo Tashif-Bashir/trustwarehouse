@@ -125,6 +125,7 @@ def login():
             session["username"] = username
             session["role"] = user.get("role", "user")
             session["name"] = user.get("name", username)
+            session["email"] = user.get("email", "")
             next_url = request.args.get("next") or url_for("index")
             return redirect(next_url)
         error = "Incorrect username or password."
@@ -148,6 +149,7 @@ def index():
         "availability.html",
         username=session.get("name"),
         role=session.get("role"),
+        user_email=session.get("email", ""),
         regions=all_regions(),
     )
 
@@ -235,17 +237,28 @@ def api_book():
     # Category = rep's first name — drives the "Kelly" tag in Outlook and our attribution engine
     rep_first = rep_name.split()[0] if rep_name else ""
 
-    attendees = [
-        {"emailAddress": {"address": rep_email, "name": rep_name}, "type": "required"},
-    ]
-    if cust_email:
+    # Booker = logged-in telesales person — auto-added, no form field needed
+    booker_email = session.get("email", "").strip()
+    booker_name  = session.get("name", "Telesales")
+
+    attendees = []
+    if booker_email:
         attendees.append({
-            "emailAddress": {"address": cust_email, "name": customer},
-            "type": "optional",
+            "emailAddress": {"address": booker_email, "name": booker_name},
+            "type": "required",
         })
+    attendees.append({
+        "emailAddress": {"address": rep_email, "name": rep_name},
+        "type": "required",
+    })
     if cc_email:
         attendees.append({
             "emailAddress": {"address": cc_email, "name": cc_email},
+            "type": "optional",
+        })
+    if cust_email:
+        attendees.append({
+            "emailAddress": {"address": cust_email, "name": customer},
             "type": "optional",
         })
 
@@ -268,9 +281,10 @@ def api_book():
     import json as _json
     app.logger.info("[DRY RUN] Would create Graph event:\n%s", _json.dumps(would_create, indent=2))
 
+    booked_by = f" — booked by {booker_name}" if booker_email else ""
     message = (
         f"DRY RUN — would book {rep_name} on {date_iso} "
-        f"{start_time}–{end_time} for {customer} ({postcode})"
+        f"{start_time}–{end_time} for {customer} ({postcode}){booked_by}"
     )
     return jsonify({
         "ok": True,
@@ -287,7 +301,7 @@ def api_book():
 @app.route("/admin/users")
 @admin_required
 def admin_users():
-    users = [{"username": u["username"], "role": u["role"], "name": u["name"]} for u in _load_users()]
+    users = [{"username": u["username"], "role": u["role"], "name": u["name"], "email": u.get("email", "")} for u in _load_users()]
     return render_template("admin_users.html", users=users)
 
 
@@ -298,6 +312,7 @@ def admin_add_user():
     password = request.form.get("password") or ""
     role = request.form.get("role", "user")
     name = (request.form.get("name") or username).strip()
+    email = (request.form.get("email") or "").strip().lower()
 
     if not username or not password:
         abort(400)
@@ -311,6 +326,7 @@ def admin_add_user():
         "password_hash": _hash_password(password),
         "role": role,
         "name": name,
+        "email": email,
     })
     _USERS_FILE.write_text(json.dumps({"users": users}, indent=2), encoding="utf-8")
     return redirect(url_for("admin_users"))

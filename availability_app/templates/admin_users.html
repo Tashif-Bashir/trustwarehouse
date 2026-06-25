@@ -67,13 +67,14 @@
       <div class="card-title">Current Users</div>
       <table>
         <thead>
-          <tr><th>Username</th><th>Name</th><th>Role</th><th></th></tr>
+          <tr><th>Username</th><th>Name</th><th>Email</th><th>Role</th><th></th></tr>
         </thead>
         <tbody>
           {% for u in users %}
           <tr>
             <td>{{ u.username }}</td>
             <td>{{ u.name }}</td>
+            <td style="color:var(--muted2);font-size:12.5px">{{ u.email or '—' }}</td>
             <td><span class="badge badge-{{ u.role }}">{{ u.role }}</span></td>
             <td>
               <form method="post" action="/admin/users/delete/{{ u.username }}"
@@ -98,6 +99,10 @@
           <div class="form-field">
             <label>Full name</label>
             <input type="text" name="name" required placeholder="e.g. Lily Smith">
+          </div>
+          <div class="form-field">
+            <label>Email address</label>
+            <input type="email" name="email" placeholder="kelly@trustelectricheating.co.uk">
           </div>
           <div class="form-field" style="max-width:160px">
             <label>Role</label>

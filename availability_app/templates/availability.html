@@ -207,6 +207,7 @@
 <script>
 const ROLE = {{ role | tojson }};
 const USERNAME = {{ username | tojson }};
+const USER_EMAIL = {{ user_email | tojson }};
 const INITIAL_REGIONS = {{ regions | tojson }};
 </script>
 {% raw %}
@@ -485,6 +486,14 @@ function SlotDrawer({ rep, dayIso, slots, onClose }) {
             <div className="booking-field">
               <label>CC — second rep / manager (optional)</label>
               <input type="email" placeholder="e.g. chrisk@trustelectricheating.co.uk" value={ccEmail} onChange={e => setCcEmail(e.target.value)} />
+              {USER_EMAIL
+                ? <div style={{fontSize:11,color:'var(--muted)',marginTop:4}}>
+                    Your email ({USER_EMAIL}) will be added automatically as a required attendee.
+                  </div>
+                : <div style={{fontSize:11,color:'var(--amber)',marginTop:4}}>
+                    Log in with a personal account to be auto-added to the invite.
+                  </div>
+              }
             </div>
             {/* Notes → body */}
             <div className="booking-field">

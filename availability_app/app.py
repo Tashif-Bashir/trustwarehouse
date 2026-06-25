@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from calendar_analysis.availability import (
     fetch_events, build_grid, region_from_postcode,
     region_from_city, all_regions, reps_for_region, REP_EMAIL,
+    reload_reps,
 )
 
 app = Flask(__name__)
@@ -36,6 +37,24 @@ app.permanent_session_lifetime = timedelta(hours=8)
 # ---------------------------------------------------------------------------
 
 _USERS_FILE = Path(__file__).parent / "users.json"
+_REPS_FILE  = Path(__file__).parent.parent / "reps.json"
+
+_KNOWN_REGIONS = [
+    "North East", "Yorkshire & Humber", "North West",
+    "London", "South East", "East of England", "South West",
+    "Wales", "Scotland",
+]
+
+
+def _load_reps_json() -> list[dict]:
+    if not _REPS_FILE.exists():
+        return []
+    return json.loads(_REPS_FILE.read_text(encoding="utf-8")).get("reps", [])
+
+
+def _save_reps_json(reps: list[dict]) -> None:
+    _REPS_FILE.write_text(json.dumps({"reps": reps}, indent=2), encoding="utf-8")
+    reload_reps()
 
 
 def _load_users() -> list[dict]:
@@ -340,6 +359,56 @@ def admin_delete_user(username: str):
     users = [u for u in _load_users() if u["username"] != username]
     _USERS_FILE.write_text(json.dumps({"users": users}, indent=2), encoding="utf-8")
     return redirect(url_for("admin_users"))
+
+
+# ---------------------------------------------------------------------------
+# Admin routes — reps
+# ---------------------------------------------------------------------------
+
+@app.route("/admin/reps")
+@admin_required
+def admin_reps():
+    return render_template("admin_reps.html", reps=_load_reps_json(), all_regions=_KNOWN_REGIONS)
+
+
+@app.route("/admin/reps/add", methods=["POST"])
+@admin_required
+def admin_add_rep():
+    name     = (request.form.get("name") or "").strip()
+    email    = (request.form.get("email") or "").strip().lower()
+    regions  = request.form.getlist("regions")
+    fallback = bool(request.form.get("fallback"))
+    freelancer = bool(request.form.get("freelancer"))
+    weekend_days = [int(d) for d in request.form.getlist("weekend_days")]
+    aliases_raw  = (request.form.get("aliases") or "").strip()
+    aliases = [a.strip().lower() for a in aliases_raw.split(",") if a.strip()]
+
+    if not name or not email:
+        abort(400)
+
+    reps = _load_reps_json()
+    if any(r["name"] == name for r in reps):
+        return redirect(url_for("admin_reps"))
+
+    reps.append({
+        "name": name,
+        "email": email,
+        "regions": regions,
+        "fallback": fallback,
+        "freelancer": freelancer,
+        "weekend_days": weekend_days,
+        "aliases": aliases,
+    })
+    _save_reps_json(reps)
+    return redirect(url_for("admin_reps"))
+
+
+@app.route("/admin/reps/delete/<path:name>", methods=["POST"])
+@admin_required
+def admin_delete_rep(name: str):
+    reps = [r for r in _load_reps_json() if r["name"] != name]
+    _save_reps_json(reps)
+    return redirect(url_for("admin_reps"))
 
 
 # ---------------------------------------------------------------------------

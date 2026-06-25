@@ -1,0 +1,139 @@
+{
+  "reps": [
+    {
+      "name": "Kelly Miller",
+      "email": "kelly@trustelectricheating.co.uk",
+      "regions": ["North East"],
+      "fallback": false,
+      "freelancer": false,
+      "weekend_days": [],
+      "aliases": []
+    },
+    {
+      "name": "Rob Chapman",
+      "email": "rob@trustelectricheating.co.uk",
+      "regions": ["Yorkshire & Humber"],
+      "fallback": false,
+      "freelancer": false,
+      "weekend_days": [],
+      "aliases": []
+    },
+    {
+      "name": "Chris Krammer",
+      "email": "chrisk@trustelectricheating.co.uk",
+      "regions": ["Yorkshire & Humber"],
+      "fallback": false,
+      "freelancer": false,
+      "weekend_days": [],
+      "aliases": []
+    },
+    {
+      "name": "Sam Chapman",
+      "email": "samchapman@trustelectricheating.co.uk",
+      "regions": ["North West"],
+      "fallback": false,
+      "freelancer": false,
+      "weekend_days": [],
+      "aliases": ["sam"]
+    },
+    {
+      "name": "Samantha Doyle",
+      "email": "samantha@trustelectricheating.co.uk",
+      "regions": ["North West"],
+      "fallback": false,
+      "freelancer": false,
+      "weekend_days": [],
+      "aliases": ["sammy"]
+    },
+    {
+      "name": "Kris Noorouzi",
+      "email": "kris@trustelectricheating.co.uk",
+      "regions": ["London", "South East", "East of England"],
+      "fallback": false,
+      "freelancer": false,
+      "weekend_days": [5],
+      "aliases": ["kourosh"]
+    },
+    {
+      "name": "Chris Mannix",
+      "email": "chrism@trustelectricheating.co.uk",
+      "regions": ["London", "South East", "East of England"],
+      "fallback": false,
+      "freelancer": false,
+      "weekend_days": [],
+      "aliases": ["chris m"]
+    },
+    {
+      "name": "Niall Devanish",
+      "email": "niall@trustelectricheating.co.uk",
+      "regions": ["South West"],
+      "fallback": false,
+      "freelancer": false,
+      "weekend_days": [],
+      "aliases": ["niall devenish"]
+    },
+    {
+      "name": "Paul Slade",
+      "email": "paul@trustelectricheating.co.uk",
+      "regions": ["Wales"],
+      "fallback": false,
+      "freelancer": false,
+      "weekend_days": [],
+      "aliases": []
+    },
+    {
+      "name": "Chris Southworth",
+      "email": "chris@nautilussussex.com",
+      "regions": ["South East"],
+      "fallback": false,
+      "freelancer": true,
+      "weekend_days": [5, 6],
+      "aliases": ["chris s"]
+    },
+    {
+      "name": "Chris Cash",
+      "email": "chris.cash@ambivo.co.uk",
+      "regions": ["Yorkshire & Humber"],
+      "fallback": false,
+      "freelancer": true,
+      "weekend_days": [],
+      "aliases": []
+    },
+    {
+      "name": "Keith Wiggins",
+      "email": "keith.wiggins1@ntlworld.com",
+      "regions": ["Yorkshire & Humber"],
+      "fallback": false,
+      "freelancer": true,
+      "weekend_days": [],
+      "aliases": []
+    },
+    {
+      "name": "Samuel Hamilton",
+      "email": "samuel@trustelectricheating.co.uk",
+      "regions": ["Scotland"],
+      "fallback": false,
+      "freelancer": false,
+      "weekend_days": [],
+      "aliases": []
+    },
+    {
+      "name": "Scott Conor",
+      "email": "scott@trustelectricheating.co.uk",
+      "regions": [],
+      "fallback": true,
+      "freelancer": false,
+      "weekend_days": [],
+      "aliases": []
+    },
+    {
+      "name": "Josh Barron",
+      "email": "josh@trustelectricheating.co.uk",
+      "regions": [],
+      "fallback": true,
+      "freelancer": false,
+      "weekend_days": [],
+      "aliases": []
+    }
+  ]
+}

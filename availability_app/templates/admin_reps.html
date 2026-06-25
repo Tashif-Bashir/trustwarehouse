@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manage Reps — Trust Availability</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#F2F3F7;--panel:#FFFFFF;--ink:#171A2B;--ink2:#3B3F55;
+    --muted:#9AA0B4;--muted2:#B0B6CC;--line:#EDEEF3;
+    --indigo:#5B6CFF;--indigo-soft:#EEF0FF;
+    --rose:#FF6B7A;--rose-soft:#FFE9EC;
+    --mint:#3DD0A4;--mint-soft:#E2F8EF;
+    --amber:#F59E0B;--amber-soft:#FEF3C7;
+    --shadow-sm:0 1px 3px rgba(20,23,40,.05);
+    --shadow-md:0 8px 24px rgba(20,23,40,.08);
+  }
+  html,body{background:var(--bg);color:var(--ink);font-family:'DM Sans',system-ui,sans-serif;font-size:14px}
+  .layout{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
+  .sidebar{background:var(--panel);border-right:1px solid var(--line);padding:22px 0}
+  .logo{display:flex;align-items:center;gap:10px;padding:4px 18px 24px}
+  .logo-mark{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#5B6CFF,#8B5CF6);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px}
+  .logo-name{font-weight:700;font-size:15px}
+  .nav-link{display:flex;align-items:center;gap:10px;padding:10px 18px;border-radius:10px;margin:1px 8px;font-size:13.5px;font-weight:500;color:var(--ink2);text-decoration:none}
+  .nav-link:hover,.nav-link.active{background:linear-gradient(135deg,#5B6CFF,#8B5CF6);color:#fff}
+  .main{padding:26px 28px}
+  .page-title{font-size:22px;font-weight:700;letter-spacing:-.4px;margin-bottom:22px}
+  .card{background:var(--panel);border-radius:14px;box-shadow:var(--shadow-sm);padding:22px;margin-bottom:20px}
+  .card-title{font-size:14px;font-weight:700;margin-bottom:16px}
+  table{width:100%;border-collapse:collapse}
+  th{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;padding:8px 12px;border-bottom:2px solid var(--line);text-align:left}
+  td{padding:10px 12px;border-bottom:1px solid var(--line);font-size:13.5px;vertical-align:middle}
+  .badge{display:inline-block;padding:2px 8px;border-radius:5px;font-size:11.5px;font-weight:600;margin-right:4px}
+  .badge-freelancer{background:var(--amber-soft);color:#92400e}
+  .badge-fallback{background:var(--indigo-soft);color:var(--indigo)}
+  .badge-weekend{background:var(--mint-soft);color:#1a7a5a}
+  .tags{display:flex;flex-wrap:wrap;gap:4px}
+  .tag{display:inline-block;padding:2px 8px;border-radius:5px;font-size:11.5px;font-weight:500;background:var(--bg);color:var(--ink2)}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .form-field{display:flex;flex-direction:column;gap:5px}
+  .form-field.full{grid-column:1/-1}
+  .form-field label{font-size:11.5px;font-weight:600;color:var(--muted)}
+  input[type=text],input[type=email]{padding:9px 12px;border-radius:9px;border:1.5px solid var(--line);background:var(--bg);font-family:inherit;font-size:13.5px;color:var(--ink);outline:none;width:100%}
+  input[type=text]:focus,input[type=email]:focus{border-color:var(--indigo)}
+  .check-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 16px;padding:4px 0}
+  .check-row{display:flex;flex-wrap:wrap;gap:10px 20px;padding:4px 0}
+  .check-item{display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer}
+  .check-item input{width:15px;height:15px;cursor:pointer;accent-color:var(--indigo)}
+  .btn{padding:9px 16px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;border:none}
+  .btn-primary{background:linear-gradient(135deg,#5B6CFF,#8B5CF6);color:#fff}
+  .btn-danger{background:var(--rose-soft);color:var(--rose)}
+  .btn-sm{padding:5px 11px;font-size:12px;border-radius:7px}
+  .btn-row{display:flex;justify-content:flex-end;margin-top:16px}
+  .back{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);text-decoration:none;margin-bottom:18px;font-weight:500}
+  .back:hover{color:var(--ink)}
+  .muted{color:var(--muted2)}
+  .section-label{font-size:11.5px;font-weight:600;color:var(--muted);margin-bottom:4px}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-mark">T</div>
+      <div class="logo-name">Trust</div>
+    </div>
+    <a href="/" class="nav-link">Availability</a>
+    <a href="/admin/users" class="nav-link">Manage Users</a>
+    <a href="/admin/reps" class="nav-link active">Manage Reps</a>
+    <a href="/logout" class="nav-link" style="margin-top:auto">Sign out</a>
+  </aside>
+  <main class="main">
+    <a href="/" class="back">← Back to Availability</a>
+    <div class="page-title">Manage Reps</div>
+
+    <div class="card">
+      <div class="card-title">Current Reps ({{ reps|length }})</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Regions</th>
+            <th>Type</th>
+            <th>Weekend</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in reps %}
+          <tr>
+            <td style="font-weight:600">{{ r.name }}</td>
+            <td style="color:var(--muted2);font-size:12.5px">{{ r.email or '—' }}</td>
+            <td>
+              {% if r.fallback %}
+                <span class="muted" style="font-size:12.5px;font-style:italic">Fallback (any region)</span>
+              {% elif r.regions %}
+                <div class="tags">
+                  {% for reg in r.regions %}
+                    <span class="tag">{{ reg }}</span>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.fallback %}
+                <span class="badge badge-fallback">Fallback</span>
+              {% endif %}
+              {% if r.freelancer %}
+                <span class="badge badge-freelancer">Freelancer</span>
+              {% endif %}
+              {% if not r.fallback and not r.freelancer %}
+                <span class="muted" style="font-size:12px">Staff</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.weekend_days %}
+                <span class="badge badge-weekend">
+                  {% if 5 in r.weekend_days %}Sat{% endif %}
+                  {% if 5 in r.weekend_days and 6 in r.weekend_days %} + {% endif %}
+                  {% if 6 in r.weekend_days %}Sun{% endif %}
+                </span>
+              {% else %}
+                <span class="muted">Mon–Fri</span>
+              {% endif %}
+            </td>
+            <td>
+              <form method="post" action="/admin/reps/delete/{{ r.name }}"
+                onsubmit="return confirm('Remove {{ r.name }} from reps? This does not affect past calendar events.')">
+                <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Add Rep</div>
+      <form method="post" action="/admin/reps/add">
+        <div class="form-grid">
+          <div class="form-field">
+            <label>Full name</label>
+            <input type="text" name="name" required placeholder="e.g. Lily Smith">
+          </div>
+          <div class="form-field">
+            <label>Email address</label>
+            <input type="email" name="email" required placeholder="e.g. lily@trustelectricheating.co.uk">
+          </div>
+
+          <div class="form-field full">
+            <label>Regions</label>
+            <div class="check-grid">
+              {% for region in all_regions %}
+              <label class="check-item">
+                <input type="checkbox" name="regions" value="{{ region }}">
+                {{ region }}
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="form-field full">
+            <label>Type</label>
+            <div class="check-row">
+              <label class="check-item">
+                <input type="checkbox" name="fallback" value="1" id="chk-fallback">
+                Fallback rep (any region, shown when no regional rep is free)
+              </label>
+              <label class="check-item">
+                <input type="checkbox" name="freelancer" value="1">
+                Freelancer / Ambivo (badged separately on the grid)
+              </label>
+            </div>
+          </div>
+
+          <div class="form-field full">
+            <label>Weekend working</label>
+            <div class="check-row">
+              <label class="check-item">
+                <input type="checkbox" name="weekend_days" value="5">
+                Saturday
+              </label>
+              <label class="check-item">
+                <input type="checkbox" name="weekend_days" value="6">
+                Sunday
+              </label>
+            </div>
+          </div>
+
+          <div class="form-field full">
+            <label>Outlook category aliases <span style="font-weight:400;color:var(--muted2)">(comma-separated — for non-obvious Outlook tags, e.g. a nickname)</span></label>
+            <input type="text" name="aliases" placeholder='e.g. "sammy" for Samantha, "kourosh" for Kris'>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button type="submit" class="btn btn-primary">Add rep</button>
+        </div>
+      </form>
+    </div>
+  </main>
+</div>
+</body>
+</html>

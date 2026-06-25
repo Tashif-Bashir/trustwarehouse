@@ -8,6 +8,7 @@ Time-off detection: all-day events OR OOO keywords in subject, regardless of sho
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import time
@@ -18,108 +19,17 @@ from typing import Any
 import requests
 
 # ---------------------------------------------------------------------------
-# Rep / region master data
+# Rep / region master data — loaded from reps.json at the repo root
 # ---------------------------------------------------------------------------
 
-# canonical_name → region(s)
-REP_REGION: dict[str, list[str]] = {
-    "Kelly Miller":      ["North East"],
-    "Rob Chapman":       ["Yorkshire & Humber"],
-    "Chris Krammer":     ["Yorkshire & Humber"],
-    "Sam Chapman":       ["North West"],
-    "Samantha Doyle":    ["North West"],
-    "Kris Noorouzi":     ["London", "South East", "East of England"],
-    "Chris Mannix":      ["London", "South East", "East of England"],
-    "Niall Devanish":    ["South West"],
-    "Paul Slade":        ["Wales"],
-    "Chris Southworth":  ["South East"],
-    "Chris Cash":        ["Yorkshire & Humber"],
-    "Keith Wiggins":     ["Yorkshire & Humber"],
-    "Samuel Hamilton":   ["Scotland"],
-}
+_REPS_FILE = Path(__file__).parent.parent / "reps.json"
 
-# Fallback reps — shown only when no regional rep is free
-FALLBACK_REPS: list[str] = ["Scott Conor", "Josh Barron"]
-
-# Freelance / Ambivo reps — shown in their region but badged separately
-FREELANCER_REPS: set[str] = {"Chris Cash", "Keith Wiggins", "Chris Southworth"}
-
-# Weekend working — rep → set of weekday numbers they work (5=Sat, 6=Sun)
-# Add any rep here to enable weekend slots for them
-WEEKEND_WORK: dict[str, set[int]] = {
-    "Kris Noorouzi":    {5},        # Saturday only
-    "Chris Southworth": {5, 6},     # Saturday and Sunday
-}
-
-# email local-part (before @) → canonical name  (Trust staff only)
-EMAIL_TO_REP: dict[str, str] = {
-    "kelly":       "Kelly Miller",
-    "rob":         "Rob Chapman",
-    "chrisk":      "Chris Krammer",
-    "samchapman":  "Sam Chapman",
-    "samantha":    "Samantha Doyle",
-    "kris":        "Kris Noorouzi",
-    "chrism":      "Chris Mannix",
-    "niall":       "Niall Devanish",
-    "paul":        "Paul Slade",
-    "scott":       "Scott Conor",
-    "josh":        "Josh Barron",
-    "samuel":      "Samuel Hamilton",
-    # extras observed in diagnosis
-    "merv":        "Merv",
-    "victoria":    "Victoria",
-    "gia":         "Gia",
-    "paula":       "Paula",
-}
-
-# Full email for every rep — used for sending booking invites
-REP_EMAIL: dict[str, str] = {
-    "Kelly Miller":     "kelly@trustelectricheating.co.uk",
-    "Rob Chapman":      "rob@trustelectricheating.co.uk",
-    "Chris Krammer":    "chrisk@trustelectricheating.co.uk",
-    "Sam Chapman":      "samchapman@trustelectricheating.co.uk",
-    "Samantha Doyle":   "samantha@trustelectricheating.co.uk",
-    "Kris Noorouzi":    "kris@trustelectricheating.co.uk",
-    "Chris Mannix":     "chrism@trustelectricheating.co.uk",
-    "Niall Devanish":   "niall@trustelectricheating.co.uk",
-    "Paul Slade":       "paul@trustelectricheating.co.uk",
-    "Scott Conor":      "scott@trustelectricheating.co.uk",
-    "Josh Barron":      "josh@trustelectricheating.co.uk",
-    "Samuel Hamilton":  "samuel@trustelectricheating.co.uk",
-    # Freelancers — confirmed personal/business emails
-    "Chris Cash":       "chris.cash@ambivo.co.uk",
-    "Keith Wiggins":    "keith.wiggins1@ntlworld.com",
-    "Chris Southworth": "chris@nautilussussex.com",
-}
-
-# category text (lowercase) → canonical name
-CATEGORY_TO_REP: dict[str, str] = {
-    "kelly":           "Kelly Miller",
-    "rob":             "Rob Chapman",
-    "kourosh":         "Kris Noorouzi",
-    "kris":            "Kris Noorouzi",
-    "chris m":         "Chris Mannix",
-    "chris mannix":    "Chris Mannix",
-    "sam":             "Sam Chapman",
-    "sam chapman":     "Sam Chapman",
-    "sammy":           "Samantha Doyle",
-    "samantha doyle":  "Samantha Doyle",
-    "niall devenish":  "Niall Devanish",
-    "niall devanish":  "Niall Devanish",
-    "niall":           "Niall Devanish",
-    "paul slade":      "Paul Slade",
-    "paul":            "Paul Slade",
-    "chris southworth":"Chris Southworth",
-    "chris s":         "Chris Southworth",
-    "chris cash":      "Chris Cash",
-    "keith":           "Keith Wiggins",
-    "keith wiggins":   "Keith Wiggins",
-    "scott conor":     "Scott Conor",
-    "scott":           "Scott Conor",
-    "josh":            "Josh Barron",
-    "josh barron":     "Josh Barron",
-    "samuel":          "Samuel Hamilton",
-    "samuel hamilton": "Samuel Hamilton",
+# Calendar attendees who appear in events but are not reps (observed in diagnosis)
+_NON_REP_EXTRAS: dict[str, str] = {
+    "merv":     "Merv",
+    "victoria": "Victoria",
+    "gia":      "Gia",
+    "paula":    "Paula",
 }
 
 GENERIC_EMAILS: set[str] = {
@@ -127,12 +37,88 @@ GENERIC_EMAILS: set[str] = {
     "telesales@trustelectricheating.co.uk",
 }
 
-# Full email → rep for freelancers who don't have @trustelectricheating.co.uk addresses
-FREELANCER_EMAIL_TO_REP: dict[str, str] = {
-    "chris.cash@ambivo.co.uk":      "Chris Cash",
-    "keith.wiggins1@ntlworld.com":  "Keith Wiggins",
-    "chris@nautilussussex.com":     "Chris Southworth",
-}
+
+def _load_reps() -> list[dict]:
+    if not _REPS_FILE.exists():
+        return []
+    return json.loads(_REPS_FILE.read_text(encoding="utf-8")).get("reps", [])
+
+
+def _build_rep_maps(reps: list[dict]) -> tuple:
+    from collections import Counter
+    first_counts: Counter = Counter(r["name"].split()[0].lower() for r in reps)
+
+    rep_region: dict[str, list[str]] = {}
+    fallback_reps: list[str] = []
+    freelancer_reps: set[str] = set()
+    weekend_work: dict[str, set[int]] = {}
+    email_to_rep: dict[str, str] = dict(_NON_REP_EXTRAS)
+    rep_email: dict[str, str] = {}
+    category_to_rep: dict[str, str] = {}
+    freelancer_email_to_rep: dict[str, str] = {}
+
+    for rep in reps:
+        name: str = rep["name"]
+        email: str = rep.get("email", "")
+        regions: list[str] = rep.get("regions", [])
+        is_fallback: bool = rep.get("fallback", False)
+        is_freelancer: bool = rep.get("freelancer", False)
+        weekend_days: list[int] = rep.get("weekend_days", [])
+        aliases: list[str] = rep.get("aliases", [])
+
+        if is_fallback:
+            fallback_reps.append(name)
+        else:
+            rep_region[name] = regions
+
+        if email:
+            rep_email[name] = email
+            if is_freelancer:
+                freelancer_email_to_rep[email.lower()] = name
+            else:
+                email_to_rep[email.split("@")[0].lower()] = name
+
+        if is_freelancer:
+            freelancer_reps.add(name)
+
+        if weekend_days:
+            weekend_work[name] = set(weekend_days)
+
+        # Auto first name only when unambiguous; always add full name and explicit aliases
+        first = name.split()[0].lower()
+        if first_counts[first] == 1:
+            category_to_rep[first] = name
+        category_to_rep[name.lower()] = name
+        for alias in aliases:
+            category_to_rep[alias.lower()] = name
+
+    return (rep_region, fallback_reps, freelancer_reps, weekend_work,
+            email_to_rep, rep_email, category_to_rep, freelancer_email_to_rep)
+
+
+def reload_reps() -> None:
+    """Reload all rep maps from reps.json in-place. Called after admin saves changes."""
+    maps = _build_rep_maps(_load_reps())
+    REP_REGION.clear();              REP_REGION.update(maps[0])
+    FALLBACK_REPS[:] =               maps[1]
+    FREELANCER_REPS.clear();         FREELANCER_REPS.update(maps[2])
+    WEEKEND_WORK.clear();            WEEKEND_WORK.update(maps[3])
+    EMAIL_TO_REP.clear();            EMAIL_TO_REP.update(maps[4])
+    REP_EMAIL.clear();               REP_EMAIL.update(maps[5])
+    CATEGORY_TO_REP.clear();         CATEGORY_TO_REP.update(maps[6])
+    FREELANCER_EMAIL_TO_REP.clear(); FREELANCER_EMAIL_TO_REP.update(maps[7])
+
+
+(
+    REP_REGION,               # canonical_name → region(s) — non-fallback reps
+    FALLBACK_REPS,            # shown only when no regional rep is free
+    FREELANCER_REPS,          # shown in region but badged separately
+    WEEKEND_WORK,             # rep → set of weekday ints (5=Sat, 6=Sun)
+    EMAIL_TO_REP,             # email local-part → canonical name
+    REP_EMAIL,                # canonical name → full email
+    CATEGORY_TO_REP,          # category text (lowercase) → canonical name
+    FREELANCER_EMAIL_TO_REP,  # full email → canonical name (freelancers)
+) = _build_rep_maps(_load_reps())
 
 # ---------------------------------------------------------------------------
 # Postcode prefix → region

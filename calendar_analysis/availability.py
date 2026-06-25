@@ -40,6 +40,9 @@ REP_REGION: dict[str, list[str]] = {
 # Fallback reps — shown only when no regional rep is free
 FALLBACK_REPS: list[str] = ["Scott Conor", "Josh Barron"]
 
+# Freelance / Ambivo reps — shown in their region but badged separately
+FREELANCER_REPS: set[str] = {"Chris Cash", "Keith Wiggins", "Chris Southworth"}
+
 # Reps who work Saturdays
 SAT_REPS: set[str] = {"Kris Noorouzi"}
 
@@ -539,6 +542,7 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10, st
             "name": rep,
             "regions": rep_regions,
             "is_fallback": is_fallback,
+            "is_freelancer": rep in FREELANCER_REPS,
             "today_count": today_count,
             "days": days_out,
         })

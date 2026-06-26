@@ -10,18 +10,16 @@ import secrets
 import sys
 import time
 import threading
-
-import requests
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 
+import requests
 from flask import (
     Flask, render_template, request, redirect, url_for,
     session, jsonify, abort,
 )
 
-# allow importing from repo root (calendar_analysis module)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from calendar_analysis.availability import (
@@ -35,11 +33,38 @@ app.secret_key = os.environ.get("AVAILABILITY_SECRET_KEY") or secrets.token_hex(
 app.permanent_session_lifetime = timedelta(hours=8)
 
 # ---------------------------------------------------------------------------
-# User store
+# BigQuery / GCS
 # ---------------------------------------------------------------------------
 
-_USERS_FILE = Path(__file__).parent / "users.json"
-_REPS_FILE  = Path(__file__).parent.parent / "reps.json"
+from google.cloud import bigquery, storage
+
+BQ_PROJECT = os.environ.get("BIGQUERY_PROJECT", "trustwarehouse")
+BQ_USERS   = f"`{BQ_PROJECT}.app.users`"
+GCS_BUCKET = os.environ.get("GCS_AVATAR_BUCKET", "trustwarehouse-avatars")
+
+_bq_client: bigquery.Client | None = None
+_gcs_client: storage.Client | None = None
+
+
+def _bq() -> bigquery.Client:
+    global _bq_client
+    if _bq_client is None:
+        _bq_client = bigquery.Client(project=BQ_PROJECT)
+    return _bq_client
+
+
+def _gcs() -> storage.Client:
+    global _gcs_client
+    if _gcs_client is None:
+        _gcs_client = storage.Client(project=BQ_PROJECT)
+    return _gcs_client
+
+
+# ---------------------------------------------------------------------------
+# Reps store (stays as JSON — calendar-analysis module owns it)
+# ---------------------------------------------------------------------------
+
+_REPS_FILE = Path(__file__).parent.parent / "reps.json"
 
 _KNOWN_REGIONS = [
     "North East", "Yorkshire & Humber", "North West",
@@ -59,10 +84,29 @@ def _save_reps_json(reps: list[dict]) -> None:
     reload_reps()
 
 
-def _load_users() -> list[dict]:
-    if not _USERS_FILE.exists():
-        return []
-    return json.loads(_USERS_FILE.read_text(encoding="utf-8")).get("users", [])
+# ---------------------------------------------------------------------------
+# User helpers (BigQuery-backed)
+# ---------------------------------------------------------------------------
+
+def _row_to_user(row) -> dict:
+    return {k: row[k] for k in row.keys()}
+
+
+def _get_user(username: str) -> dict | None:
+    rows = list(_bq().query(
+        f"SELECT * FROM {BQ_USERS} WHERE username = @u LIMIT 1",
+        job_config=bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("u", "STRING", username),
+        ]),
+    ).result())
+    return _row_to_user(rows[0]) if rows else None
+
+
+def _get_all_users() -> list[dict]:
+    rows = list(_bq().query(
+        f"SELECT username, name, email, role, photo_url FROM {BQ_USERS} ORDER BY created_at"
+    ).result())
+    return [_row_to_user(r) for r in rows]
 
 
 def _check_password(stored_hash: str, provided: str) -> bool:
@@ -80,8 +124,16 @@ def _hash_password(password: str) -> str:
     return f"pbkdf2:sha256:{salt}:{h.hex()}"
 
 
-def _get_user(username: str) -> dict | None:
-    return next((u for u in _load_users() if u["username"] == username), None)
+def _bq_params(**kv) -> list:
+    type_map = {str: "STRING", int: "INT64", float: "FLOAT64", bool: "BOOL"}
+    params = []
+    for name, val in kv.items():
+        if name.endswith("_ts"):
+            params.append(bigquery.ScalarQueryParameter(name, "TIMESTAMP", val))
+        else:
+            bq_type = type_map.get(type(val), "STRING")
+            params.append(bigquery.ScalarQueryParameter(name, bq_type, val))
+    return params
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +168,7 @@ _avail_cache: dict = {}
 _avail_lock = threading.Lock()
 _diary_cache: dict = {}
 _diary_lock = threading.Lock()
-_AVAIL_TTL = 300  # 5 min
+_AVAIL_TTL = 300
 
 
 def _get_grid(region: str | None, days: int, start_date=None) -> dict:
@@ -145,10 +197,11 @@ def login():
         user = _get_user(username)
         if user and _check_password(user["password_hash"], password):
             session.permanent = True
-            session["username"] = username
-            session["role"] = user.get("role", "user")
-            session["name"] = user.get("name", username)
-            session["email"] = user.get("email", "")
+            session["username"]  = username
+            session["role"]      = user.get("role") or "user"
+            session["name"]      = user.get("name") or username
+            session["email"]     = user.get("email") or ""
+            session["photo_url"] = user.get("photo_url") or ""
             next_url = request.args.get("next") or url_for("index")
             return redirect(next_url)
         error = "Incorrect username or password."
@@ -173,8 +226,119 @@ def index():
         username=session.get("name"),
         role=session.get("role"),
         user_email=session.get("email", ""),
+        photo_url=session.get("photo_url", ""),
         regions=all_regions(),
     )
+
+
+# ---------------------------------------------------------------------------
+# Routes — profile
+# ---------------------------------------------------------------------------
+
+def _profile_ctx(**extra):
+    return dict(
+        username=session.get("name"),
+        role=session.get("role"),
+        user_email=session.get("email", ""),
+        photo_url=session.get("photo_url", ""),
+        login_username=session.get("username"),
+        **extra,
+    )
+
+
+@app.route("/profile")
+@login_required
+def profile():
+    return render_template("profile.html", **_profile_ctx())
+
+
+@app.route("/profile/update", methods=["POST"])
+@login_required
+def profile_update():
+    name  = (request.form.get("name") or "").strip()
+    email = (request.form.get("email") or "").strip().lower()
+    if not name:
+        return render_template("profile.html", **_profile_ctx(
+            profile_error="Name cannot be empty."
+        ))
+    uname = session["username"]
+    now   = datetime.now(timezone.utc).isoformat()
+    _bq().query(
+        f"UPDATE {BQ_USERS} SET name = @name, email = @email, updated_at = @now_ts"
+        f" WHERE username = @u",
+        job_config=bigquery.QueryJobConfig(query_parameters=_bq_params(
+            name=name, email=email, now_ts=now, u=uname,
+        )),
+    ).result()
+    session["name"]  = name
+    session["email"] = email
+    return render_template("profile.html", **_profile_ctx(profile_ok="Profile updated."))
+
+
+@app.route("/profile/password", methods=["POST"])
+@login_required
+def profile_password():
+    current = request.form.get("current_password") or ""
+    new_pw  = request.form.get("new_password") or ""
+    confirm = request.form.get("confirm_password") or ""
+    uname   = session["username"]
+    user    = _get_user(uname)
+
+    if not user or not _check_password(user["password_hash"], current):
+        return render_template("profile.html", **_profile_ctx(
+            pw_error="Current password is incorrect."
+        ))
+    if len(new_pw) < 8:
+        return render_template("profile.html", **_profile_ctx(
+            pw_error="New password must be at least 8 characters."
+        ))
+    if new_pw != confirm:
+        return render_template("profile.html", **_profile_ctx(
+            pw_error="Passwords do not match."
+        ))
+
+    now = datetime.now(timezone.utc).isoformat()
+    _bq().query(
+        f"UPDATE {BQ_USERS} SET password_hash = @h, updated_at = @now_ts WHERE username = @u",
+        job_config=bigquery.QueryJobConfig(query_parameters=_bq_params(
+            h=_hash_password(new_pw), now_ts=now, u=uname,
+        )),
+    ).result()
+    return render_template("profile.html", **_profile_ctx(pw_ok="Password updated."))
+
+
+@app.route("/profile/photo", methods=["POST"])
+@login_required
+def profile_photo():
+    f = request.files.get("photo")
+    if not f or not f.filename:
+        return redirect(url_for("profile"))
+
+    allowed = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+    content_type = f.content_type or ""
+    if content_type not in allowed:
+        return render_template("profile.html", **_profile_ctx(
+            photo_error="Only JPEG, PNG, GIF, or WebP images are accepted."
+        ))
+
+    ext_map = {"image/jpeg": "jpg", "image/png": "png",
+               "image/gif": "gif", "image/webp": "webp"}
+    ext   = ext_map[content_type]
+    uname = session["username"]
+    blob  = _gcs().bucket(GCS_BUCKET).blob(f"avatars/{uname}.{ext}")
+    blob.upload_from_file(f.stream, content_type=content_type)
+    blob.make_public()
+    photo_url = blob.public_url
+
+    now = datetime.now(timezone.utc).isoformat()
+    _bq().query(
+        f"UPDATE {BQ_USERS} SET photo_url = @p, updated_at = @now_ts WHERE username = @u",
+        job_config=bigquery.QueryJobConfig(query_parameters=_bq_params(
+            p=photo_url, now_ts=now, u=uname,
+        )),
+    ).result()
+    session["photo_url"] = photo_url
+    return redirect(url_for("profile"))
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +398,6 @@ def api_refresh():
 @app.route("/api/book", methods=["POST"])
 @login_required
 def api_book():
-    """Dry-run booking endpoint — builds the Graph payload but does NOT write to calendar."""
     data = request.get_json(silent=True) or {}
     rep_name   = (data.get("rep") or "").strip()
     date_iso   = (data.get("date") or "").strip()
@@ -248,19 +411,15 @@ def api_book():
     teams      = bool(data.get("teams_meeting", False))
 
     if not all([rep_name, date_iso, start_time, end_time, customer, postcode]):
-        return jsonify({"ok": False, "message": "Missing required fields (rep, date, start, end, customer_name, postcode)"}), 400
+        return jsonify({"ok": False, "message": "Missing required fields"}), 400
 
     rep_email = REP_EMAIL.get(rep_name)
     if not rep_email:
         return jsonify({"ok": False, "message": f"No email found for rep: {rep_name}"}), 400
 
-    # Subject: "YO16 6XY - Susan Barber" — matching existing Outlook naming pattern
-    subject = f"{postcode} - {customer}"
-
-    # Category = rep's first name — drives the "Kelly" tag in Outlook and our attribution engine
+    subject  = f"{postcode} - {customer}"
     rep_first = rep_name.split()[0] if rep_name else ""
 
-    # Booker = logged-in telesales person — auto-added, no form field needed
     booker_email = session.get("email", "").strip()
     booker_name  = session.get("name", "Telesales")
 
@@ -285,7 +444,6 @@ def api_book():
             "type": "optional",
         })
 
-    # Build full MS Graph event payload (for inspection — NOT sent to Graph yet)
     would_create = {
         "subject": subject,
         "categories": [rep_first] if rep_first else [],
@@ -319,7 +477,6 @@ def api_book():
             app.logger.error("Graph booking error %s: %s", graph_resp.status_code, err_msg)
             return jsonify({"ok": False, "message": f"Calendar error ({graph_resp.status_code}): {err_msg}"}), 500
 
-        # Clear both caches so the grid and rep diary pick up the new event immediately
         with _avail_lock:
             _avail_cache.clear()
         with _diary_lock:
@@ -349,6 +506,7 @@ def rep_diary():
         username=session.get("name"),
         role=session.get("role"),
         user_email=session.get("email", ""),
+        photo_url=session.get("photo_url", ""),
     )
 
 
@@ -356,7 +514,7 @@ def rep_diary():
 @login_required
 def api_rep_diary():
     days_back = min(int(request.args.get("days_back", 30)), 90)
-    days_forward = 60  # fixed look-ahead
+    days_forward = 60
     key = f"diary:{days_back}"
     with _diary_lock:
         cached = _diary_cache.get(key)
@@ -382,13 +540,13 @@ def api_diary_refresh():
 
 
 # ---------------------------------------------------------------------------
-# Admin routes
+# Admin routes — users
 # ---------------------------------------------------------------------------
 
 @app.route("/admin/users")
 @admin_required
 def admin_users():
-    users = [{"username": u["username"], "role": u["role"], "name": u["name"], "email": u.get("email", "")} for u in _load_users()]
+    users = _get_all_users()
     return render_template("admin_users.html", users=users)
 
 
@@ -397,25 +555,26 @@ def admin_users():
 def admin_add_user():
     username = (request.form.get("username") or "").strip().lower()
     password = request.form.get("password") or ""
-    role = request.form.get("role", "user")
-    name = (request.form.get("name") or username).strip()
-    email = (request.form.get("email") or "").strip().lower()
+    role     = request.form.get("role", "user")
+    name     = (request.form.get("name") or username).strip()
+    email    = (request.form.get("email") or "").strip().lower()
 
     if not username or not password:
         abort(400)
 
-    users = _load_users()
-    if any(u["username"] == username for u in users):
+    if _get_user(username):
         return redirect(url_for("admin_users"))
 
-    users.append({
-        "username": username,
-        "password_hash": _hash_password(password),
-        "role": role,
-        "name": name,
-        "email": email,
-    })
-    _USERS_FILE.write_text(json.dumps({"users": users}, indent=2), encoding="utf-8")
+    now = datetime.now(timezone.utc).isoformat()
+    _bq().query(
+        f"INSERT INTO {BQ_USERS}"
+        f" (username, password_hash, name, email, role, photo_url, created_at, updated_at)"
+        f" VALUES (@username, @ph, @name, @email, @role, NULL, @now_ts, @now_ts)",
+        job_config=bigquery.QueryJobConfig(query_parameters=_bq_params(
+            username=username, ph=_hash_password(password),
+            name=name, email=email, role=role, now_ts=now,
+        )),
+    ).result()
     return redirect(url_for("admin_users"))
 
 
@@ -423,9 +582,13 @@ def admin_add_user():
 @admin_required
 def admin_delete_user(username: str):
     if username == session.get("username"):
-        abort(400)  # can't delete yourself
-    users = [u for u in _load_users() if u["username"] != username]
-    _USERS_FILE.write_text(json.dumps({"users": users}, indent=2), encoding="utf-8")
+        abort(400)
+    _bq().query(
+        f"DELETE FROM {BQ_USERS} WHERE username = @u",
+        job_config=bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("u", "STRING", username),
+        ]),
+    ).result()
     return redirect(url_for("admin_users"))
 
 
@@ -480,7 +643,7 @@ def admin_delete_rep(name: str):
 
 
 # ---------------------------------------------------------------------------
-# CLI: hash a password (for initial setup)
+# CLI entry point
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":

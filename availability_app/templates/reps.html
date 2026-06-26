@@ -43,6 +43,7 @@
   .sidebar-footer{margin-top:auto;padding:16px 18px;border-top:1px solid var(--line)}
   .user-row{display:flex;align-items:center;gap:10px;font-size:13px}
   .user-avatar{width:30px;height:30px;border-radius:8px;background:var(--indigo-soft);color:var(--indigo);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0}
+  .user-photo{width:30px;height:30px;border-radius:8px;object-fit:cover;flex-shrink:0}
   .user-name{font-weight:600;color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .user-role{font-size:11px;color:var(--muted)}
   .logout-btn{font-size:12px;color:var(--muted);font-weight:500;text-decoration:none;padding:4px 8px;border-radius:6px;margin-left:auto;flex-shrink:0}
@@ -55,6 +56,7 @@
   .btn{display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
   .btn-ghost{background:var(--panel);color:var(--ink2);box-shadow:var(--shadow-sm)}
   .btn-ghost:hover{box-shadow:var(--shadow-md);color:var(--ink)}
+  .btn-ghost.active-filter{background:var(--indigo-soft);color:var(--indigo);box-shadow:none}
   .btn-sm{padding:6px 11px;font-size:12px;border-radius:8px}
   select.range-select{padding:7px 12px;border-radius:9px;border:1.5px solid var(--line);background:var(--panel);font-family:inherit;font-size:13px;color:var(--ink2);outline:none;font-weight:600;box-shadow:var(--shadow-sm);cursor:pointer}
   select.range-select:focus{border-color:var(--indigo)}
@@ -84,6 +86,9 @@
   .tl-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;gap:12px;flex-wrap:wrap}
   .tl-rep-name{font-size:17px;font-weight:700;letter-spacing:-.3px}
   .tl-rep-meta{font-size:12px;color:var(--muted);margin-top:2px}
+  .tl-filter-badge{display:inline-flex;align-items:center;gap:5px;margin-top:5px;background:var(--indigo-soft);color:var(--indigo);font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:20px}
+  .tl-filter-badge button{font-size:13px;line-height:1;color:var(--indigo);opacity:.7;padding:0 0 0 2px}
+  .tl-filter-badge button:hover{opacity:1}
   .tl-totals{display:flex;gap:12px}
   .tl-total{text-align:right}
   .tl-total-num{font-size:18px;font-weight:700;color:var(--ink)}
@@ -93,16 +98,17 @@
   .appt-list{display:flex;flex-direction:column}
   .appt-row{display:flex;align-items:center;gap:14px;padding:9px 8px;border-radius:8px;transition:background .12s}
   .appt-row:hover{background:var(--bg)}
-  .appt-row.past{opacity:.5}
+  .appt-row.past{opacity:1}
   .appt-row.today{background:var(--indigo-soft);padding:9px 12px}
   .appt-row.today:hover{background:var(--indigo-soft)}
   .appt-date{font-size:12px;font-weight:700;color:var(--ink2);min-width:100px;flex-shrink:0}
-  .appt-row.past .appt-date{color:var(--muted)}
+  .appt-row.past .appt-date{color:var(--ink2)}
   .appt-row.today .appt-date{color:var(--indigo)}
   .appt-time{font-size:12px;font-weight:600;color:var(--muted);min-width:110px;flex-shrink:0;font-variant-numeric:tabular-nums}
+  .appt-row.past .appt-time{color:var(--ink2);opacity:.8}
   .appt-row.today .appt-time{color:var(--indigo);opacity:.8}
   .appt-subject{font-size:13.5px;color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .appt-row.past .appt-subject{color:var(--muted)}
+  .appt-row.past .appt-subject{color:var(--ink2)}
   .appt-row.today .appt-subject{font-weight:600;color:var(--indigo)}
 
   .today-divider{display:flex;align-items:center;gap:10px;padding:14px 0 10px;font-size:10.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--indigo)}
@@ -111,6 +117,31 @@
   .tl-empty{text-align:center;color:var(--muted);padding:40px 0;font-size:13.5px}
   .tl-section-label{font-size:10.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);padding:10px 8px 4px}
   .tl-no-select{display:flex;align-items:center;justify-content:center;height:200px;color:var(--muted);font-size:14px}
+
+  /* Calendar picker */
+  .cal-anchor{position:relative}
+  .cal-popup{position:absolute;top:calc(100% + 8px);right:0;background:var(--panel);border-radius:16px;box-shadow:var(--shadow-md);padding:18px;z-index:200;width:284px;border:1px solid var(--line)}
+  .cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .cal-month-label{font-size:13.5px;font-weight:700;color:var(--ink);letter-spacing:-.2px}
+  .cal-nav-btn{font-size:17px;font-weight:700;color:var(--muted);padding:3px 9px;border-radius:7px;line-height:1}
+  .cal-nav-btn:hover{background:var(--bg);color:var(--ink)}
+  .cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:4px}
+  .cal-wd{text-align:center;font-size:10px;font-weight:700;color:var(--muted);padding:4px 0;text-transform:uppercase;letter-spacing:.4px}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+  .cal-day{text-align:center;padding:7px 0;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;color:var(--ink2);user-select:none}
+  .cal-day:hover:not(.cal-day-grey){background:var(--bg)}
+  .cal-day-grey{color:var(--muted2);cursor:default}
+  .cal-day-today{font-weight:700;color:var(--indigo)}
+  .cal-day-sel{background:linear-gradient(135deg,#5B6CFF,#8B5CF6)!important;color:#fff!important;font-weight:700;border-radius:8px}
+  .cal-day-range{background:var(--indigo-soft);color:var(--indigo);border-radius:0}
+  .cal-day-range-start{border-radius:8px 0 0 8px}
+  .cal-day-range-end{border-radius:0 8px 8px 0}
+  .cal-hint{font-size:11.5px;color:var(--muted);text-align:center;margin:10px 0 4px;min-height:16px}
+  .cal-footer{display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  .cal-btn-clear{font-size:12.5px;color:var(--muted);font-weight:600;padding:6px 10px;border-radius:7px}
+  .cal-btn-clear:hover{background:var(--bg);color:var(--ink)}
+  .cal-btn-apply{font-size:12.5px;font-weight:700;color:#fff;background:linear-gradient(135deg,#5B6CFF,#8B5CF6);border:none;border-radius:8px;padding:7px 16px}
+  .cal-btn-apply:disabled{opacity:.4;cursor:default}
 </style>
 </head>
 <body>
@@ -119,10 +150,11 @@
 const ROLE = {{ role | tojson }};
 const USERNAME = {{ username | tojson }};
 const USER_EMAIL = {{ user_email | tojson }};
+const PHOTO_URL = {{ photo_url | tojson }};
 </script>
 {% raw %}
 <script type="text/babel" data-presets="env,react">
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 
 const Ic = {
   calendar: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="14" height="14" rx="3"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>,
@@ -130,9 +162,11 @@ const Ic = {
   user:     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="10" cy="7" r="3.5"/><path d="M3 17c0-3.3 3.1-6 7-6s7 2.7 7 6"/></svg>,
   team:     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="6.5" cy="7" r="2.5"/><path d="M1 16c0-2.8 2.4-5 5.5-5"/><circle cx="13.5" cy="6" r="2.5"/><path d="M9 16c0-2.8 2.4-5 5.5-5s5.5 2.2 5.5 5"/></svg>,
   list:     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M7 5h10M7 10h10M7 15h10M3 5h.01M3 10h.01M3 15h.01"/></svg>,
+  x:        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 5l10 10M15 5L5 15"/></svg>,
 };
 
 const TODAY_ISO = new Date().toISOString().slice(0, 10);
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 function fmtRelativeTime(d) {
   const s = Math.floor((new Date() - d) / 1000);
@@ -141,8 +175,119 @@ function fmtRelativeTime(d) {
   return `${Math.floor(s/3600)}h ago`;
 }
 
+function fmtIso(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 const initials = USERNAME.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 
+/* ── Calendar picker ── */
+function CalendarPicker({ initialRange, onApply, onClear }) {
+  const today = new Date();
+  const [viewYear,  setViewYear]  = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+  const [pickA,     setPickA]     = useState(initialRange?.start || null);
+  const [pickB,     setPickB]     = useState(initialRange?.end !== initialRange?.start ? initialRange?.end : null);
+  const [hover,     setHover]     = useState(null);
+
+  function isoOf(y, m, d) {
+    return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  }
+
+  function prevMonth() {
+    if (viewMonth === 0) { setViewYear(y => y-1); setViewMonth(11); }
+    else setViewMonth(m => m-1);
+  }
+  function nextMonth() {
+    if (viewMonth === 11) { setViewYear(y => y+1); setViewMonth(0); }
+    else setViewMonth(m => m+1);
+  }
+
+  function handleDayClick(iso) {
+    if (!pickA || (pickA && pickB)) {
+      setPickA(iso); setPickB(null);
+    } else {
+      if (iso >= pickA) setPickB(iso);
+      else { setPickA(iso); setPickB(null); }
+    }
+  }
+
+  const rangeEnd = pickB || hover;
+  const lo = pickA && rangeEnd ? (pickA <= rangeEnd ? pickA : rangeEnd) : pickA;
+  const hi = pickA && rangeEnd ? (pickA <= rangeEnd ? rangeEnd : pickA) : pickA;
+
+  function inRange(iso)   { return lo && hi && iso > lo && iso < hi; }
+  function isStart(iso)   { return iso === lo && lo !== hi; }
+  function isEnd(iso)     { return iso === hi && lo !== hi; }
+  function isSingle(iso)  { return iso === lo && lo === hi; }
+
+  // build grid
+  const firstDow = (new Date(viewYear, viewMonth, 1).getDay() + 6) % 7; // Mon=0
+  const numDays  = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const prevDays = new Date(viewYear, viewMonth, 0).getDate();
+  const cells = [];
+  for (let i = firstDow - 1; i >= 0; i--)
+    cells.push({ iso: null, label: prevDays - i, grey: true });
+  for (let d = 1; d <= numDays; d++)
+    cells.push({ iso: isoOf(viewYear, viewMonth, d), label: d, grey: false });
+  let nx = 1;
+  while (cells.length % 7 !== 0)
+    cells.push({ iso: null, label: nx++, grey: true });
+
+  const hint = !pickA ? 'Click a date, or click two to pick a range'
+             : !pickB ? 'Click the end date (or same date for single day)'
+             : `${fmtIso(lo)} – ${fmtIso(hi)}`;
+
+  return (
+    <div className="cal-popup" onClick={e => e.stopPropagation()}>
+      <div className="cal-nav">
+        <button className="cal-nav-btn" onClick={prevMonth}>‹</button>
+        <span className="cal-month-label">{MONTH_NAMES[viewMonth]} {viewYear}</span>
+        <button className="cal-nav-btn" onClick={nextMonth}>›</button>
+      </div>
+      <div className="cal-weekdays">
+        {['Mo','Tu','We','Th','Fr','Sa','Su'].map(w => <div key={w} className="cal-wd">{w}</div>)}
+      </div>
+      <div className="cal-grid">
+        {cells.map((cell, i) => {
+          if (cell.grey) return <div key={i} className="cal-day cal-day-grey">{cell.label}</div>;
+          const { iso } = cell;
+          let cls = 'cal-day';
+          if (isSingle(iso))     cls += ' cal-day-sel';
+          else if (isStart(iso)) cls += ' cal-day-sel cal-day-range-start';
+          else if (isEnd(iso))   cls += ' cal-day-sel cal-day-range-end';
+          else if (inRange(iso)) cls += ' cal-day-range';
+          if (iso === TODAY_ISO && !isSingle(iso) && !isStart(iso) && !isEnd(iso) && !inRange(iso))
+            cls += ' cal-day-today';
+          return (
+            <div
+              key={iso}
+              className={cls}
+              onClick={() => handleDayClick(iso)}
+              onMouseEnter={() => { if (pickA && !pickB) setHover(iso); }}
+              onMouseLeave={() => setHover(null)}>
+              {cell.label}
+            </div>
+          );
+        })}
+      </div>
+      <div className="cal-hint">{hint}</div>
+      <div className="cal-footer">
+        <button className="cal-btn-clear" onClick={onClear}>Clear filter</button>
+        <button
+          className="cal-btn-apply"
+          disabled={!pickA}
+          onClick={() => onApply({ start: lo, end: pickB ? hi : lo })}>
+          Apply
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Sidebar ── */
 function Sidebar() {
   return (
     <aside className="sidebar">
@@ -161,9 +306,13 @@ function Sidebar() {
         <a href="/admin/users" className="nav-link">{Ic.user}<span>Manage Users</span></a>
         <a href="/admin/reps" className="nav-link">{Ic.team}<span>Manage Reps</span></a>
       </>}
+      <a href="/profile" className="nav-link">{Ic.user}<span>Profile</span></a>
       <div className="sidebar-footer">
         <div className="user-row">
-          <div className="user-avatar">{initials}</div>
+          {PHOTO_URL
+            ? <img src={PHOTO_URL} className="user-photo" alt={USERNAME} />
+            : <div className="user-avatar">{initials}</div>
+          }
           <div>
             <div className="user-name">{USERNAME}</div>
             <div className="user-role">{ROLE}</div>
@@ -221,12 +370,26 @@ function ApptRow({ appt }) {
 }
 
 /* ── Timeline for one rep ── */
-function Timeline({ rep }) {
-  const all    = rep.appointments;
-  const past   = all.filter(a => a.is_past);
-  const todays = all.filter(a => a.is_today);
-  const future = all.filter(a => !a.is_past && !a.is_today);
+function Timeline({ rep, filterRange, onClearFilter }) {
+  const all = rep.appointments;
+
+  const filtered = filterRange
+    ? all.filter(a => a.date >= filterRange.start && a.date <= filterRange.end)
+    : all;
+
+  const past   = filtered.filter(a => a.is_past);
+  const todays = filtered.filter(a => a.is_today);
+  const future = filtered.filter(a => !a.is_past && !a.is_today);
   const upcoming = todays.length + future.length;
+
+  const filterLabel = filterRange
+    ? (filterRange.start === filterRange.end
+        ? fmtIso(filterRange.start)
+        : `${fmtIso(filterRange.start)} – ${fmtIso(filterRange.end)}`)
+    : null;
+
+  const showTodayDivider = !filterRange ||
+    (filterRange.start <= TODAY_ISO && TODAY_ISO <= filterRange.end);
 
   return (
     <div className="tl-card">
@@ -237,6 +400,12 @@ function Timeline({ rep }) {
             {rep.is_fallback ? 'Flexible coverage' : rep.regions?.join(' · ')}
             {rep.is_freelancer ? ' · Freelancer / Ambivo' : ''}
           </div>
+          {filterLabel && (
+            <div className="tl-filter-badge">
+              {Ic.calendar} {filterLabel}
+              <button onClick={onClearFilter} title="Clear date filter">×</button>
+            </div>
+          )}
         </div>
         <div className="tl-totals">
           <div className="tl-total">
@@ -251,11 +420,12 @@ function Timeline({ rep }) {
       </div>
 
       <div className="appt-list">
-        {all.length === 0 && (
-          <div className="tl-empty">No appointments found in this period.</div>
+        {filtered.length === 0 && (
+          <div className="tl-empty">
+            {filterLabel ? `No appointments in this period (${filterLabel}).` : 'No appointments found in this period.'}
+          </div>
         )}
 
-        {/* Past */}
         {past.length > 0 && (
           <>
             <div className="tl-section-label">Past</div>
@@ -263,16 +433,16 @@ function Timeline({ rep }) {
           </>
         )}
 
-        {/* TODAY divider */}
-        {all.length > 0 && <div className="today-divider">Today</div>}
+        {showTodayDivider && filtered.length > 0 && (
+          <div className="today-divider">Today</div>
+        )}
 
-        {/* Today */}
-        {todays.length > 0
-          ? todays.map(a => <ApptRow key={`${a.date}-${a.start}`} appt={a} />)
-          : <div className="tl-empty" style={{padding:'8px 0',fontSize:12}}>No appointments today</div>
-        }
+        {showTodayDivider && (
+          todays.length > 0
+            ? todays.map(a => <ApptRow key={`${a.date}-${a.start}`} appt={a} />)
+            : <div className="tl-empty" style={{padding:'8px 0',fontSize:12}}>No appointments today</div>
+        )}
 
-        {/* Upcoming */}
         {future.length > 0 && (
           <>
             <div className="tl-section-label" style={{paddingTop:14}}>Upcoming</div>
@@ -292,8 +462,21 @@ function App() {
   const [error,       setError]       = useState(null);
   const [daysBack,    setDaysBack]    = useState(30);
   const [lastRefresh, setLastRefresh] = useState(null);
+  const [calOpen,     setCalOpen]     = useState(false);
+  const [filterRange, setFilterRange] = useState(null);
+  const calRef = useRef(null);
 
   useEffect(() => { loadDiary(daysBack); }, [daysBack]);
+
+  // close calendar on outside click
+  useEffect(() => {
+    if (!calOpen) return;
+    function handler(e) {
+      if (calRef.current && !calRef.current.contains(e.target)) setCalOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [calOpen]);
 
   function loadDiary(db) {
     setLoading(true); setError(null);
@@ -316,8 +499,24 @@ function App() {
     fetch('/api/reps/diary/refresh').then(() => loadDiary(daysBack));
   }
 
+  function handleCalApply(range) {
+    setFilterRange(range);
+    setCalOpen(false);
+  }
+
+  function handleCalClear() {
+    setFilterRange(null);
+    setCalOpen(false);
+  }
+
   const allReps = diary?.reps || [];
   const repData = allReps.find(r => r.name === selectedRep);
+
+  const filterBtnLabel = filterRange
+    ? (filterRange.start === filterRange.end
+        ? fmtIso(filterRange.start)
+        : `${fmtIso(filterRange.start)} – ${fmtIso(filterRange.end)}`)
+    : 'Date filter';
 
   return (
     <div className="layout">
@@ -342,6 +541,24 @@ function App() {
               <option value={30}>Last 30 days</option>
               <option value={60}>Last 60 days</option>
             </select>
+
+            {/* Calendar date filter */}
+            <div className="cal-anchor" ref={calRef}>
+              <button
+                className={`btn btn-ghost btn-sm${filterRange ? ' active-filter' : ''}`}
+                onClick={() => setCalOpen(o => !o)}>
+                {Ic.calendar}
+                <span>{filterBtnLabel}</span>
+              </button>
+              {calOpen && (
+                <CalendarPicker
+                  initialRange={filterRange}
+                  onApply={handleCalApply}
+                  onClear={handleCalClear}
+                />
+              )}
+            </div>
+
             <button className="btn btn-ghost btn-sm" onClick={handleRefresh} disabled={loading}>
               {Ic.refresh} Refresh
             </button>
@@ -361,7 +578,11 @@ function App() {
             <RepList reps={allReps} selected={selectedRep} onSelect={setSelectedRep} />
             <div className="diary-main">
               {repData
-                ? <Timeline rep={repData} />
+                ? <Timeline
+                    rep={repData}
+                    filterRange={filterRange}
+                    onClearFilter={() => setFilterRange(null)}
+                  />
                 : <div className="tl-no-select">Select a rep to see their diary</div>
               }
             </div>

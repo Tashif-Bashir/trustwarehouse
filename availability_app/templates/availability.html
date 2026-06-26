@@ -46,6 +46,7 @@
   .sidebar-footer{margin-top:auto;padding:16px 18px;border-top:1px solid var(--line)}
   .user-row{display:flex;align-items:center;gap:10px;font-size:13px}
   .user-avatar{width:30px;height:30px;border-radius:8px;background:var(--indigo-soft);color:var(--indigo);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0}
+  .user-photo{width:30px;height:30px;border-radius:8px;object-fit:cover;flex-shrink:0}
   .user-name{font-weight:600;color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .user-role{font-size:11px;color:var(--muted)}
   .logout-btn{font-size:12px;color:var(--muted);font-weight:500;text-decoration:none;padding:4px 8px;border-radius:6px;margin-left:auto;flex-shrink:0}
@@ -146,6 +147,8 @@
   .slot{padding:7px 10px;border-radius:8px;text-align:center;font-size:12.5px;font-weight:600;transition:all .15s}
   .slot.free{background:var(--mint-soft);color:#1a7a5a;cursor:pointer}
   .slot.free:hover{background:#bdf2df;transform:translateY(-1px)}
+  .slot.buffer{background:var(--amber-soft);color:#92400e;cursor:pointer}
+  .slot.buffer:hover{background:#fde68a;transform:translateY(-1px)}
   .slot.booked{background:var(--line);color:var(--muted);cursor:default}
   .slot.off{background:var(--rose-soft);color:#c0392b;cursor:default}
   .slot.free.past-slot{background:var(--line);color:var(--muted2);cursor:default}
@@ -210,6 +213,7 @@
 const ROLE = {{ role | tojson }};
 const USERNAME = {{ username | tojson }};
 const USER_EMAIL = {{ user_email | tojson }};
+const PHOTO_URL = {{ photo_url | tojson }};
 const INITIAL_REGIONS = {{ regions | tojson }};
 </script>
 {% raw %}
@@ -292,9 +296,16 @@ function Sidebar() {
           </a>
         </>
       )}
+      <a href="/profile" className="nav-link">
+        {Ic.user}
+        <span>Profile</span>
+      </a>
       <div className="sidebar-footer">
         <div className="user-row">
-          <div className="user-avatar">{initials}</div>
+          {PHOTO_URL
+            ? <img src={PHOTO_URL} className="user-photo" alt={USERNAME} />
+            : <div className="user-avatar">{initials}</div>
+          }
           <div>
             <div className="user-name">{USERNAME}</div>
             <div className="user-role">{ROLE}</div>
@@ -374,11 +385,11 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
   }
 
   const rangeSlots  = slots.filter(s => inRange(s.time));
-  const hasConflict = rangeSlots.some(s => s.status !== 'free');
+  const hasConflict = rangeSlots.some(s => s.status === 'booked' || s.status === 'off');
   const canBook     = !!(selStart && selEnd && custName.trim() && postcode.trim() && !hasConflict && !result && !dayIsPast);
 
   function handleSlotClick(slot) {
-    if (result || slot.status !== 'free' || dayIsPast) return;
+    if (result || (slot.status !== 'free' && slot.status !== 'buffer') || dayIsPast) return;
     if (!selStart) {
       setSelStart(slot.time); setSelEnd(null);
     } else if (!selEnd) {
@@ -452,16 +463,17 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
           const isStart  = slot.time === selStart;
           const isEnd    = !!(selEnd && slot.time === selEnd);
           const inSel    = inRange(slot.time);
+          const isSelectable = slot.status === 'free' || slot.status === 'buffer';
           let cls = `slot ${slot.status}`;
           if (slot.status === 'free' && dayIsPast) {
             cls = 'slot free past-slot';
-          } else if (slot.status === 'free') {
+          } else if (isSelectable) {
             if (isStart) cls = 'slot sel-start';
             else if (isEnd) cls = 'slot sel-end';
             else if (inSel) cls = 'slot sel-range';
           }
           const labelColor = (isStart || isEnd) ? 'rgba(255,255,255,0.8)' : undefined;
-          const label = slot.status !== 'free'
+          const label = !isSelectable
             ? (slot.status === 'booked' ? 'booked' : 'off')
             : isStart && !selEnd ? '× cancel'
             : isStart ? 'start'

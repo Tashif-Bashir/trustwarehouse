@@ -406,7 +406,7 @@ def api_book():
     customer   = (data.get("customer_name") or "").strip()
     postcode   = (data.get("postcode") or "").strip().upper()
     cust_email = (data.get("customer_email") or "").strip()
-    cc_email   = (data.get("cc_email") or "").strip()
+    cc_emails  = [e.strip() for e in (data.get("cc_emails") or []) if str(e).strip()]
     notes      = (data.get("notes") or "").strip()
     teams      = bool(data.get("teams_meeting", False))
 
@@ -440,9 +440,9 @@ def api_book():
         "emailAddress": {"address": rep_email, "name": rep_name},
         "type": "required",
     })
-    if cc_email:
+    for cc in cc_emails:
         attendees.append({
-            "emailAddress": {"address": cc_email, "name": cc_email},
+            "emailAddress": {"address": cc, "name": cc},
             "type": "optional",
         })
     if cust_email:

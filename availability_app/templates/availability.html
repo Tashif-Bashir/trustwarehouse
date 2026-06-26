@@ -365,7 +365,7 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
   const [custName,     setCustName]     = useState('');
   const [custEmail,    setCustEmail]    = useState('');
   const [postcode,     setPostcode]     = useState('');
-  const [ccEmail,      setCcEmail]      = useState('');
+  const [ccEmails,     setCcEmails]     = useState(['']);
   const [notes,        setNotes]        = useState('');
   const [teamsEnabled, setTeamsEnabled] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -419,7 +419,7 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
           customer_name: custName.trim(),
           customer_email: custEmail.trim(),
           postcode: postcode.trim().toUpperCase(),
-          cc_email: ccEmail.trim(),
+          cc_emails: ccEmails.map(e => e.trim()).filter(Boolean),
           notes: notes.trim(),
           teams_meeting: teamsEnabled,
         }),
@@ -520,10 +520,34 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
               <label>Customer email (optional)</label>
               <input type="email" placeholder="customer@email.com" value={custEmail} onChange={e => setCustEmail(e.target.value)} />
             </div>
-            {/* CC — second rep or manager */}
+            {/* CC — multiple */}
             <div className="booking-field">
-              <label>CC — second rep / manager (optional)</label>
-              <input type="email" placeholder="e.g. chrisk@trustelectricheating.co.uk" value={ccEmail} onChange={e => setCcEmail(e.target.value)} />
+              <label>CC (optional) — add as many as needed</label>
+              {ccEmails.map((addr, i) => (
+                <div key={i} style={{display:'flex',gap:6,marginBottom:6}}>
+                  <input
+                    type="email"
+                    placeholder="e.g. chrisk@trustelectricheating.co.uk"
+                    value={addr}
+                    onChange={e => {
+                      const next = [...ccEmails];
+                      next[i] = e.target.value;
+                      setCcEmails(next);
+                    }}
+                    style={{flex:1}}
+                  />
+                  {ccEmails.length > 1 && (
+                    <button type="button" onClick={() => setCcEmails(ccEmails.filter((_, j) => j !== i))}
+                      style={{padding:'0 10px',borderRadius:8,border:'1.5px solid var(--line)',background:'var(--rose-soft)',color:'var(--rose)',fontWeight:700,cursor:'pointer',flexShrink:0}}>
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button type="button" onClick={() => setCcEmails([...ccEmails, ''])}
+                style={{fontSize:12,color:'var(--indigo)',fontWeight:600,background:'none',border:'none',cursor:'pointer',padding:'2px 0'}}>
+                + Add CC
+              </button>
               {USER_EMAIL
                 ? <div style={{fontSize:11,color:'var(--muted)',marginTop:4}}>
                     Your email ({USER_EMAIL}) will be added automatically as a required attendee.
@@ -582,7 +606,7 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
             <div className="confirm-detail">
               <strong>{postcode} — {custName}</strong><br/>
               {rep.name} · {fmtDate(dayIso)} · <strong>{selStart} – {bookingEnd}</strong>
-              {ccEmail && <><br/>CC: {ccEmail}</>}
+              {ccEmails.some(e => e.trim()) && <><br/>CC: {ccEmails.filter(e => e.trim()).join(', ')}</>}
               {custEmail && <><br/>Customer: {custEmail}</>}
               {teamsEnabled && <><br/>📹 Teams link will be added</>}
               {notes && <><br/><span style={{fontSize:12,color:'var(--muted)'}}>{notes}</span></>}

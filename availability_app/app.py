@@ -40,6 +40,82 @@ app.secret_key = os.environ.get("AVAILABILITY_SECRET_KEY") or secrets.token_hex(
 app.permanent_session_lifetime = timedelta(hours=8)
 
 # ---------------------------------------------------------------------------
+# Redis slot lock (Upstash REST — no persistent connection needed)
+# ---------------------------------------------------------------------------
+
+_REDIS_URL   = os.environ.get("UPSTASH_REDIS_REST_URL", "").rstrip("/")
+_REDIS_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN", "")
+_LOCK_TTL    = 20  # seconds — long enough for Graph round-trip
+
+
+def _lock_key(rep_email: str, date_iso: str, start_time: str) -> str:
+    safe = f"{rep_email}:{date_iso}:{start_time}".replace("@", "_").replace(".", "_").replace(":", "")
+    return f"slot_{safe}"
+
+
+def _redis_acquire(key: str, value: str) -> bool:
+    """SET key value NX EX _LOCK_TTL — returns True if we got the lock."""
+    if not _REDIS_URL:
+        return True
+    try:
+        r = requests.post(
+            f"{_REDIS_URL}/set/{key}/{value}/NX/EX/{_LOCK_TTL}",
+            headers={"Authorization": f"Bearer {_REDIS_TOKEN}"},
+            timeout=5,
+        )
+        return r.json().get("result") == "OK"
+    except Exception:
+        return True  # Redis down — fail open, don't block bookings
+
+
+def _redis_release(key: str, value: str) -> None:
+    """Delete the lock only if we still own it."""
+    if not _REDIS_URL:
+        return
+    try:
+        current = requests.get(
+            f"{_REDIS_URL}/get/{key}",
+            headers={"Authorization": f"Bearer {_REDIS_TOKEN}"},
+            timeout=5,
+        ).json().get("result")
+        if current == value:
+            requests.post(
+                f"{_REDIS_URL}/del/{key}",
+                headers={"Authorization": f"Bearer {_REDIS_TOKEN}"},
+                timeout=5,
+            )
+    except Exception:
+        pass
+
+
+def _slot_is_free(rep_email: str, date_iso: str, start_time: str, end_time: str) -> bool:
+    """Re-verify via Graph that no event for this rep overlaps the slot."""
+    try:
+        token = get_graph_token()
+        resp = requests.get(
+            f"https://graph.microsoft.com/v1.0/users/{CALENDAR_MAILBOX}/calendarView"
+            f"?startDateTime={date_iso}T{start_time}:00"
+            f"&endDateTime={date_iso}T{end_time}:00"
+            "&$select=attendees",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Prefer": 'outlook.timezone="Europe/London"',
+            },
+            timeout=15,
+        )
+        if not resp.ok:
+            return True  # Can't verify — fail open
+        rep_lower = rep_email.lower()
+        for event in resp.json().get("value", []):
+            for att in event.get("attendees", []):
+                if att.get("emailAddress", {}).get("address", "").lower() == rep_lower:
+                    return False
+    except Exception:
+        return True  # Fail open
+    return True
+
+
+# ---------------------------------------------------------------------------
 # BigQuery / GCS
 # ---------------------------------------------------------------------------
 
@@ -443,7 +519,18 @@ def api_book():
     if not rep_email:
         return jsonify({"ok": False, "message": f"No email found for rep: {rep_name}"}), 400
 
-    subject  = f"{postcode} - {customer}"
+    # ── Slot lock: prevent two agents booking the same slot simultaneously ──
+    lock_key = _lock_key(rep_email, date_iso, start_time)
+    lock_val = secrets.token_hex(8)
+    if not _redis_acquire(lock_key, lock_val):
+        return jsonify({"ok": False, "message": "This slot is being booked right now by someone else. Please pick another time."}), 409
+
+    try:
+        # ── Re-verify via Graph that the slot is still free ──
+        if not _slot_is_free(rep_email, date_iso, start_time, end_time):
+            return jsonify({"ok": False, "message": "This slot was just booked. Please pick another time."}), 409
+
+        subject  = f"{postcode} - {customer}"
     rep_first = rep_name.split()[0] if rep_name else ""
 
     booker_email = session.get("email", "").strip()
@@ -525,6 +612,9 @@ def api_book():
     except Exception as ex:
         app.logger.exception("Booking request failed")
         return jsonify({"ok": False, "message": f"Booking failed: {ex}"}), 500
+
+    finally:
+        _redis_release(lock_key, lock_val)
 
 
 # ---------------------------------------------------------------------------

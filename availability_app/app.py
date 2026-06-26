@@ -423,12 +423,19 @@ def api_book():
     booker_email = session.get("email", "").strip()
     booker_name  = session.get("name", "Telesales")
 
+    _TELESALES = "telesales@trustelectricheating.co.uk"
+
     attendees = []
-    if booker_email:
+    if booker_email and booker_email.lower() != _TELESALES:
         attendees.append({
             "emailAddress": {"address": booker_email, "name": booker_name},
             "type": "required",
         })
+    # telesales inbox always receives every booking
+    attendees.append({
+        "emailAddress": {"address": _TELESALES, "name": "Telesales"},
+        "type": "required",
+    })
     attendees.append({
         "emailAddress": {"address": rep_email, "name": rep_name},
         "type": "required",

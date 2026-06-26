@@ -181,7 +181,6 @@
   .confirm-title{font-size:16px;font-weight:700;letter-spacing:-.2px;margin-bottom:12px}
   .confirm-detail{font-size:13.5px;color:var(--ink2);line-height:1.7;margin-bottom:22px}
   .confirm-actions{display:flex;gap:10px;justify-content:flex-end}
-  .dry-run-badge{display:inline-block;background:var(--amber-soft);color:#8a6200;font-size:10px;font-weight:700;padding:1px 7px;border-radius:5px;margin-left:6px;vertical-align:middle;text-transform:uppercase;letter-spacing:.4px}
   /* Booking result */
   .booking-result{border-radius:10px;padding:14px 16px;margin-top:16px}
   .booking-result.ok{background:var(--mint-soft);color:#1a7a5a}
@@ -587,7 +586,6 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
         <div className={`booking-result ${result.ok ? 'ok' : 'err'}`}>
           <div className="result-title">
             {result.ok ? '✓ Submitted' : '✗ Error'}
-            {result.ok && result.dry_run && <span className="dry-run-badge">DRY RUN — not saved to calendar</span>}
           </div>
           <div className="result-detail">{result.message}</div>
           {result.ok && (
@@ -610,10 +608,6 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
               {custEmail && <><br/>Customer: {custEmail}</>}
               {teamsEnabled && <><br/>📹 Teams link will be added</>}
               {notes && <><br/><span style={{fontSize:12,color:'var(--muted)'}}>{notes}</span></>}
-              <br/><br/>
-              <span style={{fontSize:11,color:'var(--amber)',fontWeight:700}}>
-                ⚠ DRY RUN — no calendar invite will be sent yet
-              </span>
             </div>
             <div className="confirm-actions">
               <button className="btn btn-ghost" onClick={() => setConfirming(false)} disabled={booking}>Cancel</button>

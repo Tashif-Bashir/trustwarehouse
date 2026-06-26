@@ -20,13 +20,20 @@ from flask import (
     session, jsonify, abort,
 )
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from calendar_analysis.availability import (
-    fetch_events, build_grid, build_rep_diary, region_from_postcode,
-    region_from_city, all_regions, reps_for_region, REP_EMAIL,
-    reload_reps, get_graph_token, CALENDAR_MAILBOX,
-)
+try:
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from calendar_analysis.availability import (
+        fetch_events, build_grid, build_rep_diary, region_from_postcode,
+        region_from_city, all_regions, reps_for_region, REP_EMAIL,
+        reload_reps, get_graph_token, CALENDAR_MAILBOX,
+    )
+except ImportError:
+    # Vercel deployment: calendar engine is bundled alongside this file
+    from availability_engine import (  # type: ignore[no-redef]
+        fetch_events, build_grid, build_rep_diary, region_from_postcode,
+        region_from_city, all_regions, reps_for_region, REP_EMAIL,
+        reload_reps, get_graph_token, CALENDAR_MAILBOX,
+    )
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("AVAILABILITY_SECRET_KEY") or secrets.token_hex(32)
@@ -47,17 +54,29 @@ _bq_client: bigquery.Client | None = None
 _gcs_client: storage.Client | None = None
 
 
+def _gcp_creds():
+    """Return service account credentials from GOOGLE_CREDENTIALS_JSON env var."""
+    raw = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    if not raw:
+        return None
+    from google.oauth2 import service_account
+    return service_account.Credentials.from_service_account_info(
+        json.loads(raw),
+        scopes=["https://www.googleapis.com/auth/cloud-platform"],
+    )
+
+
 def _bq() -> bigquery.Client:
     global _bq_client
     if _bq_client is None:
-        _bq_client = bigquery.Client(project=BQ_PROJECT)
+        _bq_client = bigquery.Client(project=BQ_PROJECT, credentials=_gcp_creds())
     return _bq_client
 
 
 def _gcs() -> storage.Client:
     global _gcs_client
     if _gcs_client is None:
-        _gcs_client = storage.Client(project=BQ_PROJECT)
+        _gcs_client = storage.Client(project=BQ_PROJECT, credentials=_gcp_creds())
     return _gcs_client
 
 

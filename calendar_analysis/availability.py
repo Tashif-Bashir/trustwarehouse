@@ -413,6 +413,15 @@ def _parse_dt(event: dict, key: str) -> datetime | None:
 # Main grid builder
 # ---------------------------------------------------------------------------
 
+def _now_london() -> datetime:
+    """Current datetime in Europe/London (naive, matching slot datetimes)."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Europe/London")).replace(tzinfo=None)
+    except Exception:
+        return datetime.now()
+
+
 def build_grid(events: list[dict], region: str | None = None, days: int = 10, start_date: date | None = None) -> dict:
     """
     Build the availability grid.
@@ -438,6 +447,7 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10, st
         }
     """
     actual_today = date.today()
+    now_uk = _now_london()
     from_date = start_date if start_date else actual_today
     # build date list from from_date — include all 7 days so weekend-working
     # reps (Kris=Sat, Chris Southworth=Sat+Sun) get their slots shown
@@ -519,6 +529,9 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10, st
                     slot_list.append({"time": slot_time_str, "status": "off", "subject": None})
                     continue
 
+                # past slots (today only, before current time) — non-bookable
+                slot_is_past = (d == actual_today and slot_dt < now_uk)
+
                 # check booked — overlaps with any appointment
                 booked_event = next(
                     (ev for s, e in booked_intervals
@@ -532,6 +545,12 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10, st
                     for s, e in booked_intervals
                 )
 
+                # check if an appointment ended in the 30 min before this slot
+                just_after_appt = any(
+                    slot_dt - timedelta(minutes=30) <= e < slot_dt
+                    for s, e in booked_intervals
+                )
+
                 if booked_event is not None:
                     # find the actual subject
                     subj = next(
@@ -542,9 +561,10 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10, st
                         None,
                     )
                     slot_list.append({"time": slot_time_str, "status": "booked", "subject": subj})
-                elif not window_clear:
-                    # slot itself is free but 90-min window is blocked — mark as booked
-                    slot_list.append({"time": slot_time_str, "status": "booked", "subject": None})
+                elif slot_is_past:
+                    slot_list.append({"time": slot_time_str, "status": "past", "subject": None})
+                elif not window_clear or just_after_appt:
+                    slot_list.append({"time": slot_time_str, "status": "buffer", "subject": None})
                 else:
                     slot_list.append({"time": slot_time_str, "status": "free", "subject": None})
 

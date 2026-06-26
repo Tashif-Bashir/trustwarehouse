@@ -151,6 +151,7 @@
   .slot.buffer:hover{background:#fde68a;transform:translateY(-1px)}
   .slot.booked{background:var(--line);color:var(--muted);cursor:default}
   .slot.off{background:var(--rose-soft);color:#c0392b;cursor:default}
+  .slot.past{background:var(--bg);color:var(--muted2);cursor:default;opacity:.6}
   .slot.free.past-slot{background:var(--line);color:var(--muted2);cursor:default}
   .day-cell.past-day{opacity:.6}
   .slot.sel-range{background:#DBEAFE;color:#1D4ED8;outline:1px solid #93C5FD;cursor:pointer}
@@ -385,7 +386,7 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
   }
 
   const rangeSlots  = slots.filter(s => inRange(s.time));
-  const hasConflict = rangeSlots.some(s => s.status === 'booked' || s.status === 'off');
+  const hasConflict = rangeSlots.some(s => s.status === 'booked' || s.status === 'off' || s.status === 'past');
   const canBook     = !!(selStart && selEnd && custName.trim() && postcode.trim() && !hasConflict && !result && !dayIsPast);
 
   function handleSlotClick(slot) {
@@ -474,7 +475,7 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
           }
           const labelColor = (isStart || isEnd) ? 'rgba(255,255,255,0.8)' : undefined;
           const label = !isSelectable
-            ? (slot.status === 'booked' ? 'booked' : 'off')
+            ? (slot.status === 'booked' ? 'booked' : slot.status === 'past' ? '—' : 'off')
             : isStart && !selEnd ? '× cancel'
             : isStart ? 'start'
             : isEnd ? 'end'

@@ -40,6 +40,7 @@ from google.cloud import bigquery, storage
 
 BQ_PROJECT = os.environ.get("BIGQUERY_PROJECT", "trustwarehouse")
 BQ_USERS   = f"`{BQ_PROJECT}.app.users`"
+BQ_REPS    = f"`{BQ_PROJECT}.app.reps`"
 GCS_BUCKET = os.environ.get("GCS_AVATAR_BUCKET", "trustwarehouse-avatars")
 
 _bq_client: bigquery.Client | None = None
@@ -61,10 +62,8 @@ def _gcs() -> storage.Client:
 
 
 # ---------------------------------------------------------------------------
-# Reps store (stays as JSON — calendar-analysis module owns it)
+# Reps store (BigQuery-backed)
 # ---------------------------------------------------------------------------
-
-_REPS_FILE = Path(__file__).parent.parent / "reps.json"
 
 _KNOWN_REGIONS = [
     "North East", "Yorkshire & Humber", "North West",
@@ -73,15 +72,23 @@ _KNOWN_REGIONS = [
 ]
 
 
-def _load_reps_json() -> list[dict]:
-    if not _REPS_FILE.exists():
-        return []
-    return json.loads(_REPS_FILE.read_text(encoding="utf-8")).get("reps", [])
+def _row_to_rep(row) -> dict:
+    return {
+        "name":         row["name"],
+        "email":        row["email"] or "",
+        "regions":      json.loads(row["regions"] or "[]"),
+        "fallback":     bool(row["fallback"]),
+        "freelancer":   bool(row["freelancer"]),
+        "weekend_days": json.loads(row["weekend_days"] or "[]"),
+        "aliases":      json.loads(row["aliases"] or "[]"),
+    }
 
 
-def _save_reps_json(reps: list[dict]) -> None:
-    _REPS_FILE.write_text(json.dumps({"reps": reps}, indent=2), encoding="utf-8")
-    reload_reps()
+def _get_all_reps() -> list[dict]:
+    rows = list(_bq().query(
+        f"SELECT * FROM {BQ_REPS} ORDER BY created_at"
+    ).result())
+    return [_row_to_rep(r) for r in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -606,46 +613,63 @@ def admin_delete_user(username: str):
 @app.route("/admin/reps")
 @admin_required
 def admin_reps():
-    return render_template("admin_reps.html", reps=_load_reps_json(), all_regions=_KNOWN_REGIONS)
+    return render_template("admin_reps.html", reps=_get_all_reps(), all_regions=_KNOWN_REGIONS)
 
 
 @app.route("/admin/reps/add", methods=["POST"])
 @admin_required
 def admin_add_rep():
-    name     = (request.form.get("name") or "").strip()
-    email    = (request.form.get("email") or "").strip().lower()
-    regions  = request.form.getlist("regions")
-    fallback = bool(request.form.get("fallback"))
-    freelancer = bool(request.form.get("freelancer"))
+    name         = (request.form.get("name") or "").strip()
+    email        = (request.form.get("email") or "").strip().lower()
+    regions      = request.form.getlist("regions")
+    fallback     = bool(request.form.get("fallback"))
+    freelancer   = bool(request.form.get("freelancer"))
     weekend_days = [int(d) for d in request.form.getlist("weekend_days")]
     aliases_raw  = (request.form.get("aliases") or "").strip()
-    aliases = [a.strip().lower() for a in aliases_raw.split(",") if a.strip()]
+    aliases      = [a.strip().lower() for a in aliases_raw.split(",") if a.strip()]
 
     if not name or not email:
         abort(400)
 
-    reps = _load_reps_json()
-    if any(r["name"] == name for r in reps):
+    existing = list(_bq().query(
+        f"SELECT name FROM {BQ_REPS} WHERE name = @n LIMIT 1",
+        job_config=bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("n", "STRING", name),
+        ]),
+    ).result())
+    if existing:
         return redirect(url_for("admin_reps"))
 
-    reps.append({
-        "name": name,
-        "email": email,
-        "regions": regions,
-        "fallback": fallback,
-        "freelancer": freelancer,
-        "weekend_days": weekend_days,
-        "aliases": aliases,
-    })
-    _save_reps_json(reps)
+    now = datetime.now(timezone.utc).isoformat()
+    _bq().query(
+        f"INSERT INTO {BQ_REPS}"
+        f" (name, email, regions, fallback, freelancer, weekend_days, aliases, created_at)"
+        f" VALUES (@name, @email, @regions, @fallback, @freelancer, @weekend_days, @aliases, @now_ts)",
+        job_config=bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("name",         "STRING",    name),
+            bigquery.ScalarQueryParameter("email",        "STRING",    email),
+            bigquery.ScalarQueryParameter("regions",      "STRING",    json.dumps(regions)),
+            bigquery.ScalarQueryParameter("fallback",     "BOOL",      fallback),
+            bigquery.ScalarQueryParameter("freelancer",   "BOOL",      freelancer),
+            bigquery.ScalarQueryParameter("weekend_days", "STRING",    json.dumps(weekend_days)),
+            bigquery.ScalarQueryParameter("aliases",      "STRING",    json.dumps(aliases)),
+            bigquery.ScalarQueryParameter("now_ts",       "TIMESTAMP", now),
+        ]),
+    ).result()
+    reload_reps()
     return redirect(url_for("admin_reps"))
 
 
 @app.route("/admin/reps/delete/<path:name>", methods=["POST"])
 @admin_required
 def admin_delete_rep(name: str):
-    reps = [r for r in _load_reps_json() if r["name"] != name]
-    _save_reps_json(reps)
+    _bq().query(
+        f"DELETE FROM {BQ_REPS} WHERE name = @n",
+        job_config=bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("n", "STRING", name),
+        ]),
+    ).result()
+    reload_reps()
     return redirect(url_for("admin_reps"))
 
 

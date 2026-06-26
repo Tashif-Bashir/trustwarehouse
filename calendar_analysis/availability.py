@@ -22,8 +22,6 @@ import requests
 # Rep / region master data — loaded from reps.json at the repo root
 # ---------------------------------------------------------------------------
 
-_REPS_FILE = Path(__file__).parent.parent / "reps.json"
-
 # Calendar attendees who appear in events but are not reps (observed in diagnosis)
 _NON_REP_EXTRAS: dict[str, str] = {
     "merv":     "Merv",
@@ -38,10 +36,40 @@ GENERIC_EMAILS: set[str] = {
 }
 
 
+_bq_reps_client = None
+_BQ_REPS_PROJECT = os.environ.get("BIGQUERY_PROJECT", "trustwarehouse")
+_BQ_REPS_TABLE   = f"`{_BQ_REPS_PROJECT}.app.reps`"
+
+
+def _bq_reps():
+    global _bq_reps_client
+    if _bq_reps_client is None:
+        from google.cloud import bigquery as _bq_mod
+        _bq_reps_client = _bq_mod.Client(project=_BQ_REPS_PROJECT)
+    return _bq_reps_client
+
+
 def _load_reps() -> list[dict]:
-    if not _REPS_FILE.exists():
+    try:
+        rows = list(_bq_reps().query(
+            f"SELECT * FROM {_BQ_REPS_TABLE} ORDER BY created_at"
+        ).result())
+        return [
+            {
+                "name":         row["name"],
+                "email":        row["email"] or "",
+                "regions":      json.loads(row["regions"] or "[]"),
+                "fallback":     bool(row["fallback"]),
+                "freelancer":   bool(row["freelancer"]),
+                "weekend_days": json.loads(row["weekend_days"] or "[]"),
+                "aliases":      json.loads(row["aliases"] or "[]"),
+            }
+            for row in rows
+        ]
+    except Exception as exc:
+        import sys
+        print(f"WARNING: could not load reps from BigQuery: {exc}", file=sys.stderr)
         return []
-    return json.loads(_REPS_FILE.read_text(encoding="utf-8")).get("reps", [])
 
 
 def _build_rep_maps(reps: list[dict]) -> tuple:

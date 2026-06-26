@@ -546,7 +546,7 @@ def rep_diary():
 @app.route("/api/reps/diary")
 @login_required
 def api_rep_diary():
-    days_back = min(int(request.args.get("days_back", 30)), 90)
+    days_back = min(int(request.args.get("days_back", 7)), 90)
     days_forward = 60
     key = f"diary:{days_back}"
     with _diary_lock:

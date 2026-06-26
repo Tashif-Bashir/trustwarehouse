@@ -525,12 +525,12 @@ def api_book():
     if not _redis_acquire(lock_key, lock_val):
         return jsonify({"ok": False, "message": "This slot is being booked right now by someone else. Please pick another time."}), 409
 
-    try:
-        # ── Re-verify via Graph that the slot is still free ──
-        if not _slot_is_free(rep_email, date_iso, start_time, end_time):
-            return jsonify({"ok": False, "message": "This slot was just booked. Please pick another time."}), 409
+    # ── Re-verify via Graph that the slot is still free ──
+    if not _slot_is_free(rep_email, date_iso, start_time, end_time):
+        _redis_release(lock_key, lock_val)
+        return jsonify({"ok": False, "message": "This slot was just booked. Please pick another time."}), 409
 
-        subject  = f"{postcode} - {customer}"
+    subject  = f"{postcode} - {customer}"
     rep_first = rep_name.split()[0] if rep_name else ""
 
     booker_email = session.get("email", "").strip()

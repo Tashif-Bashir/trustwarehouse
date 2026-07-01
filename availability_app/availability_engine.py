@@ -72,6 +72,8 @@ def _load_reps() -> list[dict]:
                 "freelancer":   bool(row["freelancer"]),
                 "weekend_days": json.loads(row["weekend_days"] or "[]"),
                 "aliases":      json.loads(row["aliases"] or "[]"),
+                "sharpspring_owner_id": (row["sharpspring_owner_id"]
+                                         if "sharpspring_owner_id" in row.keys() else "") or "",
             }
             for row in rows
         ]
@@ -689,6 +691,7 @@ def build_rep_diary(events: list[dict]) -> dict:
             "start":    start_dt.strftime("%H:%M"),
             "end":      end_dt.strftime("%H:%M") if end_dt else "",
             "subject":  (event.get("subject") or "").strip(),
+            "event_id": event.get("id", ""),
             "is_past":  start_dt.date() < today,
             "is_today": start_dt.date() == today,
         })

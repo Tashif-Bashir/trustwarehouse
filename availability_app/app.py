@@ -122,8 +122,9 @@ def _slot_is_free(rep_email: str, date_iso: str, start_time: str, end_time: str)
 from google.cloud import bigquery, storage
 
 BQ_PROJECT = os.environ.get("BIGQUERY_PROJECT", "trustwarehouse")
-BQ_USERS   = f"`{BQ_PROJECT}.app.users`"
-BQ_REPS    = f"`{BQ_PROJECT}.app.reps`"
+BQ_USERS    = f"`{BQ_PROJECT}.app.users`"
+BQ_REPS     = f"`{BQ_PROJECT}.app.reps`"
+BQ_BOOKINGS = f"`{BQ_PROJECT}.app.bookings`"
 GCS_BUCKET = os.environ.get("GCS_AVATAR_BUCKET", "trustwarehouse-avatars")
 
 _bq_client: bigquery.Client | None = None
@@ -176,7 +177,19 @@ def _row_to_rep(row) -> dict:
         "freelancer":   bool(row["freelancer"]),
         "weekend_days": json.loads(row["weekend_days"] or "[]"),
         "aliases":      json.loads(row["aliases"] or "[]"),
+        "sharpspring_owner_id": row["sharpspring_owner_id"] or "",
     }
+
+
+# Valid options for the SharpSpring "Appointment Booked By" picklist
+# (field appointment_made_by_65e1a90253305). A booking user's sharpspring_name
+# must match one of these exactly, or be left blank.
+MADE_BY_OPTIONS = [
+    "Gemma Taylor", "Susan England", "Alicja Aleksiuk", "Lily Harpham",
+    "Reilly Andrew", "Josh Baron", "Kim Ellis", "Victoria Ramsden",
+    "Alice Hardegon", "Declan Franks", "Other", "Amelia Konczewska",
+    "Alisha Moore", "Ashleigh Nankervis",
+]
 
 
 def _get_all_reps() -> list[dict]:
@@ -184,6 +197,185 @@ def _get_all_reps() -> list[dict]:
         f"SELECT * FROM {BQ_REPS} ORDER BY created_at"
     ).result())
     return [_row_to_rep(r) for r in rows]
+
+
+def _rep_owner_id(rep_name: str) -> str:
+    """Return a rep's SharpSpring owner ID (for lead reassignment), or '' if unknown."""
+    if not rep_name:
+        return ""
+    rows = list(_bq().query(
+        f"SELECT sharpspring_owner_id FROM {BQ_REPS} WHERE name = @n LIMIT 1",
+        job_config=bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("n", "STRING", rep_name),
+        ]),
+    ).result())
+    return (rows[0]["sharpspring_owner_id"] or "") if rows else ""
+
+
+# Outlook master-category names (the pre-coloured tags), cached ~hourly.
+_master_cat_cache: dict = {"ts": 0.0, "names": []}
+_master_cat_lock = threading.Lock()
+
+
+def _master_categories() -> list[str]:
+    now = time.time()
+    with _master_cat_lock:
+        if _master_cat_cache["names"] and now - _master_cat_cache["ts"] < 3600:
+            return _master_cat_cache["names"]
+    names: list[str] = []
+    try:
+        token = get_graph_token()
+        r = requests.get(
+            f"https://graph.microsoft.com/v1.0/users/{CALENDAR_MAILBOX}/outlook/masterCategories",
+            headers={"Authorization": f"Bearer {token}"}, timeout=15)
+        if r.ok:
+            names = [c.get("displayName", "") for c in r.json().get("value", []) if c.get("displayName")]
+    except Exception:
+        app.logger.exception("master categories fetch failed")
+    if names:
+        with _master_cat_lock:
+            _master_cat_cache.update(ts=now, names=names)
+        return names
+    return _master_cat_cache["names"]
+
+
+def _rep_outlook_category(rep_name: str) -> str:
+    """Return the rep's exact Outlook master-category name (so the colour shows), else first name.
+
+    Matches, in order: full rep name → aliases → first name — against the mailbox's master
+    categories. Handles the inconsistent naming (full names, first names, and nicknames like
+    'Kourosh' for Kris, 'Sammy' for Samuel).
+    """
+    if not rep_name:
+        return ""
+    first = rep_name.split()[0]
+    candidates = [rep_name]
+    try:
+        rows = list(_bq().query(
+            f"SELECT aliases FROM {BQ_REPS} WHERE name = @n LIMIT 1",
+            job_config=bigquery.QueryJobConfig(query_parameters=[
+                bigquery.ScalarQueryParameter("n", "STRING", rep_name)]),
+        ).result())
+        if rows:
+            candidates += json.loads(rows[0]["aliases"] or "[]")
+    except Exception:
+        app.logger.exception("rep aliases lookup failed")
+    candidates.append(first)
+    by_lower = {m.lower(): m for m in _master_categories()}
+    for c in candidates:
+        if c and c.lower() in by_lower:
+            return by_lower[c.lower()]
+    return first
+
+
+def _record_booking(**kv) -> None:
+    """Insert an `active` booking row so the appointment can be cancelled later from the diary.
+
+    Keyed by the Graph event id — this is the link between a diary entry and the lead/booker.
+    Never raises: a logging failure must not break a successful booking.
+    """
+    if not kv.get("event_id"):
+        return
+    try:
+        _bq().query(
+            f"INSERT INTO {BQ_BOOKINGS}"
+            f" (event_id, lead_id, booker_username, booker_owner_id, booker_name,"
+            f"  rep_name, rep_owner_id, customer, postcode, appt_date, appt_start, appt_end,"
+            f"  booked_at, status)"
+            f" VALUES (@event_id, @lead_id, @booker_username, @booker_owner_id, @booker_name,"
+            f"  @rep_name, @rep_owner_id, @customer, @postcode, @appt_date, @appt_start, @appt_end,"
+            f"  @booked_ts, 'active')",
+            job_config=bigquery.QueryJobConfig(query_parameters=_bq_params(
+                booked_ts=datetime.now(timezone.utc).isoformat(), **kv,
+            )),
+        ).result()
+    except Exception:
+        app.logger.exception("Failed to record booking row (booking still succeeded)")
+
+
+def _annotate_cancellable(diary: dict) -> None:
+    """Mark each diary appointment `cancellable` if its event has an active booking row.
+
+    Only appointments booked through the tool (and not yet cancelled) can be cancelled here.
+    """
+    ids = [a["event_id"] for rep in diary.get("reps", [])
+           for a in rep.get("appointments", []) if a.get("event_id")]
+    active: set[str] = set()
+    if ids:
+        try:
+            rows = _bq().query(
+                f"SELECT event_id FROM {BQ_BOOKINGS} WHERE status = 'active'"
+                f" AND event_id IN UNNEST(@ids)",
+                job_config=bigquery.QueryJobConfig(query_parameters=[
+                    bigquery.ArrayQueryParameter("ids", "STRING", ids),
+                ]),
+            ).result()
+            active = {r["event_id"] for r in rows}
+        except Exception:
+            app.logger.exception("cancellable lookup failed")
+    for rep in diary.get("reps", []):
+        for a in rep.get("appointments", []):
+            a["cancellable"] = a.get("event_id", "") in active
+
+
+def _get_active_booking(event_id: str) -> dict | None:
+    """Return the active booking row for a calendar event, or None."""
+    rows = list(_bq().query(
+        f"SELECT * FROM {BQ_BOOKINGS} WHERE event_id = @e AND status = 'active' LIMIT 1",
+        job_config=bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("e", "STRING", event_id),
+        ]),
+    ).result())
+    return dict(rows[0]) if rows else None
+
+
+def _ss_cancel_lead(lead: dict, booker_owner_id: str) -> bool:
+    """Revert a lead on cancellation: status→Cancelled, Booked→No, owner→booker.
+
+    If the booker's owner id is unknown, keep the lead's current owner rather than
+    letting SharpSpring reassign it to the API account.
+    """
+    owner_to_set = booker_owner_id or (lead.get("ownerID") or "")
+    obj = {
+        "id": str(lead.get("id")),
+        _SS_F_STATUS: "Appointment Cancelled",
+        _SS_F_APPT_BOOKED: "No",
+    }
+    if owner_to_set:
+        obj["ownerID"] = str(owner_to_set)
+    resp = _ss_call("updateLeads", {"objects": [obj]})
+    updates = (resp.get("result") or {}).get("updates", []) if resp else []
+    return bool(updates and updates[0].get("success"))
+
+
+def _ss_delete_event(event_id: str) -> bool:
+    """Delete a calendar event. True on success or if already gone (404)."""
+    try:
+        token = get_graph_token()
+        r = requests.delete(
+            f"https://graph.microsoft.com/v1.0/users/{CALENDAR_MAILBOX}/events/{event_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=20,
+        )
+        return r.status_code in (204, 404)
+    except Exception:
+        app.logger.exception("Graph event delete failed")
+        return False
+
+
+def _mark_booking_cancelled(event_id: str, cancelled_by: str) -> None:
+    try:
+        _bq().query(
+            f"UPDATE {BQ_BOOKINGS} SET status = 'cancelled', cancelled_at = @cts,"
+            f" cancelled_by = @u WHERE event_id = @e AND status = 'active'",
+            job_config=bigquery.QueryJobConfig(query_parameters=[
+                bigquery.ScalarQueryParameter("cts", "TIMESTAMP", datetime.now(timezone.utc).isoformat()),
+                bigquery.ScalarQueryParameter("u", "STRING", cancelled_by),
+                bigquery.ScalarQueryParameter("e", "STRING", event_id),
+            ]),
+        ).result()
+    except Exception:
+        app.logger.exception("Failed to mark booking cancelled")
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +398,8 @@ def _get_user(username: str) -> dict | None:
 
 def _get_all_users() -> list[dict]:
     rows = list(_bq().query(
-        f"SELECT username, name, email, role, photo_url FROM {BQ_USERS} ORDER BY created_at"
+        f"SELECT username, name, email, role, photo_url,"
+        f" sharpspring_owner_id, sharpspring_name FROM {BQ_USERS} ORDER BY created_at"
     ).result())
     return [_row_to_user(r) for r in rows]
 
@@ -236,6 +429,244 @@ def _bq_params(**kv) -> list:
             bq_type = type_map.get(type(val), "STRING")
             params.append(bigquery.ScalarQueryParameter(name, bq_type, val))
     return params
+
+
+# ---------------------------------------------------------------------------
+# SharpSpring CRM integration — lead search + appointment write-back
+# ---------------------------------------------------------------------------
+
+_SS_BASE_URL = "https://api.sharpspring.com/pubapi/v1.2/"
+
+# .env fallback so SharpSpring creds resolve in local dev too. On Vercel the real
+# environment is used (no .env present); locally we read the repo-root .env.
+_DOTENV: dict[str, str] = {}
+_dotenv_path = Path(__file__).parent.parent / ".env"
+if _dotenv_path.exists():
+    for _line in _dotenv_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            _DOTENV[_k.strip()] = _v.strip().strip('"').strip("'")
+
+
+def _cfg(key: str) -> str:
+    return os.environ.get(key) or _DOTENV.get(key, "")
+
+
+def _now_uk() -> datetime:
+    """Current UK wall-clock time, handling BST/GMT — no tz-data dependency.
+
+    UK clocks are UTC+1 from 01:00 UTC on the last Sunday of March until
+    01:00 UTC on the last Sunday of October, otherwise UTC+0.
+    """
+    now = datetime.now(timezone.utc)
+    y = now.year
+    mar31, oct31 = date(y, 3, 31), date(y, 10, 31)
+    last_sun_mar = mar31.day - ((mar31.weekday() + 1) % 7)
+    last_sun_oct = oct31.day - ((oct31.weekday() + 1) % 7)
+    bst_start = datetime(y, 3, last_sun_mar, 1, tzinfo=timezone.utc)
+    bst_end   = datetime(y, 10, last_sun_oct, 1, tzinfo=timezone.utc)
+    if bst_start <= now < bst_end:
+        now += timedelta(hours=1)
+    return now.replace(tzinfo=None)
+
+
+# SharpSpring appointment field system names (confirmed against real lead data)
+_SS_F_STATUS      = "status_633ae6f6ac6fe"                       # Domestic Lead Status
+_SS_F_APPT_DT     = "appointment_time___date_5ae8ca2f532bc"      # Appointment Time & Date
+_SS_F_APPT_BOOKED = "appointment_booked_5ae8cb01a35c6"           # Appointment Booked (Yes/No)
+_SS_F_MADE_BY     = "appointment_made_by_65e1a90253305"          # Appointment Booked By (picklist)
+_SS_F_BOOKED_TS   = "date_time_appointment_booked_687fabb701341"  # timestamp the booking was made
+
+
+def _ss_call(method: str, params: dict) -> dict:
+    """JSON-RPC call to SharpSpring. Returns parsed response, or {} on transport error/missing creds."""
+    account_id = _cfg("SHARPSPRING_ACCOUNT_ID")
+    secret_key = _cfg("SHARPSPRING_SECRET_KEY")
+    if not account_id or not secret_key:
+        return {}
+    try:
+        r = requests.post(
+            _SS_BASE_URL,
+            params={"accountID": account_id, "secretKey": secret_key},
+            json={"method": method, "params": params, "id": secrets.token_hex(8)},
+            timeout=20,
+        )
+        return r.json()
+    except Exception:
+        return {}
+
+
+def _ss_get_lead(lead_id: str) -> dict | None:
+    """Live lookup of one lead by id. Returns the lead dict, or None if not found/deleted.
+
+    Always call this before writing — createNotes/updateLeads will happily 'succeed'
+    against a deleted id, so getLeads is the only reliable existence check.
+    """
+    if not lead_id:
+        return None
+    resp = _ss_call("getLeads", {"where": {"id": str(lead_id)}, "limit": 1})
+    leads = (resp.get("result") or {}).get("lead", []) if resp else []
+    return leads[0] if leads else None
+
+
+# Fresh-leads cache — today's leads via getLeadsDateRange, refreshed lazily (5-min TTL).
+# Covers leads created since the last 30-min BigQuery sync so search finds them too.
+_ss_fresh_cache: dict = {"ts": 0.0, "leads": []}
+_ss_fresh_lock = threading.Lock()
+_SS_FRESH_TTL = 300
+
+
+def _ss_fresh_leads_today() -> list[dict]:
+    now = time.time()
+    with _ss_fresh_lock:
+        if _ss_fresh_cache["leads"] and now - _ss_fresh_cache["ts"] < _SS_FRESH_TTL:
+            return _ss_fresh_cache["leads"]
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    leads: list[dict] = []
+    offset = 0
+    while True:
+        resp = _ss_call("getLeadsDateRange", {
+            "startDate": f"{today} 00:00:00", "endDate": f"{today} 23:59:59",
+            "timestamp": "create", "limit": 500, "offset": offset,
+        })
+        batch = (resp.get("result") or {}).get("lead", []) if resp else []
+        leads.extend(batch)
+        if len(batch) < 500:
+            break
+        offset += 500
+    with _ss_fresh_lock:
+        _ss_fresh_cache.update(ts=now, leads=leads)
+    return leads
+
+
+def _ss_update_lead(lead_id: str, *, date_iso: str, start_time: str,
+                    rep_owner_id: str = "", made_by_name: str = "",
+                    street: str = "", postcode: str = "") -> bool:
+    """Write the appointment fields to a lead. Returns True on success.
+
+    rep_owner_id reassigns the lead to the field rep (omitting ownerID makes SharpSpring
+    reassign to the API account owner, so we only send it when known). street/postcode
+    update the lead's standard address (from the booking's Location + Postcode).
+    """
+    obj = {
+        "id": str(lead_id),
+        "leadStatus": "qualified",
+        _SS_F_STATUS: "Appointment",
+        _SS_F_APPT_DT: f"{date_iso} {start_time}:00",
+        _SS_F_APPT_BOOKED: "Yes",
+        # SharpSpring stores/displays this as UK local time, so write UK wall-clock
+        # (auto-handles BST/GMT) — not UTC, which reads an hour behind in summer.
+        _SS_F_BOOKED_TS: _now_uk().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    if rep_owner_id:
+        obj["ownerID"] = str(rep_owner_id)
+    if made_by_name:
+        obj[_SS_F_MADE_BY] = made_by_name
+    if street:
+        obj["street"] = street
+    if postcode:
+        obj["zipcode"] = postcode
+    resp = _ss_call("updateLeads", {"objects": [obj]})
+    updates = (resp.get("result") or {}).get("updates", []) if resp else []
+    return bool(updates and updates[0].get("success"))
+
+
+def _ss_create_note(lead_id: str, text: str, owner_id: str = "") -> bool:
+    """Create a note in the lead's activity feed. owner_id attributes it to that user."""
+    if not text:
+        return False
+    obj = {"whoID": str(lead_id), "whoType": "lead", "note": text}
+    if owner_id:
+        obj["authorID"] = str(owner_id)
+    resp = _ss_call("createNotes", {"objects": [obj]})
+    creates = (resp.get("result") or {}).get("creates", []) if resp else []
+    return bool(creates and creates[0].get("success"))
+
+
+def _digits(s: str) -> str:
+    return "".join(c for c in (s or "") if c.isdigit())
+
+
+def _bq_search_leads(name: str, phone: str, email: str, postcode: str, limit: int = 25) -> list[dict]:
+    """Search the synced lead history in BigQuery. Provided fields are AND-combined."""
+    conds, params = [], []
+    if name:
+        # Tokenise: each word must appear somewhere in "first last" — order/whitespace independent.
+        for i, tok in enumerate(name.split()):
+            conds.append(
+                f"LOWER(CONCAT(COALESCE(first_name,''),' ',COALESCE(last_name,''))) LIKE @nm{i}")
+            params.append(bigquery.ScalarQueryParameter(f"nm{i}", "STRING", f"%{tok.lower()}%"))
+    if email:
+        conds.append("LOWER(COALESCE(email_address,'')) LIKE @email")
+        params.append(bigquery.ScalarQueryParameter("email", "STRING", f"%{email.lower()}%"))
+    if postcode:
+        conds.append("REPLACE(LOWER(COALESCE(zipcode,'')),' ','') LIKE @pc")
+        params.append(bigquery.ScalarQueryParameter("pc", "STRING", f"%{postcode.lower().replace(' ', '')}%"))
+    if phone:
+        conds.append("(REGEXP_REPLACE(COALESCE(phone_number,''),r'[^0-9]','') LIKE @ph"
+                     " OR REGEXP_REPLACE(COALESCE(mobile_phone_number,''),r'[^0-9]','') LIKE @ph)")
+        params.append(bigquery.ScalarQueryParameter("ph", "STRING", f"%{_digits(phone)}%"))
+    if not conds:
+        return []
+    sql = (
+        "SELECT id, first_name, last_name, email_address, phone_number,"
+        " mobile_phone_number, zipcode, owner_id,"
+        " status_633ae6f6ac6fe AS dom_status"
+        " FROM bronze.sharpspring_leads"
+        f" WHERE {' AND '.join(conds)}"
+        " ORDER BY update_timestamp DESC"
+        f" LIMIT {limit}"
+    )
+    rows = _bq().query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).result()
+    return [dict(r) for r in rows]
+
+
+def _search_leads(name: str, phone: str, email: str, postcode: str) -> list[dict]:
+    """Merge BigQuery history + today's fresh SharpSpring leads, deduped by id (fresh wins)."""
+    name_tokens = name.lower().split() if name else []
+    em = email.lower() if email else ""
+    pc = postcode.lower().replace(" ", "") if postcode else ""
+    ph = _digits(phone)
+
+    merged: dict[str, dict] = {}
+    try:
+        for r in _bq_search_leads(name, phone, email, postcode):
+            merged[str(r["id"])] = {
+                "id": str(r["id"]),
+                "name": f"{r.get('first_name') or ''} {r.get('last_name') or ''}".strip(),
+                "email": r.get("email_address") or "",
+                "phone": r.get("phone_number") or r.get("mobile_phone_number") or "",
+                "postcode": r.get("zipcode") or "",
+                "status": r.get("dom_status") or "",
+                "source": "history",
+            }
+    except Exception as exc:  # noqa: BLE001 — search must degrade gracefully
+        print(f"WARNING: BigQuery lead search failed: {exc}", file=sys.stderr)
+
+    for lead in _ss_fresh_leads_today():
+        full = f"{lead.get('firstName') or ''} {lead.get('lastName') or ''}".lower()
+        if name_tokens and not all(t in full for t in name_tokens):
+            continue
+        if em and em not in (lead.get("emailAddress") or "").lower():
+            continue
+        if pc and pc not in (lead.get("zipcode") or "").lower().replace(" ", ""):
+            continue
+        if ph:
+            pd = _digits((lead.get("phoneNumber") or "") + (lead.get("mobilePhoneNumber") or ""))
+            if ph not in pd:
+                continue
+        merged[str(lead.get("id"))] = {
+            "id": str(lead.get("id")),
+            "name": f"{lead.get('firstName') or ''} {lead.get('lastName') or ''}".strip(),
+            "email": lead.get("emailAddress") or "",
+            "phone": lead.get("phoneNumber") or lead.get("mobilePhoneNumber") or "",
+            "postcode": lead.get("zipcode") or "",
+            "status": lead.get("status_633ae6f6ac6fe") or "",
+            "source": "fresh",
+        }
+
+    return list(merged.values())[:25]
 
 
 # ---------------------------------------------------------------------------
@@ -497,6 +928,20 @@ def api_refresh():
     return jsonify({"ok": True})
 
 
+@app.route("/api/search_leads", methods=["POST"])
+@login_required
+def api_search_leads():
+    """Find a SharpSpring lead by name/phone/email/postcode (BigQuery + today's fresh leads)."""
+    data = request.get_json(silent=True) or {}
+    name     = (data.get("name") or "").strip()
+    phone    = (data.get("phone") or "").strip()
+    email    = (data.get("email") or "").strip()
+    postcode = (data.get("postcode") or "").strip()
+    if not any([name, phone, email, postcode]):
+        return jsonify({"leads": []})
+    return jsonify({"leads": _search_leads(name, phone, email, postcode)})
+
+
 @app.route("/api/book", methods=["POST"])
 @login_required
 def api_book():
@@ -511,6 +956,9 @@ def api_book():
     cc_emails  = [e.strip() for e in (data.get("cc_emails") or []) if str(e).strip()]
     notes      = (data.get("notes") or "").strip()
     teams      = bool(data.get("teams_meeting", False))
+    lead_id    = (data.get("lead_id") or "").strip()
+    skip_crm   = bool(data.get("skip_crm", False))
+    location   = (data.get("location") or "").strip()
 
     if not all([rep_name, date_iso, start_time, end_time, customer, postcode]):
         return jsonify({"ok": False, "message": "Missing required fields"}), 400
@@ -531,10 +979,15 @@ def api_book():
         return jsonify({"ok": False, "message": "This slot was just booked. Please pick another time."}), 409
 
     subject  = f"{postcode} - {customer}"
-    rep_first = rep_name.split()[0] if rep_name else ""
+    rep_category = _rep_outlook_category(rep_name)  # exact Outlook category so the colour shows
 
     booker_email = session.get("email", "").strip()
     booker_name  = session.get("name", "Telesales")
+
+    # Booking user's SharpSpring identity — for note attribution + "Appointment Booked By"
+    _booker = _get_user(session.get("username", "")) or {}
+    booker_owner_id = _booker.get("sharpspring_owner_id") or ""
+    booker_made_by  = _booker.get("sharpspring_name") or ""
 
     _TELESALES = "telesales@trustelectricheating.co.uk"
 
@@ -566,7 +1019,8 @@ def api_book():
 
     would_create = {
         "subject": subject,
-        "categories": [rep_first] if rep_first else [],
+        "categories": [rep_category] if rep_category else [],
+        "location": {"displayName": location} if location else {"displayName": ""},
         "start": {"dateTime": f"{date_iso}T{start_time}:00", "timeZone": "Europe/London"},
         "end":   {"dateTime": f"{date_iso}T{end_time}:00",   "timeZone": "Europe/London"},
         "attendees": attendees,
@@ -597,17 +1051,68 @@ def api_book():
             app.logger.error("Graph booking error %s: %s", graph_resp.status_code, err_msg)
             return jsonify({"ok": False, "message": f"Calendar error ({graph_resp.status_code}): {err_msg}"}), 500
 
+        event_id = (graph_resp.json() or {}).get("id", "")
+
         with _avail_lock:
             _avail_cache.clear()
         with _diary_lock:
             _diary_cache.clear()
 
+        # ── CRM write-back — runs only after the calendar booking succeeds, and
+        #    never blocks it. Locked ordering: verify lead → update → note. ──
+        crm_status = "skipped"
+        if lead_id and not skip_crm:
+            try:
+                lead = _ss_get_lead(lead_id)
+                if lead is None:
+                    crm_status = "not_found"
+                else:
+                    # Reassign to the field rep if we know their owner id; otherwise
+                    # preserve the lead's current owner (never let it default to the API account).
+                    owner_id = _rep_owner_id(rep_name) or (lead.get("ownerID") or "")
+                    updated = _ss_update_lead(
+                        lead_id, date_iso=date_iso, start_time=start_time,
+                        rep_owner_id=owner_id, made_by_name=booker_made_by,
+                        street=location, postcode=postcode,
+                    )
+                    if notes:
+                        _ss_create_note(lead_id, notes, owner_id=booker_owner_id)
+                    crm_status = "updated" if updated else "failed"
+            except Exception:
+                app.logger.exception("CRM write-back failed (booking still succeeded)")
+                crm_status = "failed"
+
+        # ── Record the booking so it can be cancelled later from the diary. ──
+        # Store lead_id only when the CRM was actually updated, so cancel reverts
+        # CRM only for bookings that changed it; others cancel calendar-only.
+        _record_booking(
+            event_id=event_id,
+            lead_id=(lead_id if crm_status == "updated" else ""),
+            booker_username=session.get("username", ""),
+            booker_owner_id=booker_owner_id,
+            booker_name=booker_name,
+            rep_name=rep_name,
+            rep_owner_id=_rep_owner_id(rep_name),
+            customer=customer,
+            postcode=postcode,
+            appt_date=date_iso,
+            appt_start=start_time,
+            appt_end=end_time,
+        )
+
         booked_by = f" — booked by {booker_name}" if booker_email else ""
+        crm_tail = {
+            "updated":   " · CRM updated",
+            "failed":    " · CRM update failed — update SharpSpring manually",
+            "not_found": " · lead not found in CRM — update SharpSpring manually",
+            "skipped":   "",
+        }[crm_status]
         message = (
             f"Booked: {rep_name} · {date_iso} · {start_time}–{end_time} "
-            f"· {customer} ({postcode}){booked_by}"
+            f"· {customer} ({postcode}){booked_by}{crm_tail}"
         )
-        return jsonify({"ok": True, "dry_run": False, "message": message})
+        return jsonify({"ok": True, "dry_run": False, "message": message,
+                        "crm_status": crm_status})
 
     except Exception as ex:
         app.logger.exception("Booking request failed")
@@ -615,6 +1120,64 @@ def api_book():
 
     finally:
         _redis_release(lock_key, lock_val)
+
+
+@app.route("/api/cancel", methods=["POST"])
+@login_required
+def api_cancel():
+    """Cancel a tool-booked appointment: delete the calendar event + revert the CRM."""
+    data = request.get_json(silent=True) or {}
+    event_id = (data.get("event_id") or "").strip()
+    if not event_id:
+        return jsonify({"ok": False, "message": "Missing event_id"}), 400
+
+    booking = _get_active_booking(event_id)
+    if not booking:
+        return jsonify({"ok": False, "message": "This appointment can't be cancelled here "
+                        "(it wasn't booked through this tool)."}), 404
+
+    # 1. Remove the calendar event (the appointment itself). Critical — abort if it fails,
+    #    so we never revert the CRM while the event still stands.
+    if not _ss_delete_event(event_id):
+        return jsonify({"ok": False, "message": "Couldn't remove the calendar event — please try again."}), 502
+
+    # 2. Revert the CRM (best-effort — the appointment is already gone from the calendar).
+    crm_status = "skipped"
+    lead_id = booking.get("lead_id") or ""
+    if lead_id:
+        try:
+            lead = _ss_get_lead(lead_id)
+            if lead is None:
+                crm_status = "not_found"
+            else:
+                ok = _ss_cancel_lead(lead, booking.get("booker_owner_id") or "")
+                canceller = _get_user(session.get("username", "")) or {}
+                _ss_create_note(
+                    lead_id,
+                    f"Appointment cancelled by {session.get('name', 'Telesales')} "
+                    f"on {_now_uk().strftime('%d %b %Y')}.",
+                    owner_id=(canceller.get("sharpspring_owner_id") or ""),
+                )
+                crm_status = "reverted" if ok else "failed"
+        except Exception:
+            app.logger.exception("CRM cancel failed (calendar event already removed)")
+            crm_status = "failed"
+
+    # 3. Mark the booking cancelled + refresh caches.
+    _mark_booking_cancelled(event_id, session.get("username", ""))
+    with _avail_lock:
+        _avail_cache.clear()
+    with _diary_lock:
+        _diary_cache.clear()
+
+    tail = {
+        "reverted":  " CRM reverted.",
+        "failed":    " CRM revert failed — update SharpSpring manually.",
+        "not_found": " (lead no longer in CRM).",
+        "skipped":   "",
+    }[crm_status]
+    return jsonify({"ok": True, "crm_status": crm_status,
+                    "message": f"Appointment cancelled.{tail}"})
 
 
 # ---------------------------------------------------------------------------
@@ -647,6 +1210,7 @@ def api_rep_diary():
         start = date.today() - timedelta(days=days_back)
         events = fetch_events(days=days_back + days_forward, start_date=start)
         data = build_rep_diary(events)
+        _annotate_cancellable(data)
         with _diary_lock:
             _diary_cache[key] = {"data": data, "ts": time.time()}
         return jsonify(data)
@@ -670,7 +1234,7 @@ def api_diary_refresh():
 @admin_required
 def admin_users():
     users = _get_all_users()
-    return render_template("admin_users.html", users=users)
+    return render_template("admin_users.html", users=users, made_by_options=MADE_BY_OPTIONS)
 
 
 @app.route("/admin/users/add", methods=["POST"])
@@ -696,6 +1260,28 @@ def admin_add_user():
         job_config=bigquery.QueryJobConfig(query_parameters=_bq_params(
             username=username, ph=_hash_password(password),
             name=name, email=email, role=role, now_ts=now,
+        )),
+    ).result()
+    return redirect(url_for("admin_users"))
+
+
+@app.route("/admin/users/sharpspring", methods=["POST"])
+@admin_required
+def admin_set_user_sharpspring():
+    """Set a user's SharpSpring owner ID (note attribution) and Booked-By picklist name."""
+    username = (request.form.get("username") or "").strip().lower()
+    owner_id = (request.form.get("sharpspring_owner_id") or "").strip()
+    ss_name  = (request.form.get("sharpspring_name") or "").strip()
+    if not username:
+        abort(400)
+    if ss_name and ss_name not in MADE_BY_OPTIONS:
+        ss_name = ""  # never store a value that isn't a valid picklist option
+    now = datetime.now(timezone.utc).isoformat()
+    _bq().query(
+        f"UPDATE {BQ_USERS} SET sharpspring_owner_id = @oid, sharpspring_name = @nm,"
+        f" updated_at = @now_ts WHERE username = @u",
+        job_config=bigquery.QueryJobConfig(query_parameters=_bq_params(
+            oid=owner_id, nm=ss_name, u=username, now_ts=now,
         )),
     ).result()
     return redirect(url_for("admin_users"))
@@ -763,6 +1349,25 @@ def admin_add_rep():
             bigquery.ScalarQueryParameter("weekend_days", "STRING",    json.dumps(weekend_days)),
             bigquery.ScalarQueryParameter("aliases",      "STRING",    json.dumps(aliases)),
             bigquery.ScalarQueryParameter("now_ts",       "TIMESTAMP", now),
+        ]),
+    ).result()
+    reload_reps()
+    return redirect(url_for("admin_reps"))
+
+
+@app.route("/admin/reps/owner", methods=["POST"])
+@admin_required
+def admin_set_rep_owner():
+    """Set a rep's SharpSpring owner ID (used to reassign the lead on booking)."""
+    name     = (request.form.get("name") or "").strip()
+    owner_id = (request.form.get("sharpspring_owner_id") or "").strip()
+    if not name:
+        abort(400)
+    _bq().query(
+        f"UPDATE {BQ_REPS} SET sharpspring_owner_id = @oid WHERE name = @n",
+        job_config=bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("oid", "STRING", owner_id or None),
+            bigquery.ScalarQueryParameter("n",   "STRING", name),
         ]),
     ).result()
     reload_reps()

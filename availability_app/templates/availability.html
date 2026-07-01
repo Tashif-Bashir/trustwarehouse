@@ -174,6 +174,24 @@
   .booking-field textarea{resize:vertical;min-height:72px}
   .booking-actions{display:flex;gap:8px;margin-top:14px;align-items:center;justify-content:flex-end}
   .conflict-notice{background:var(--rose-soft);color:#c0392b;font-size:12px;font-weight:600;padding:8px 12px;border-radius:8px;margin-top:10px}
+  /* Lead search */
+  .lead-search{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .lead-search-label{font-size:11px;font-weight:700;color:var(--ink2);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:8px}
+  .lead-search-label span{display:block;font-weight:500;color:var(--muted);text-transform:none;letter-spacing:0;font-size:11px;margin-top:2px}
+  .lead-search-inputs{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .lead-search-inputs input{flex:1;min-width:84px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--line);background:var(--panel);font-family:inherit;font-size:13px;color:var(--ink);outline:none}
+  .lead-search-inputs input:focus{border-color:var(--indigo)}
+  .lead-results{margin-top:8px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel);max-height:210px;overflow-y:auto}
+  .lead-result{padding:8px 11px;border-bottom:1px solid var(--line);cursor:pointer;font-size:13px;display:flex;flex-direction:column;gap:2px}
+  .lead-result:last-child{border-bottom:none}
+  .lead-result:hover{background:var(--indigo-soft)}
+  .lead-result-meta{font-size:11.5px;color:var(--muted)}
+  .lead-selected{margin-top:8px;padding:8px 11px;border-radius:8px;background:var(--mint-soft);color:#1a7a5a;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .lead-unlink{background:none;border:none;color:var(--indigo);font-weight:600;font-size:12px;cursor:pointer;text-decoration:underline;flex-shrink:0}
+  .lead-skip{display:flex;align-items:center;gap:7px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink2);cursor:pointer}
+  .lead-skip input{width:15px;height:15px;cursor:pointer;accent-color:var(--indigo)}
+  .lead-none{margin-top:8px;font-size:12.5px;color:#b45309;font-weight:500}
+  .lead-calendar-only{margin-top:8px;font-size:12.5px;color:var(--muted);font-weight:500}
   /* Confirm modal */
   .confirm-overlay{position:fixed;inset:0;background:rgba(20,23,40,.45);display:flex;align-items:center;justify-content:center;z-index:200;animation:fadeIn .15s ease-out}
   @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -364,12 +382,24 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
   const [custName,     setCustName]     = useState('');
   const [custEmail,    setCustEmail]    = useState('');
   const [postcode,     setPostcode]     = useState('');
+  const [location,     setLocation]     = useState('');
   const [ccEmails,     setCcEmails]     = useState(['']);
   const [notes,        setNotes]        = useState('');
   const [teamsEnabled, setTeamsEnabled] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [booking,    setBooking]    = useState(false);
   const [result,     setResult]     = useState(null);
+  // Lead search (links the booking to a SharpSpring lead so the CRM updates)
+  const [lsName,     setLsName]     = useState('');
+  const [lsPhone,    setLsPhone]    = useState('');
+  const [lsEmail,    setLsEmail]    = useState('');
+  const [lsPostcode, setLsPostcode] = useState('');
+  const [leadResults,   setLeadResults]   = useState([]);
+  const [leadSearching, setLeadSearching] = useState(false);
+  const [searched,      setSearched]      = useState(false);
+  const [leadId,        setLeadId]        = useState('');
+  const [leadName,      setLeadName]      = useState('');
+  const [skipCrm,       setSkipCrm]       = useState(false);
 
   function addMins(t, m) {
     const [h, min] = t.split(':').map(Number);
@@ -377,16 +407,18 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
     return `${String(Math.floor(tot / 60)).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
   }
 
-  const bookingEnd = selEnd ? addMins(selEnd, 30) : null;
+  // End slot = end time. No end selected ⇒ a single 30-min appointment (also lets you book the last slot of the day).
+  const bookingEnd = selEnd ? selEnd : (selStart ? addMins(selStart, 30) : null);
 
-  function inRange(time) {
+  function inRange(time) {            // highlight: start..end inclusive (end slot shown as the endpoint)
     if (!selStart) return false;
     return time >= selStart && time <= (selEnd || selStart);
   }
 
-  const rangeSlots  = slots.filter(s => inRange(s.time));
-  const hasConflict = rangeSlots.some(s => s.status === 'booked' || s.status === 'off' || s.status === 'past');
-  const canBook     = !!(selStart && selEnd && custName.trim() && postcode.trim() && !hasConflict && !result && !dayIsPast);
+  // Blocks the appointment actually occupies = start .. (bookingEnd − 30). The end slot is a boundary, not occupied.
+  const occupiedSlots = slots.filter(s => selStart && bookingEnd && s.time >= selStart && s.time < bookingEnd);
+  const hasConflict   = occupiedSlots.some(s => s.status === 'booked' || s.status === 'off' || s.status === 'past');
+  const canBook       = !!(selStart && custName.trim() && postcode.trim() && !hasConflict && !result && !dayIsPast);
 
   function handleSlotClick(slot) {
     if (result || (slot.status !== 'free' && slot.status !== 'buffer') || dayIsPast) return;
@@ -403,8 +435,43 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
 
   function clearSelection() {
     setSelStart(null); setSelEnd(null);
-    setCustName(''); setCustEmail(''); setPostcode(''); setCcEmail(''); setNotes(''); setTeamsEnabled(false);
+    setCustName(''); setCustEmail(''); setPostcode(''); setLocation(''); setCcEmails(['']); setNotes(''); setTeamsEnabled(false);
+    setLsName(''); setLsPhone(''); setLsEmail(''); setLsPostcode('');
+    setLeadResults([]); setSearched(false); setLeadId(''); setLeadName(''); setSkipCrm(false);
   }
+
+  async function searchLeads() {
+    setLeadSearching(true); setSearched(false);
+    try {
+      const resp = await fetch('/api/search_leads', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: lsName.trim(), phone: lsPhone.trim(),
+          email: lsEmail.trim(), postcode: lsPostcode.trim(),
+        }),
+      });
+      const data = await resp.json();
+      setLeadResults(data.leads || []);
+    } catch (e) {
+      setLeadResults([]);
+    } finally {
+      setLeadSearching(false); setSearched(true);
+    }
+  }
+
+  function selectLead(l) {
+    setLeadId(l.id); setLeadName(l.name || '(no name)');
+    if (l.name)     setCustName(l.name);
+    if (l.postcode) setPostcode(l.postcode.toUpperCase());
+    if (l.email)    setCustEmail(l.email);
+    setLeadResults([]); setSearched(false);
+  }
+
+  function unlinkLead() {
+    setLeadId(''); setLeadName(''); setLeadResults([]); setSearched(false);
+  }
+
+  const hasLeadQuery = !!(lsName.trim() || lsPhone.trim() || lsEmail.trim() || lsPostcode.trim());
 
   async function handleBook() {
     setBooking(true);
@@ -418,9 +485,12 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
           customer_name: custName.trim(),
           customer_email: custEmail.trim(),
           postcode: postcode.trim().toUpperCase(),
+          location: location.trim(),
           cc_emails: ccEmails.map(e => e.trim()).filter(Boolean),
           notes: notes.trim(),
           teams_meeting: teamsEnabled,
+          lead_id: leadId,
+          skip_crm: skipCrm,
         }),
       });
       const data = await resp.json();
@@ -446,8 +516,8 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
       {/* Instruction hint */}
       {!result && !dayIsPast && (
         <div style={{fontSize:12,color: selStart ? 'var(--indigo)' : 'var(--muted)',fontWeight: selStart ? 600 : 400,marginBottom:10}}>
-          {!selStart && 'Click a free slot to start selecting a time range.'}
-          {selStart && !selEnd && `${selStart} selected — click the last slot of the appointment.`}
+          {!selStart && 'Click the start slot. Click a later slot to set the end time — or just book a single 30-min slot.'}
+          {selStart && !selEnd && `${selStart} – ${bookingEnd} (30 min). Click a later slot to extend the end time, or fill in the form to book.`}
           {selStart && selEnd && `${selStart} – ${bookingEnd} selected. Fill in the form below.`}
         </div>
       )}
@@ -496,11 +566,68 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
         <div className="booking-form">
           <div className="booking-range-row">
             <span className="booking-range-label">Appointment:</span>
-            <span className="booking-range-badge">{fmtDate(dayIso)} · {selStart} – {selEnd ? bookingEnd : '?'}</span>
+            <span className="booking-range-badge">{fmtDate(dayIso)} · {selStart} – {bookingEnd}</span>
             {postcode && <span className="booking-range-badge" style={{background:'var(--mint-soft)',color:'#1a7a5a'}}>{postcode}</span>}
-            {!selEnd && <span className="booking-hint">select end time above</span>}
+            {!selEnd && <span className="booking-hint">single 30-min slot — click a later slot to extend</span>}
           </div>
           <div className="booking-fields">
+            {/* Find the lead — links the booking to a SharpSpring lead so the CRM auto-updates */}
+            <div className="lead-search">
+              <label className="lead-search-label">
+                Find the lead {Ic.search || ''}
+                <span>type name, phone, email or postcode — updates SharpSpring on booking</span>
+              </label>
+              {!skipCrm && !leadId && (
+                <>
+                  <div className="lead-search-inputs">
+                    <input type="text" placeholder="Name" value={lsName}
+                      onChange={e => setLsName(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && hasLeadQuery && searchLeads()} />
+                    <input type="text" placeholder="Phone" value={lsPhone}
+                      onChange={e => setLsPhone(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && hasLeadQuery && searchLeads()} />
+                    <input type="text" placeholder="Email" value={lsEmail}
+                      onChange={e => setLsEmail(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && hasLeadQuery && searchLeads()} />
+                    <input type="text" placeholder="Postcode" value={lsPostcode}
+                      onChange={e => setLsPostcode(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && hasLeadQuery && searchLeads()} />
+                    <button type="button" className="btn btn-primary btn-sm"
+                      disabled={!hasLeadQuery || leadSearching} onClick={searchLeads}>
+                      {leadSearching ? '…' : 'Search'}
+                    </button>
+                  </div>
+                  {leadResults.length > 0 && (
+                    <div className="lead-results">
+                      {leadResults.map(l => (
+                        <div key={l.id} className="lead-result" onClick={() => selectLead(l)}>
+                          <strong>{l.name || '(no name)'}</strong>
+                          <span className="lead-result-meta">
+                            {[l.postcode, l.phone, l.status].filter(Boolean).join(' · ')}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {searched && leadResults.length === 0 && (
+                    <div className="lead-none">No lead found — tick "calendar only" below to book without updating SharpSpring.</div>
+                  )}
+                </>
+              )}
+              {!skipCrm && leadId && (
+                <div className="lead-selected">
+                  <span>✓ Linked to <strong>{leadName}</strong> — SharpSpring will be updated</span>
+                  <button type="button" className="lead-unlink" onClick={unlinkLead}>change</button>
+                </div>
+              )}
+              {skipCrm && (
+                <div className="lead-calendar-only">Calendar only — SharpSpring will not be updated.</div>
+              )}
+              <label className="lead-skip">
+                <input type="checkbox" checked={skipCrm} onChange={e => setSkipCrm(e.target.checked)} />
+                Book calendar only — don't update SharpSpring
+              </label>
+            </div>
             {/* Row 1: name + postcode side by side */}
             <div style={{display:'flex',gap:10}}>
               <div className="booking-field" style={{flex:2}}>
@@ -513,6 +640,12 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
                   onChange={e => setPostcode(e.target.value.toUpperCase())}
                   style={{textTransform:'uppercase',letterSpacing:'.5px'}} />
               </div>
+            </div>
+            {/* Location → calendar event Location + CRM address */}
+            <div className="booking-field">
+              <label>Location / address (optional)</label>
+              <input type="text" placeholder="e.g. 7 Alder Close, Sandford, Wareham"
+                value={location} onChange={e => setLocation(e.target.value)} />
             </div>
             {/* Customer email */}
             <div className="booking-field">
@@ -607,6 +740,10 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
               {ccEmails.some(e => e.trim()) && <><br/>CC: {ccEmails.filter(e => e.trim()).join(', ')}</>}
               {custEmail && <><br/>Customer: {custEmail}</>}
               {teamsEnabled && <><br/>📹 Teams link will be added</>}
+              <br/>
+              {leadId && !skipCrm
+                ? <span style={{color:'#1a7a5a',fontWeight:600}}>✓ SharpSpring lead "{leadName}" will be updated</span>
+                : <span style={{color:'var(--muted)'}}>SharpSpring will not be updated (calendar only)</span>}
               {notes && <><br/><span style={{fontSize:12,color:'var(--muted)'}}>{notes}</span></>}
             </div>
             <div className="confirm-actions">

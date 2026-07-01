@@ -142,6 +142,23 @@
   .cal-btn-clear:hover{background:var(--bg);color:var(--ink)}
   .cal-btn-apply{font-size:12.5px;font-weight:700;color:#fff;background:linear-gradient(135deg,#5B6CFF,#8B5CF6);border:none;border-radius:8px;padding:7px 16px}
   .cal-btn-apply:disabled{opacity:.4;cursor:default}
+
+  /* Cancel appointment */
+  .appt-cancel{flex-shrink:0;font-size:11.5px;font-weight:600;color:var(--muted);padding:4px 10px;border-radius:7px;border:1.5px solid var(--line);background:var(--panel);transition:all .12s;opacity:0}
+  .appt-row:hover .appt-cancel{opacity:1}
+  .appt-cancel:hover{background:var(--rose-soft);color:var(--rose);border-color:var(--rose-soft)}
+  .appt-row.today .appt-cancel{opacity:1;background:#fff}
+  .btn-danger{background:var(--rose);color:#fff;box-shadow:0 5px 14px rgba(255,107,122,.32)}
+  .btn-danger:hover{opacity:.92}
+  .btn-danger:disabled{opacity:.5;cursor:default}
+  .cancel-overlay{position:fixed;inset:0;background:rgba(20,23,40,.45);display:flex;align-items:center;justify-content:center;z-index:300;animation:fadeIn .15s ease-out}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  .cancel-box{background:var(--panel);border-radius:18px;padding:26px;max-width:400px;width:90%;box-shadow:var(--shadow-md)}
+  .cancel-title{font-size:16px;font-weight:700;letter-spacing:-.2px;margin-bottom:12px}
+  .cancel-detail{font-size:13.5px;color:var(--ink2);line-height:1.5}
+  .cancel-warn{font-size:12.5px;color:var(--muted);background:var(--bg);border-radius:10px;padding:10px 12px;margin-top:12px;line-height:1.45}
+  .cancel-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;font-size:13px;font-weight:500;padding:12px 18px;border-radius:10px;box-shadow:var(--shadow-md);z-index:400;cursor:pointer;max-width:90%;animation:fadeIn .15s ease-out}
 </style>
 </head>
 <body>
@@ -356,7 +373,7 @@ function RepList({ reps, selected, onSelect }) {
 }
 
 /* ── Single appointment row ── */
-function ApptRow({ appt }) {
+function ApptRow({ appt, onCancel }) {
   const d = new Date(appt.date + 'T00:00:00');
   const dayStr = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
   const kind   = appt.is_today ? 'today' : appt.is_past ? 'past' : 'future';
@@ -365,12 +382,18 @@ function ApptRow({ appt }) {
       <div className="appt-date">{dayStr}</div>
       <div className="appt-time">{appt.start}{appt.end ? `–${appt.end}` : ''}</div>
       <div className="appt-subject" title={appt.subject}>{appt.subject || '(no title)'}</div>
+      {appt.cancellable && !appt.is_past && (
+        <button className="appt-cancel" onClick={() => onCancel(appt)}
+          title="Cancel this appointment — removes the calendar event and reverts the CRM">
+          Cancel
+        </button>
+      )}
     </div>
   );
 }
 
 /* ── Timeline for one rep ── */
-function Timeline({ rep, filterRange, onClearFilter }) {
+function Timeline({ rep, filterRange, onClearFilter, onCancel }) {
   const all = rep.appointments;
 
   const filtered = filterRange
@@ -429,7 +452,7 @@ function Timeline({ rep, filterRange, onClearFilter }) {
         {past.length > 0 && (
           <>
             <div className="tl-section-label">Past</div>
-            {past.map(a => <ApptRow key={`${a.date}-${a.start}`} appt={a} />)}
+            {past.map(a => <ApptRow key={`${a.date}-${a.start}`} appt={a} onCancel={onCancel} />)}
           </>
         )}
 
@@ -439,14 +462,14 @@ function Timeline({ rep, filterRange, onClearFilter }) {
 
         {showTodayDivider && (
           todays.length > 0
-            ? todays.map(a => <ApptRow key={`${a.date}-${a.start}`} appt={a} />)
+            ? todays.map(a => <ApptRow key={`${a.date}-${a.start}`} appt={a} onCancel={onCancel} />)
             : <div className="tl-empty" style={{padding:'8px 0',fontSize:12}}>No appointments today</div>
         )}
 
         {future.length > 0 && (
           <>
             <div className="tl-section-label" style={{paddingTop:14}}>Upcoming</div>
-            {future.map(a => <ApptRow key={`${a.date}-${a.start}`} appt={a} />)}
+            {future.map(a => <ApptRow key={`${a.date}-${a.start}`} appt={a} onCancel={onCancel} />)}
           </>
         )}
       </div>
@@ -464,6 +487,9 @@ function App() {
   const [lastRefresh, setLastRefresh] = useState(null);
   const [calOpen,     setCalOpen]     = useState(false);
   const [filterRange, setFilterRange] = useState(null);
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancelBusy,   setCancelBusy]   = useState(false);
+  const [toast,        setToast]        = useState(null);
   const calRef = useRef(null);
 
   useEffect(() => { loadDiary(daysBack); }, [daysBack]);
@@ -507,6 +533,28 @@ function App() {
   function handleCalClear() {
     setFilterRange(null);
     setCalOpen(false);
+  }
+
+  async function confirmCancel() {
+    if (!cancelTarget) return;
+    setCancelBusy(true);
+    try {
+      const resp = await fetch('/api/cancel', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_id: cancelTarget.event_id }),
+      });
+      const data = await resp.json();
+      setToast(data.message || (data.ok ? 'Appointment cancelled.' : 'Cancel failed.'));
+      setCancelTarget(null);
+      if (data.ok) {
+        fetch('/api/reps/diary/refresh').then(() => loadDiary(daysBack));
+      }
+    } catch (e) {
+      setToast('Cancel failed: ' + e.message);
+    } finally {
+      setCancelBusy(false);
+      setTimeout(() => setToast(null), 6000);
+    }
   }
 
   const allReps = diary?.reps || [];
@@ -582,12 +630,38 @@ function App() {
                     rep={repData}
                     filterRange={filterRange}
                     onClearFilter={() => setFilterRange(null)}
+                    onCancel={setCancelTarget}
                   />
                 : <div className="tl-no-select">Select a rep to see their diary</div>
               }
             </div>
           </div>
         )}
+
+        {cancelTarget && (
+          <div className="cancel-overlay"
+            onClick={e => e.target === e.currentTarget && !cancelBusy && setCancelTarget(null)}>
+            <div className="cancel-box">
+              <div className="cancel-title">Cancel appointment?</div>
+              <div className="cancel-detail">
+                <strong>{cancelTarget.subject || '(no title)'}</strong><br/>
+                {selectedRep} · {fmtIso(cancelTarget.date)} · {cancelTarget.start}{cancelTarget.end ? `–${cancelTarget.end}` : ''}
+              </div>
+              <div className="cancel-warn">
+                This removes the calendar event and reverts the lead in SharpSpring
+                (status → Appointment Cancelled, owner back to the booker).
+              </div>
+              <div className="cancel-actions">
+                <button className="btn btn-ghost" onClick={() => setCancelTarget(null)} disabled={cancelBusy}>Keep it</button>
+                <button className="btn btn-danger" onClick={confirmCancel} disabled={cancelBusy}>
+                  {cancelBusy ? 'Cancelling…' : 'Cancel appointment'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {toast && <div className="toast" onClick={() => setToast(null)}>{toast}</div>}
       </main>
     </div>
   );

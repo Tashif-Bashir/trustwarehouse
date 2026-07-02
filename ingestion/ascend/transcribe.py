@@ -160,7 +160,7 @@ def run() -> None:
     from faster_whisper import WhisperModel
     model = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
 
-    rows = []
+    inserted = 0
     for rec in todo:
         tmp = Path(tempfile.gettempdir()) / f"ascend_{rec['id']}.mp3"
         try:
@@ -170,7 +170,9 @@ def run() -> None:
         finally:
             tmp.unlink(missing_ok=True)  # never retain audio
         phone = _normalise_phone(rec["caller"]["phoneNumber"])
-        rows.append({
+        # Insert per recording so a mid-batch crash never loses completed work
+        # and progress is visible in BigQuery immediately.
+        errors = bq.insert_rows_json(TABLE, [{
             "recording_id": rec["id"],
             "call_id": rec.get("callId"),
             "user_uuid": rec["user_uuid"],
@@ -184,13 +186,13 @@ def run() -> None:
             "transcript": text,
             "model": f"faster-whisper-{WHISPER_MODEL}-int8",
             "transcribed_at": datetime.now(timezone.utc).isoformat(),
-        })
+        }])
+        if errors:
+            raise RuntimeError(f"BigQuery insert errors: {errors[:3]}")
+        inserted += 1
         print(f"  done {rec['id']} ({rec.get('duration')}s, {len(text)} chars)", flush=True)
 
-    errors = bq.insert_rows_json(TABLE, rows)
-    if errors:
-        raise RuntimeError(f"BigQuery insert errors: {errors[:3]}")
-    print(f"inserted {len(rows)} transcripts into {TABLE}")
+    print(f"inserted {inserted} transcripts into {TABLE}")
 
 
 if __name__ == "__main__":

@@ -33,6 +33,29 @@ MIN_SECONDS = int(os.environ.get("ASCEND_TRANSCRIBE_MIN_SECONDS", "120"))
 LOOKBACK_DAYS = int(os.environ.get("ASCEND_TRANSCRIBE_LOOKBACK_DAYS", "3"))
 MAX_PER_RUN = int(os.environ.get("ASCEND_TRANSCRIBE_MAX_PER_RUN", "60"))
 WHISPER_MODEL = os.environ.get("ASCEND_WHISPER_MODEL", "small")
+WHISPER_DEVICE = os.environ.get("ASCEND_WHISPER_DEVICE", "cpu")  # cpu (VM) | cuda (GPU worker)
+
+
+def _load_model():
+    """Load faster-whisper on the configured device.
+
+    On Windows+cuda the pip-installed CUDA DLLs (nvidia-cublas/cudnn packages)
+    must be registered before ctranslate2 loads.
+    """
+    if WHISPER_DEVICE == "cuda" and os.name == "nt":
+        try:
+            import nvidia
+            for base in list(nvidia.__path__):
+                for sub in os.listdir(base):
+                    d = os.path.join(base, sub, "bin")
+                    if os.path.isdir(d):
+                        os.add_dll_directory(d)
+                        os.environ["PATH"] = d + os.pathsep + os.environ["PATH"]
+        except ImportError:
+            pass  # system-wide CUDA install
+    from faster_whisper import WhisperModel
+    compute = "float16" if WHISPER_DEVICE == "cuda" else "int8"
+    return WhisperModel(WHISPER_MODEL, device=WHISPER_DEVICE, compute_type=compute)
 
 DDL = f"""
 CREATE TABLE IF NOT EXISTS `{TABLE}` (
@@ -157,8 +180,7 @@ def run() -> None:
 
     leads = _match_leads(bq, [_normalise_phone(r["caller"]["phoneNumber"]) for r in todo])
 
-    from faster_whisper import WhisperModel
-    model = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
+    model = _load_model()
 
     inserted = 0
     for rec in todo:
@@ -184,7 +206,7 @@ def run() -> None:
             "recording_file": rec.get("fileName"),
             "lead_id": leads.get(phone or ""),
             "transcript": text,
-            "model": f"faster-whisper-{WHISPER_MODEL}-int8",
+            "model": f"faster-whisper-{WHISPER_MODEL}-{'float16' if WHISPER_DEVICE == 'cuda' else 'int8'}",
             "transcribed_at": datetime.now(timezone.utc).isoformat(),
         }])
         if errors:

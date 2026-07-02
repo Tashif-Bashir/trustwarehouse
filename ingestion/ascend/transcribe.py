@@ -144,6 +144,8 @@ def run() -> None:
                     continue
                 todo.append({**rec, "user_uuid": uuid, "agent": name})
         except Exception as exc:  # noqa: BLE001 — one bad user must not sink the batch
+            if "404" in str(exc):
+                continue  # recording not enabled for this user (e.g. field reps) — expected
             print(f"  WARNING: listing recordings failed for {name or uuid}: {exc}", flush=True)
     todo.sort(key=lambda r: r["whenCreated"], reverse=True)
     dropped = max(0, len(todo) - MAX_PER_RUN)

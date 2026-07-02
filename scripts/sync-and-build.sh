@@ -42,6 +42,9 @@ case "$SOURCE" in
   ga4)
     SELECTOR=""  # no dbt step
     ;;
+  ascend)
+    SELECTOR=""  # bronze only for now — silver_ascend_calls comes once schema settles
+    ;;
   unleashed)
     SELECTOR="silver_unleashed_customers silver_unleashed_products silver_unleashed_sales_orders silver_unleashed_stock_on_hand gold_sales_orders gold_sales_reconciled"
     ;;

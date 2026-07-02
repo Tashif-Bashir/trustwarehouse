@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Ascend sync every 60 seconds
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=60s
+AccuracySec=10s
+Unit=ascend-sync.service
+
+[Install]
+WantedBy=timers.target

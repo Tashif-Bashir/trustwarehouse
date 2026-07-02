@@ -1,0 +1,12 @@
+[Unit]
+Description=Sync Ascend (Focus phone system) calls into bronze
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/trustwarehouse
+EnvironmentFile=/home/ubuntu/trustwarehouse/.env
+ExecStart=/home/ubuntu/trustwarehouse/scripts/sync-and-build.sh ascend
+StandardOutput=journal
+StandardError=journal

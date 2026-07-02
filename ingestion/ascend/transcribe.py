@@ -68,13 +68,18 @@ def _normalise_phone(raw: str | None) -> str | None:
 
 
 def _agents(bq: bigquery.Client) -> dict[str, str]:
-    """uuid -> display name for every agent seen in the CDRs."""
+    """uuid -> display name for every real user seen in the CDRs.
+
+    Auto-attendants/external legs carry pseudo ids (base64-ish, ':E' suffix) that the
+    recordings endpoint rejects — only proper GUIDs are real users.
+    """
     rows = bq.query(f"""
         SELECT DISTINCT JSON_VALUE(side, '$.userUniqueId') AS uuid,
                JSON_VALUE(side, '$.name') AS name
         FROM `{PROJECT}.bronze.ascend_calls`,
              UNNEST([`from`, `to`]) AS side
-        WHERE JSON_VALUE(side, '$.userUniqueId') IS NOT NULL
+        WHERE REGEXP_CONTAINS(JSON_VALUE(side, '$.userUniqueId'),
+              r'^[0-9A-Fa-f]{{8}}-[0-9A-Fa-f]{{4}}-[0-9A-Fa-f]{{4}}-[0-9A-Fa-f]{{4}}-[0-9A-Fa-f]{{12}}$')
     """).result()
     return {r["uuid"]: r["name"] or "" for r in rows}
 
@@ -124,13 +129,16 @@ def run() -> None:
     # Collect the work list first so we can lead-match in one query.
     todo: list[dict] = []
     for uuid, name in agents.items():
-        for rec in client.get_call_recordings(uuid):
-            when = datetime.fromisoformat(rec["whenCreated"])
-            if when < cutoff:
-                break  # newest-first — everything after this is older
-            if rec["id"] in done or rec.get("duration", 0) < MIN_SECONDS:
-                continue
-            todo.append({**rec, "user_uuid": uuid, "agent": name})
+        try:
+            for rec in client.get_call_recordings(uuid):
+                when = datetime.fromisoformat(rec["whenCreated"])
+                if when < cutoff:
+                    break  # newest-first — everything after this is older
+                if rec["id"] in done or rec.get("duration", 0) < MIN_SECONDS:
+                    continue
+                todo.append({**rec, "user_uuid": uuid, "agent": name})
+        except Exception as exc:  # noqa: BLE001 — one bad user must not sink the batch
+            print(f"  WARNING: listing recordings failed for {name or uuid}: {exc}", flush=True)
     todo.sort(key=lambda r: r["whenCreated"], reverse=True)
     dropped = max(0, len(todo) - MAX_PER_RUN)
     todo = todo[:MAX_PER_RUN]

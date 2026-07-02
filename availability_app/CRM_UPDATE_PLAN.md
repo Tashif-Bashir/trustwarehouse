@@ -281,6 +281,84 @@ Doubles as an audit trail for the later sales/performance work.
 
 ---
 
+# Feature 3: Heating / Water appointment types (Enquiry Type → dual lead statuses)
+
+**Goal:** the CRM tracks heating and water as parallel pipelines. When booking, telesales must be able to say *what* the appointment is for, and the tool must update the right status field(s) — plus record the customer's stance on the other product — so nobody touches the CRM manually.
+
+## CRM fields (confirmed via getFields)
+| Field | System name | Notes |
+|---|---|---|
+| Enquiry Type | `lead_warmth__1__69ea236712886` | picklist: `Heating` / `Heating and Water` / `Water` (repurposed old "lead warmth" field). **Human-chosen on the form** (design changed during preview testing): a third dropdown, pre-filled from the **live** CRM value at lead selection (`/api/lead_enquiry` — search's BigQuery copy can lag ≤30 min), independent of the two status dropdowns, written back exactly as picked ("— leave as is —" = don't write). Covers the rare case where a customer enquires about one product but books another. |
+| Domestic Lead Status (main/heating) | `status_633ae6f6ac6fe` | already written today |
+| **Domestic Lead Status WATER** | `domestic_lead_status__1__6a0f07b50b5d2` | same 17 options as main |
+
+(The CRM has a whole parallel water pipeline — Appointment Status WATER, Appointment Amount WATER (£), Installation/Delivery Date WATER — out of scope here, but relevant to the future sales scorecard.)
+
+## Decisions locked (with owner)
+- **Status matrix** ("other side" outcome is the telesales person's call, per the customer's stance):
+
+| Booked | Main status | WATER status |
+|---|---|---|
+| Heating + Water | `Appointment` | `Appointment` |
+| Heating only | `Appointment` | `Follow Up` / `Not Interested` / unchanged — telesales picks |
+| Water only | `Follow Up` / `Not Interested` / unchanged — telesales picks | `Appointment` |
+
+- **UI: two dropdowns.** "Appointment for": Heating / Water / Heating + Water — **pre-filled from the linked lead's Enquiry Type** (Heating if unknown), editable. When one-sided, a second dropdown appears — "Other enquiry": **Leave unchanged (default)** / Follow Up / Not Interested. Hidden when Heating + Water.
+- **No automatic other-side writes** — nothing is written to the other pipeline unless telesales actively picks it (default Leave unchanged). Avoids wrong writes on pure single-product enquiries.
+- **Generic appointment fields unchanged** — Appointment Time & Date, Appointment Booked=Yes, Booked By, telesales timestamp, owner reassignment, note: all still written for every type. Only the two status fields vary.
+- **Cancel reverts appointment fields only** — whichever status fields the booking set to `Appointment` become `Appointment Cancelled`; any Follow Up / Not Interested written on the other side stays. Requires recording the appointment type on the booking row.
+
+## Build phases
+
+### Phase 12: Backend ✅ DONE
+- [x] Verified bronze columns: `lead_warmth___1___69ea236712886`, `domestic_lead_status___1___6a0f07b50b5d2`; live write of the WATER field on the test lead confirmed
+- [x] Search returns `enquiry_type` (BigQuery + fresh paths; note: history value can lag the CRM by ≤30 min — fine for an editable pre-fill)
+- [x] `api_book` accepts + validates `appt_type` / `other_outcome` (both ⇒ other forced empty)
+- [x] `_ss_update_lead` status matrix implemented
+- [x] `app.bookings.appt_type` column added (NULL = heating for old rows)
+- [x] `/api/cancel` reverts per `appt_type`
+- Verified live, all 3 cycles book→cancel: water+FollowUp → main=Follow Up/water=Appointment → cancel: water=Cancelled, **Follow Up preserved**; heating+NotInterested mirror-image ✓; both → both Appointment → both Cancelled ✓
+
+### Phase 13: Frontend (booking modal) ✅ DONE
+- [x] "Appointment for" dropdown (Heating/Water/Heating + Water), pre-filled from linked lead's `enquiry_type`, shown when a lead is linked
+- [x] Conditional "Other enquiry" dropdown (label flips to "Heating enquiry"/"Water enquiry"; default Leave unchanged; hidden for both)
+- [x] Confirm modal spells out exactly which statuses will be written
+- [x] Payload includes `appt_type` + `other_outcome`; JSX validated via @babel/standalone
+
+### Phase 14: Local + preview testing ✅ DONE
+- [x] All 3 status-matrix cycles (book→cancel) verified live via test client; other-side outcomes preserved on cancel
+- [x] Enquiry Type: live pre-fill at selection (`/api/lead_enquiry`), independent human-chosen dropdown, write + leave-as-is both verified
+- [x] Owner verified end-to-end on the preview URL
+
+### Phase 15: Preview deploy → verify → promote ✅ DONE
+- [x] Preview env vars set up (11 vars; GOOGLE_CREDENTIALS_JSON etc. recovered from the SA key file — the Production copies are `sensitive`-type, unreadable)
+- [x] SSO Deployment Protection disabled (app has its own login; previews are public like production)
+- [x] Stable preview alias: **trust-availability-preview.vercel.app** (re-point on each preview deploy)
+- [x] UX polish added during preview: booking success = popup ("Appointment booked" → OK → drawer closes + grid refreshes); errors stay inline with Try again
+- [x] Owner approved on preview → merged to main → promoted to production
+
+---
+
+# Deployment workflow (from Feature 3 onward): branch → Vercel preview → merge → production
+
+The team actively uses `trust-availability.vercel.app`, so new features are no longer deployed straight to production. Instead:
+
+1. **Branch:** develop on a feature branch (e.g. `feat/water-appointments`) — `main` stays equal to what production runs.
+2. **Local test first** (as before, against test lead `2000146206227458`).
+3. **Preview deploy:** `vercel` (NO `--prod`) from `availability_app/` → builds a **preview deployment** on its own URL (`trust-availability-<hash>-trustprojects.vercel.app`). **Production is untouched** — the team keeps using the old version.
+4. **Verify on the preview URL** (owner + telesales if wanted).
+5. **Promote:** merge branch → `main`, push, then `vercel --prod`. Production switches only at this moment.
+
+**One-time setup needed before the first preview:**
+- [ ] Copy all env vars to the **Preview** environment (they currently exist in **Production only** — a preview would boot without credentials). Same REST API method as before (`target: ["preview"]`).
+- [ ] Check **Deployment Protection** on the first preview — team projects often require a Vercel login to view preview URLs; disable for previews or use a share link if it blocks testers.
+
+**Caveats:**
+- Preview and production share the **same live backend** (BigQuery, SharpSpring, calendar, Redis) — a booking made on the preview URL is real. Always test with the Zzz test lead.
+- We deploy from the working tree via CLI (not git-connected), so the branch is for git hygiene + rollback safety; the preview builds whatever is checked out locally.
+
+---
+
 ## Graceful degradation rules
 
 | Scenario | Behaviour |

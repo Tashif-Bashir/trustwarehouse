@@ -192,6 +192,13 @@
   .lead-skip input{width:15px;height:15px;cursor:pointer;accent-color:var(--indigo)}
   .lead-none{margin-top:8px;font-size:12.5px;color:#b45309;font-weight:500}
   .lead-calendar-only{margin-top:8px;font-size:12.5px;color:var(--muted);font-weight:500}
+  .appt-type-row{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
+  .appt-type-field{flex:1;min-width:150px}
+  .appt-type-field label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:4px}
+  .appt-type-field select{width:100%;padding:8px 10px;border-radius:8px;border:1.5px solid var(--line);background:var(--panel);font-family:inherit;font-size:13px;color:var(--ink);outline:none;cursor:pointer}
+  .appt-type-field select:focus{border-color:var(--indigo)}
+  .booked-box{max-width:420px}
+  .booked-icon{width:52px;height:52px;border-radius:50%;background:var(--mint-soft);color:#1a7a5a;font-size:26px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 14px}
   /* Confirm modal */
   .confirm-overlay{position:fixed;inset:0;background:rgba(20,23,40,.45);display:flex;align-items:center;justify-content:center;z-index:200;animation:fadeIn .15s ease-out}
   @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -376,7 +383,7 @@ function DayCell({ slots, onClick, selected, dayIso, compact, isPast }) {
 }
 
 /* ── Slot drawer with booking ── */
-function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
+function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
   const [selStart, setSelStart] = useState(null);
   const [selEnd,   setSelEnd]   = useState(null);
   const [custName,     setCustName]     = useState('');
@@ -400,6 +407,11 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
   const [leadId,        setLeadId]        = useState('');
   const [leadName,      setLeadName]      = useState('');
   const [skipCrm,       setSkipCrm]       = useState(false);
+  // Heating / water appointment type + the telesales call on the other pipeline
+  const [apptType,     setApptType]     = useState('heating');
+  const [otherOutcome, setOtherOutcome] = useState('');
+  // Independent, human-chosen Enquiry Type — written to the CRM as picked
+  const [enquiryType,  setEnquiryType]  = useState('');
 
   function addMins(t, m) {
     const [h, min] = t.split(':').map(Number);
@@ -438,6 +450,7 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
     setCustName(''); setCustEmail(''); setPostcode(''); setLocation(''); setCcEmails(['']); setNotes(''); setTeamsEnabled(false);
     setLsName(''); setLsPhone(''); setLsEmail(''); setLsPostcode('');
     setLeadResults([]); setSearched(false); setLeadId(''); setLeadName(''); setSkipCrm(false);
+    setApptType('heating'); setOtherOutcome(''); setEnquiryType('');
   }
 
   async function searchLeads() {
@@ -459,12 +472,29 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
     }
   }
 
+  function applyEnquiryType(eqRaw) {
+    const eq = (eqRaw || '').toLowerCase();
+    // Pre-fill both dropdowns; each stays independently editable after.
+    setEnquiryType(eq === 'water' ? 'Water' : eq === 'heating and water' ? 'Heating and Water'
+                   : eq === 'heating' ? 'Heating' : '');
+    setApptType(eq === 'water' ? 'water' : eq === 'heating and water' ? 'both' : 'heating');
+  }
+
   function selectLead(l) {
     setLeadId(l.id); setLeadName(l.name || '(no name)');
     if (l.name)     setCustName(l.name);
     if (l.postcode) setPostcode(l.postcode.toUpperCase());
     if (l.email)    setCustEmail(l.email);
+    // Pre-fill from the search result immediately (may be up to ~30 min stale)...
+    applyEnquiryType(l.enquiry_type);
+    setOtherOutcome('');
     setLeadResults([]); setSearched(false);
+    // ...then correct it with the live CRM value (telesales often change the
+    // enquiry type during the call and book straight after).
+    fetch(`/api/lead_enquiry?id=${encodeURIComponent(l.id)}`)
+      .then(r => r.json())
+      .then(d => { if (d.enquiry_type) applyEnquiryType(d.enquiry_type); })
+      .catch(() => {});
   }
 
   function unlinkLead() {
@@ -491,6 +521,9 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
           teams_meeting: teamsEnabled,
           lead_id: leadId,
           skip_crm: skipCrm,
+          appt_type: apptType,
+          other_outcome: apptType === 'both' ? '' : otherOutcome,
+          enquiry_type: enquiryType,
         }),
       });
       const data = await resp.json();
@@ -615,10 +648,41 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
                 </>
               )}
               {!skipCrm && leadId && (
-                <div className="lead-selected">
-                  <span>✓ Linked to <strong>{leadName}</strong> — SharpSpring will be updated</span>
-                  <button type="button" className="lead-unlink" onClick={unlinkLead}>change</button>
-                </div>
+                <>
+                  <div className="lead-selected">
+                    <span>✓ Linked to <strong>{leadName}</strong> — SharpSpring will be updated</span>
+                    <button type="button" className="lead-unlink" onClick={unlinkLead}>change</button>
+                  </div>
+                  <div className="appt-type-row">
+                    <div className="appt-type-field">
+                      <label>Enquiry type</label>
+                      <select value={enquiryType} onChange={e => setEnquiryType(e.target.value)}>
+                        <option value="">— leave as is —</option>
+                        <option value="Heating">Heating</option>
+                        <option value="Water">Water</option>
+                        <option value="Heating and Water">Heating and Water</option>
+                      </select>
+                    </div>
+                    <div className="appt-type-field">
+                      <label>Appointment for</label>
+                      <select value={apptType} onChange={e => setApptType(e.target.value)}>
+                        <option value="heating">Heating</option>
+                        <option value="water">Water</option>
+                        <option value="both">Heating + Water</option>
+                      </select>
+                    </div>
+                    {apptType !== 'both' && (
+                      <div className="appt-type-field">
+                        <label>{apptType === 'water' ? 'Heating enquiry' : 'Water enquiry'}</label>
+                        <select value={otherOutcome} onChange={e => setOtherOutcome(e.target.value)}>
+                          <option value="">Leave unchanged</option>
+                          <option value="Follow Up">Follow Up</option>
+                          <option value="Not Interested">Not Interested</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
               {skipCrm && (
                 <div className="lead-calendar-only">Calendar only — SharpSpring will not be updated.</div>
@@ -714,18 +778,28 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
         </div>
       )}
 
-      {/* Result card */}
-      {result && (
-        <div className={`booking-result ${result.ok ? 'ok' : 'err'}`}>
-          <div className="result-title">
-            {result.ok ? '✓ Submitted' : '✗ Error'}
-          </div>
+      {/* Error stays inline so the form can be retried */}
+      {result && !result.ok && (
+        <div className="booking-result err">
+          <div className="result-title">✗ Error</div>
           <div className="result-detail">{result.message}</div>
-          {result.ok && (
-            <button className="btn btn-ghost btn-sm" style={{marginTop:10}} onClick={() => { setResult(null); clearSelection(); }}>
-              Book another
-            </button>
-          )}
+          <button className="btn btn-ghost btn-sm" style={{marginTop:10}} onClick={() => setResult(null)}>
+            Try again
+          </button>
+        </div>
+      )}
+
+      {/* Success popup — OK closes the drawer and refreshes the grid */}
+      {result && result.ok && (
+        <div className="confirm-overlay">
+          <div className="confirm-box booked-box">
+            <div className="booked-icon">✓</div>
+            <div className="confirm-title" style={{textAlign:'center'}}>Appointment booked</div>
+            <div className="confirm-detail" style={{textAlign:'center'}}>{result.message}</div>
+            <div className="confirm-actions" style={{justifyContent:'center'}}>
+              <button className="btn btn-primary" style={{minWidth:120}} onClick={onBooked}>OK</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -742,7 +816,13 @@ function SlotDrawer({ rep, dayIso, slots, onClose, dayIsPast }) {
               {teamsEnabled && <><br/>📹 Teams link will be added</>}
               <br/>
               {leadId && !skipCrm
-                ? <span style={{color:'#1a7a5a',fontWeight:600}}>✓ SharpSpring lead "{leadName}" will be updated</span>
+                ? <span style={{color:'#1a7a5a',fontWeight:600}}>
+                    ✓ SharpSpring "{leadName}":{' '}
+                    {apptType === 'both' && 'Heating = Appointment · Water = Appointment'}
+                    {apptType === 'heating' && `Heating = Appointment${otherOutcome ? ` · Water = ${otherOutcome}` : ''}`}
+                    {apptType === 'water' && `Water = Appointment${otherOutcome ? ` · Heating = ${otherOutcome}` : ''}`}
+                    {enquiryType && ` · Enquiry = ${enquiryType}`}
+                  </span>
                 : <span style={{color:'var(--muted)'}}>SharpSpring will not be updated (calendar only)</span>}
               {notes && <><br/><span style={{fontSize:12,color:'var(--muted)'}}>{notes}</span></>}
             </div>
@@ -980,6 +1060,7 @@ function App() {
                 slots={selectedSlots}
                 dayIsPast={selected.day < TODAY_ISO}
                 onClose={() => setSelected(null)}
+                onBooked={() => { setSelected(null); handleRefresh(); }}
               />
             )}
 

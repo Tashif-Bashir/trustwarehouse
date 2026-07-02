@@ -281,10 +281,10 @@ def _record_booking(**kv) -> None:
             f"INSERT INTO {BQ_BOOKINGS}"
             f" (event_id, lead_id, booker_username, booker_owner_id, booker_name,"
             f"  rep_name, rep_owner_id, customer, postcode, appt_date, appt_start, appt_end,"
-            f"  booked_at, status)"
+            f"  appt_type, booked_at, status)"
             f" VALUES (@event_id, @lead_id, @booker_username, @booker_owner_id, @booker_name,"
             f"  @rep_name, @rep_owner_id, @customer, @postcode, @appt_date, @appt_start, @appt_end,"
-            f"  @booked_ts, 'active')",
+            f"  @appt_type, @booked_ts, 'active')",
             job_config=bigquery.QueryJobConfig(query_parameters=_bq_params(
                 booked_ts=datetime.now(timezone.utc).isoformat(), **kv,
             )),
@@ -329,18 +329,23 @@ def _get_active_booking(event_id: str) -> dict | None:
     return dict(rows[0]) if rows else None
 
 
-def _ss_cancel_lead(lead: dict, booker_owner_id: str) -> bool:
+def _ss_cancel_lead(lead: dict, booker_owner_id: str, appt_type: str = "heating") -> bool:
     """Revert a lead on cancellation: status→Cancelled, Booked→No, owner→booker.
 
+    Only the status field(s) the booking set to Appointment are reverted (per appt_type);
+    a Follow Up / Not Interested written on the other pipeline at booking time stays.
     If the booker's owner id is unknown, keep the lead's current owner rather than
     letting SharpSpring reassign it to the API account.
     """
     owner_to_set = booker_owner_id or (lead.get("ownerID") or "")
     obj = {
         "id": str(lead.get("id")),
-        _SS_F_STATUS: "Appointment Cancelled",
         _SS_F_APPT_BOOKED: "No",
     }
+    if appt_type in ("heating", "both") or appt_type not in APPT_TYPES:
+        obj[_SS_F_STATUS] = "Appointment Cancelled"
+    if appt_type in ("water", "both"):
+        obj[_SS_F_STATUS_WATER] = "Appointment Cancelled"
     if owner_to_set:
         obj["ownerID"] = str(owner_to_set)
     resp = _ss_call("updateLeads", {"objects": [obj]})
@@ -477,6 +482,13 @@ _SS_F_APPT_DT     = "appointment_time___date_5ae8ca2f532bc"      # Appointment T
 _SS_F_APPT_BOOKED = "appointment_booked_5ae8cb01a35c6"           # Appointment Booked (Yes/No)
 _SS_F_MADE_BY     = "appointment_made_by_65e1a90253305"          # Appointment Booked By (picklist)
 _SS_F_BOOKED_TS   = "date_time_appointment_booked_687fabb701341"  # timestamp the booking was made
+_SS_F_STATUS_WATER = "domestic_lead_status__1__6a0f07b50b5d2"    # Domestic Lead Status WATER
+_SS_F_ENQUIRY      = "lead_warmth__1__69ea236712886"             # Enquiry Type (Heating/Heating and Water/Water)
+
+# Appointment types the booking form can submit, and allowed other-side outcomes
+APPT_TYPES     = ("heating", "water", "both")
+OTHER_OUTCOMES = ("", "Follow Up", "Not Interested")
+ENQUIRY_TYPES  = ("", "Heating", "Water", "Heating and Water")  # '' = don't write
 
 
 def _ss_call(method: str, params: dict) -> dict:
@@ -542,23 +554,48 @@ def _ss_fresh_leads_today() -> list[dict]:
 
 def _ss_update_lead(lead_id: str, *, date_iso: str, start_time: str,
                     rep_owner_id: str = "", made_by_name: str = "",
-                    street: str = "", postcode: str = "") -> bool:
+                    street: str = "", postcode: str = "",
+                    appt_type: str = "heating", other_outcome: str = "",
+                    enquiry_type: str = "") -> bool:
     """Write the appointment fields to a lead. Returns True on success.
 
     rep_owner_id reassigns the lead to the field rep (omitting ownerID makes SharpSpring
     reassign to the API account owner, so we only send it when known). street/postcode
     update the lead's standard address (from the booking's Location + Postcode).
+
+    appt_type drives the heating/water status matrix:
+      both    -> main = Appointment, WATER = Appointment
+      heating -> main = Appointment, WATER = other_outcome (if chosen)
+      water   -> WATER = Appointment, main = other_outcome (if chosen)
+    other_outcome is the telesales person's call on the *other* pipeline
+    ('' = leave unchanged, 'Follow Up', 'Not Interested').
+
+    enquiry_type is an independent, human-chosen value for the CRM's Enquiry Type
+    picklist ('' = leave unchanged) — telesales decide what the enquiry is about,
+    e.g. a customer who enquired about heating but books water.
     """
     obj = {
         "id": str(lead_id),
         "leadStatus": "qualified",
-        _SS_F_STATUS: "Appointment",
         _SS_F_APPT_DT: f"{date_iso} {start_time}:00",
         _SS_F_APPT_BOOKED: "Yes",
         # SharpSpring stores/displays this as UK local time, so write UK wall-clock
         # (auto-handles BST/GMT) — not UTC, which reads an hour behind in summer.
         _SS_F_BOOKED_TS: _now_uk().strftime("%Y-%m-%d %H:%M:%S"),
     }
+    if appt_type == "both":
+        obj[_SS_F_STATUS] = "Appointment"
+        obj[_SS_F_STATUS_WATER] = "Appointment"
+    elif appt_type == "water":
+        obj[_SS_F_STATUS_WATER] = "Appointment"
+        if other_outcome:
+            obj[_SS_F_STATUS] = other_outcome
+    else:  # heating (default)
+        obj[_SS_F_STATUS] = "Appointment"
+        if other_outcome:
+            obj[_SS_F_STATUS_WATER] = other_outcome
+    if enquiry_type:
+        obj[_SS_F_ENQUIRY] = enquiry_type
     if rep_owner_id:
         obj["ownerID"] = str(rep_owner_id)
     if made_by_name:
@@ -612,7 +649,8 @@ def _bq_search_leads(name: str, phone: str, email: str, postcode: str, limit: in
     sql = (
         "SELECT id, first_name, last_name, email_address, phone_number,"
         " mobile_phone_number, zipcode, owner_id,"
-        " status_633ae6f6ac6fe AS dom_status"
+        " status_633ae6f6ac6fe AS dom_status,"
+        " lead_warmth___1___69ea236712886 AS enquiry_type"
         " FROM bronze.sharpspring_leads"
         f" WHERE {' AND '.join(conds)}"
         " ORDER BY update_timestamp DESC"
@@ -639,6 +677,7 @@ def _search_leads(name: str, phone: str, email: str, postcode: str) -> list[dict
                 "phone": r.get("phone_number") or r.get("mobile_phone_number") or "",
                 "postcode": r.get("zipcode") or "",
                 "status": r.get("dom_status") or "",
+                "enquiry_type": r.get("enquiry_type") or "",
                 "source": "history",
             }
     except Exception as exc:  # noqa: BLE001 — search must degrade gracefully
@@ -663,6 +702,7 @@ def _search_leads(name: str, phone: str, email: str, postcode: str) -> list[dict
             "phone": lead.get("phoneNumber") or lead.get("mobilePhoneNumber") or "",
             "postcode": lead.get("zipcode") or "",
             "status": lead.get("status_633ae6f6ac6fe") or "",
+            "enquiry_type": lead.get(_SS_F_ENQUIRY) or "",
             "source": "fresh",
         }
 
@@ -942,6 +982,20 @@ def api_search_leads():
     return jsonify({"leads": _search_leads(name, phone, email, postcode)})
 
 
+@app.route("/api/lead_enquiry")
+@login_required
+def api_lead_enquiry():
+    """Live Enquiry Type for a lead, straight from SharpSpring.
+
+    The search results carry enquiry_type from BigQuery (up to ~30 min stale);
+    this endpoint gives the booking form the current value at selection time —
+    telesales often set the enquiry type during the call and book immediately.
+    """
+    lead_id = (request.args.get("id") or "").strip()
+    lead = _ss_get_lead(lead_id) if lead_id else None
+    return jsonify({"enquiry_type": (lead or {}).get(_SS_F_ENQUIRY) or ""})
+
+
 @app.route("/api/book", methods=["POST"])
 @login_required
 def api_book():
@@ -959,6 +1013,17 @@ def api_book():
     lead_id    = (data.get("lead_id") or "").strip()
     skip_crm   = bool(data.get("skip_crm", False))
     location   = (data.get("location") or "").strip()
+    appt_type  = (data.get("appt_type") or "heating").strip().lower()
+    other_outcome = (data.get("other_outcome") or "").strip()
+    enquiry_type  = (data.get("enquiry_type") or "").strip()
+    if appt_type not in APPT_TYPES:
+        appt_type = "heating"
+    if other_outcome not in OTHER_OUTCOMES:
+        other_outcome = ""
+    if enquiry_type not in ENQUIRY_TYPES:
+        enquiry_type = ""
+    if appt_type == "both":
+        other_outcome = ""  # no "other side" when both are booked
 
     if not all([rep_name, date_iso, start_time, end_time, customer, postcode]):
         return jsonify({"ok": False, "message": "Missing required fields"}), 400
@@ -1074,6 +1139,8 @@ def api_book():
                         lead_id, date_iso=date_iso, start_time=start_time,
                         rep_owner_id=owner_id, made_by_name=booker_made_by,
                         street=location, postcode=postcode,
+                        appt_type=appt_type, other_outcome=other_outcome,
+                        enquiry_type=enquiry_type,
                     )
                     if notes:
                         _ss_create_note(lead_id, notes, owner_id=booker_owner_id)
@@ -1098,6 +1165,7 @@ def api_book():
             appt_date=date_iso,
             appt_start=start_time,
             appt_end=end_time,
+            appt_type=appt_type,
         )
 
         booked_by = f" — booked by {booker_name}" if booker_email else ""
@@ -1150,7 +1218,8 @@ def api_cancel():
             if lead is None:
                 crm_status = "not_found"
             else:
-                ok = _ss_cancel_lead(lead, booking.get("booker_owner_id") or "")
+                ok = _ss_cancel_lead(lead, booking.get("booker_owner_id") or "",
+                                     appt_type=(booking.get("appt_type") or "heating"))
                 canceller = _get_user(session.get("username", "")) or {}
                 _ss_create_note(
                     lead_id,

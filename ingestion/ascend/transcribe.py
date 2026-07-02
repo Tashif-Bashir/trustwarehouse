@@ -136,6 +136,12 @@ def run() -> None:
                     break  # newest-first — everything after this is older
                 if rec["id"] in done or rec.get("duration", 0) < MIN_SECONDS:
                     continue
+                # Customer calls only (Wildix parity): a short remote number is an
+                # internal extension — internal calls are recorded on BOTH sides and
+                # would be transcribed twice.
+                remote_digits = "".join(c for c in (rec.get("caller", {}).get("phoneNumber") or "") if c.isdigit())
+                if len(remote_digits) < 7:
+                    continue
                 todo.append({**rec, "user_uuid": uuid, "agent": name})
         except Exception as exc:  # noqa: BLE001 — one bad user must not sink the batch
             print(f"  WARNING: listing recordings failed for {name or uuid}: {exc}", flush=True)

@@ -1,0 +1,18 @@
+[Unit]
+Description=Transcribe Ascend call recordings into bronze (faster-whisper, no audio retained)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/trustwarehouse
+EnvironmentFile=/home/ubuntu/trustwarehouse/.env
+Environment=PATH=/home/ubuntu/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/home/ubuntu/.local/bin/uv run python -m ingestion.ascend.transcribe
+TimeoutStartSec=7200
+Nice=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -79,3 +79,35 @@ class AscendClient:
             if len(calls) < PAGE_SIZE:
                 break
             offset += PAGE_SIZE
+
+    def get_call_recordings(self, user_uuid: str, page_size: int = 100) -> Iterator[dict]:
+        """Yield call-recording metadata for one user, newest first.
+
+        Each record: id, fileName, duration (s), caller {phoneNumber, displayName},
+        whenCreated (ISO), callId (joins to the CDR), direction, status.
+        """
+        offset = 0
+        while True:
+            resp = requests.get(
+                f"{API_BASE}/voice/v2/accounts/_me/users/{user_uuid}/call-recordings"
+                f"?offset={offset}&count={page_size}",
+                headers={"Authorization": f"Bearer {self._get_token()}"},
+                timeout=60,
+            )
+            resp.raise_for_status()
+            records = resp.json().get("records") or []
+            yield from records
+            if len(records) < page_size:
+                break
+            offset += page_size
+
+    def download_recording(self, user_uuid: str, recording_id: int) -> bytes:
+        """Return the MP3 content of one call recording."""
+        resp = requests.get(
+            f"{API_BASE}/voice/v2/accounts/_me/users/{user_uuid}"
+            f"/call-recordings/{recording_id}/_content",
+            headers={"Authorization": f"Bearer {self._get_token()}"},
+            timeout=120,
+        )
+        resp.raise_for_status()
+        return resp.content

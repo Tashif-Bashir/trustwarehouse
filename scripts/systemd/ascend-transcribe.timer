@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Ascend recording transcription every 30 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=30min
+AccuracySec=1min
+Unit=ascend-transcribe.service
+
+[Install]
+WantedBy=timers.target

@@ -171,7 +171,7 @@
   .booking-field label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:4px}
   .booking-field input,.booking-field textarea{width:100%;padding:8px 12px;border-radius:8px;border:1.5px solid var(--line);background:var(--panel);font-family:inherit;font-size:13px;color:var(--ink);outline:none;transition:border-color .15s}
   .booking-field input:focus,.booking-field textarea:focus{border-color:var(--indigo)}
-  .booking-field textarea{resize:vertical;min-height:72px}
+  .booking-field textarea{resize:vertical;min-height:110px;max-height:50vh;overflow-y:auto}
   .booking-actions{display:flex;gap:8px;margin-top:14px;align-items:center;justify-content:flex-end}
   .conflict-notice{background:var(--rose-soft);color:#c0392b;font-size:12px;font-weight:600;padding:8px 12px;border-radius:8px;margin-top:10px}
   /* Lead search */
@@ -411,6 +411,14 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
   const [confirming, setConfirming] = useState(false);
   const [booking,    setBooking]    = useState(false);
   const [result,     setResult]     = useState(null);
+  // Notes auto-grow: the box expands to fit the text (capped at half the screen)
+  const notesRef = useRef(null);
+  useEffect(() => {
+    const el = notesRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight + 2, window.innerHeight * 0.5) + 'px';
+  }, [notes]);
   // Lead search (links the booking to a SharpSpring lead so the CRM updates)
   const [lsName,     setLsName]     = useState('');
   const [lsPhone,    setLsPhone]    = useState('');
@@ -768,12 +776,13 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
                   </div>
               }
             </div>
-            {/* Notes → body */}
+            {/* Notes → body (auto-grows with the text so long notes never need inner scrolling) */}
             <div className="booking-field">
               <label>Notes (goes in body)</label>
               <textarea
+                ref={notesRef}
                 placeholder="Customer details, property info, heating notes…"
-                value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
+                value={notes} onChange={e => setNotes(e.target.value)} rows={5} />
             </div>
             {/* Teams toggle */}
             <div className="toggle-row" onClick={() => setTeamsEnabled(t => !t)}>

@@ -40,7 +40,13 @@ def _now_utc() -> datetime:
 
 
 def _candidate_lead_ids(since: datetime) -> list[str]:
-    """Return ids of appointment-booked leads updated since ``since``.
+    """Return ids of ALL leads updated since ``since``.
+
+    Previously restricted to appointment-booked leads (the sync was built for the
+    sales reconciliation), which left bronze notes as a biased sample — e.g. only
+    2 of the 121 unknown-region June leads had notes in bronze while 78 had notes
+    in the CRM. Notes are one API call per lead; a daily updated-since window is
+    a few hundred calls, comfortably inside the 50k/day quota.
 
     Reads from bronze (kept fresh by the main 30-minute sync) so we avoid
     re-paginating every lead from the API on each notes run.
@@ -51,8 +57,7 @@ def _candidate_lead_ids(since: datetime) -> list[str]:
         """
         SELECT CAST(id AS STRING) AS id
         FROM `trustwarehouse.bronze.sharpspring_leads`
-        WHERE appointment_booked_5ae8cb01a35c6 = 'Yes'
-          AND update_timestamp > @since
+        WHERE update_timestamp > @since
         ORDER BY update_timestamp
         """,
         job_config=bigquery.QueryJobConfig(
@@ -69,6 +74,10 @@ def notes_resource():
 
     if os.getenv("SHARPSPRING_NOTES_FULL_BACKFILL", "").strip() == "1":
         since = datetime(2000, 1, 1, tzinfo=timezone.utc)
+    elif os.getenv("SHARPSPRING_NOTES_SINCE", "").strip():
+        # One-off windowed backfill, e.g. SHARPSPRING_NOTES_SINCE=2026-06-01
+        # (keeps within the 50k/day API quota, unlike a full backfill)
+        since = datetime.fromisoformat(os.environ["SHARPSPRING_NOTES_SINCE"]).replace(tzinfo=timezone.utc)
     elif state.get("cursor"):
         since = datetime.fromisoformat(state["cursor"])
     else:

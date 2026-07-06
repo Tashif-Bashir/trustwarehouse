@@ -199,6 +199,20 @@
   .appt-type-field select:focus{border-color:var(--indigo)}
   .booked-box{max-width:420px}
   .booked-icon{width:52px;height:52px;border-radius:50%;background:var(--mint-soft);color:#1a7a5a;font-size:26px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 14px}
+  /* App-bookings adoption badge */
+  .cal-anchor{position:relative}
+  .appb-chip{display:inline-flex;align-items:center;gap:7px;padding:8px 13px;border-radius:10px;border:none;background:linear-gradient(135deg,#5B6CFF,#8B5CF6);color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:0 5px 14px rgba(91,108,255,.28)}
+  .appb-chip:hover{opacity:.92}
+  .appb-num{background:rgba(255,255,255,.22);border-radius:6px;padding:1px 8px;font-size:13.5px;font-weight:700}
+  .appb-panel{position:absolute;top:calc(100% + 8px);right:0;background:var(--panel);border-radius:14px;box-shadow:var(--shadow-md);border:1px solid var(--line);padding:14px;z-index:250;width:420px;max-height:420px;overflow-y:auto}
+  .appb-title{font-size:12px;font-weight:700;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+  .appb-empty{font-size:13px;color:var(--muted);padding:8px 0}
+  .appb-row{display:flex;gap:10px;padding:7px 4px;border-bottom:1px solid var(--line);font-size:12.5px;align-items:baseline}
+  .appb-row:last-child{border-bottom:none}
+  .appb-row.cancelled .appb-what{color:var(--muted);text-decoration:line-through}
+  .appb-when{color:var(--muted);font-weight:600;flex-shrink:0;font-variant-numeric:tabular-nums}
+  .appb-what{color:var(--ink);line-height:1.45;min-width:0}
+  .appb-meta{color:var(--muted)}
   /* Confirm modal */
   .confirm-overlay{position:fixed;inset:0;background:rgba(20,23,40,.45);display:flex;align-items:center;justify-content:center;z-index:200;animation:fadeIn .15s ease-out}
   @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -853,11 +867,38 @@ function App() {
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null); // {repName, day}
   const [lastRefresh, setLastRefresh] = useState(null);
+  // Tool-adoption badge: how many appointments were booked via the app
+  const [appBookings, setAppBookings] = useState(null);
+  const [showBookings, setShowBookings] = useState(false);
+  const bookingsRef = useRef(null);
   const [tick, setTick] = useState(0);
   useEffect(() => { const id = setInterval(() => setTick(t => t+1), 30000); return () => clearInterval(id); }, []);
   const resolveTimer = useRef(null);
 
   const activeRegion = manualRegion || resolvedRegion || null;
+
+  // App-bookings badge: load on start, refresh every 2 minutes
+  useEffect(() => {
+    function loadAppBookings() {
+      fetch('/api/bookings/recent')
+        .then(r => r.json())
+        .then(d => setAppBookings(d))
+        .catch(() => {});
+    }
+    loadAppBookings();
+    const id = setInterval(loadAppBookings, 120000);
+    return () => clearInterval(id);
+  }, []);
+
+  // close the bookings panel on outside click
+  useEffect(() => {
+    if (!showBookings) return;
+    function handler(e) {
+      if (bookingsRef.current && !bookingsRef.current.contains(e.target)) setShowBookings(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showBookings]);
 
   // resolve postcode/city as user types
   useEffect(() => {
@@ -940,6 +981,33 @@ function App() {
             )}
           </div>
           <div className="header-actions">
+            {/* Tool-adoption badge: bookings made through this app */}
+            <div className="cal-anchor" ref={bookingsRef}>
+              <button className="appb-chip" onClick={() => setShowBookings(o => !o)}
+                title="Appointments booked through this app">
+                <span className="appb-num">{appBookings ? appBookings.today : '–'}</span>
+                <span>booked via app today</span>
+              </button>
+              {showBookings && (
+                <div className="appb-panel">
+                  <div className="appb-title">Booked through the app — last 7 days</div>
+                  {(!appBookings || appBookings.bookings.length === 0) && (
+                    <div className="appb-empty">Nothing booked through the app yet.</div>
+                  )}
+                  {appBookings && appBookings.bookings.map((b, i) => (
+                    <div key={i} className={`appb-row${b.status === 'cancelled' ? ' cancelled' : ''}`}>
+                      <div className="appb-when">{b.booked_day.slice(5)} · {b.booked_time}</div>
+                      <div className="appb-what">
+                        <strong>{b.booker_name || '?'}</strong> booked {b.customer} ({b.postcode})
+                        <span className="appb-meta"> → {b.rep_name} · {b.appt_date} {b.appt_start}
+                          {b.appt_type && b.appt_type !== 'heating' ? ` · ${b.appt_type}` : ''}
+                          {b.status === 'cancelled' ? ' · CANCELLED' : ''}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="view-toggle">
               <button
                 className={`btn btn-sm ${view === 'week' ? 'btn-primary' : 'btn-ghost'}`}

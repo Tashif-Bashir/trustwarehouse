@@ -996,6 +996,33 @@ def api_lead_enquiry():
     return jsonify({"enquiry_type": (lead or {}).get(_SS_F_ENQUIRY) or ""})
 
 
+@app.route("/api/bookings/recent")
+@login_required
+def api_bookings_recent():
+    """Tool-adoption stats: today's via-app booking count + the last 7 days' bookings.
+
+    Reads app.bookings (written on every successful booking). Test-lead bookings are
+    excluded so demos don't inflate the adoption number.
+    """
+    rows = list(_bq().query(f"""
+        SELECT booker_name, customer, postcode, rep_name, appt_type, status,
+               appt_date, appt_start,
+               FORMAT_TIMESTAMP('%Y-%m-%d', booked_at, 'Europe/London') AS booked_day,
+               FORMAT_TIMESTAMP('%H:%M', booked_at, 'Europe/London') AS booked_time
+        FROM {BQ_BOOKINGS}
+        WHERE booked_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)
+          AND customer NOT LIKE 'Zzz Testlead%'
+        ORDER BY booked_at DESC
+        LIMIT 40
+    """).result())
+    bookings = [dict(r) for r in rows]
+    today = _now_uk().strftime("%Y-%m-%d")
+    return jsonify({
+        "today": sum(1 for b in bookings if b["booked_day"] == today),
+        "bookings": bookings,
+    })
+
+
 @app.route("/api/book", methods=["POST"])
 @login_required
 def api_book():

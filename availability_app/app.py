@@ -341,7 +341,13 @@ def _ss_cancel_lead(lead: dict, booker_owner_id: str, appt_type: str = "heating"
     obj = {
         "id": str(lead.get("id")),
         _SS_F_APPT_BOOKED: "No",
+        _SS_F_APPT_DT: "",    # a cancelled appointment has no time...
+        _SS_F_BOOKED_TS: "",  # ...no telesales booking timestamp...
+        _SS_F_APPT_TYPE: "",  # ...and no Physical/Video type
     }
+    old_appt = lead.get(_SS_F_APPT_DT) or ""
+    if old_appt:
+        obj[_SS_F_PREV_APPT] = old_appt  # ...but it's preserved as the previous one
     if appt_type in ("heating", "both") or appt_type not in APPT_TYPES:
         obj[_SS_F_STATUS] = "Appointment Cancelled"
     if appt_type in ("water", "both"):
@@ -484,6 +490,10 @@ _SS_F_MADE_BY     = "appointment_made_by_65e1a90253305"          # Appointment B
 _SS_F_BOOKED_TS   = "date_time_appointment_booked_687fabb701341"  # timestamp the booking was made
 _SS_F_STATUS_WATER = "domestic_lead_status__1__6a0f07b50b5d2"    # Domestic Lead Status WATER
 _SS_F_ENQUIRY      = "lead_warmth__1__69ea236712886"             # Enquiry Type (Heating/Heating and Water/Water)
+_SS_F_APPT_TYPE    = "type_of_appointment_606ee2f254f4d"         # Type of Appointment (Physical / Video Call)
+_SS_F_PREV_APPT    = "previous_appointment_time___date_6a1d969b9f800"  # Previous Appointment Time & Date
+# NOTE: the Previous field is labelled "AUTO UPDATED" in the CRM but its automation
+# does NOT fire on API writes (live-tested) — the tool maintains it explicitly.
 
 # Appointment types the booking form can submit, and allowed other-side outcomes
 APPT_TYPES     = ("heating", "water", "both")
@@ -556,7 +566,8 @@ def _ss_update_lead(lead_id: str, *, date_iso: str, start_time: str,
                     rep_owner_id: str = "", made_by_name: str = "",
                     street: str = "", postcode: str = "",
                     appt_type: str = "heating", other_outcome: str = "",
-                    enquiry_type: str = "") -> bool:
+                    enquiry_type: str = "", teams_meeting: bool = False,
+                    prev_appt: str = "") -> bool:
     """Write the appointment fields to a lead. Returns True on success.
 
     rep_owner_id reassigns the lead to the field rep (omitting ownerID makes SharpSpring
@@ -574,15 +585,20 @@ def _ss_update_lead(lead_id: str, *, date_iso: str, start_time: str,
     picklist ('' = leave unchanged) — telesales decide what the enquiry is about,
     e.g. a customer who enquired about heating but books water.
     """
+    new_appt = f"{date_iso} {start_time}:00"
     obj = {
         "id": str(lead_id),
         "leadStatus": "qualified",
-        _SS_F_APPT_DT: f"{date_iso} {start_time}:00",
+        _SS_F_APPT_DT: new_appt,
         _SS_F_APPT_BOOKED: "Yes",
+        _SS_F_APPT_TYPE: "Video Call" if teams_meeting else "Physical",
         # SharpSpring stores/displays this as UK local time, so write UK wall-clock
         # (auto-handles BST/GMT) — not UTC, which reads an hour behind in summer.
         _SS_F_BOOKED_TS: _now_uk().strftime("%Y-%m-%d %H:%M:%S"),
     }
+    # Re-booking: stash the old appointment time before overwriting it.
+    if prev_appt and prev_appt != new_appt:
+        obj[_SS_F_PREV_APPT] = prev_appt
     if appt_type == "both":
         obj[_SS_F_STATUS] = "Appointment"
         obj[_SS_F_STATUS_WATER] = "Appointment"
@@ -1103,11 +1119,9 @@ def api_book():
             "emailAddress": {"address": cc, "name": cc},
             "type": "optional",
         })
-    if cust_email:
-        attendees.append({
-            "emailAddress": {"address": cust_email, "name": customer},
-            "type": "optional",
-        })
+    # The customer is deliberately NOT an attendee — attendees receive calendar
+    # invites, and customers must never get one. Their email goes in the body
+    # instead so the rep can still see it.
 
     would_create = {
         "subject": subject,
@@ -1116,7 +1130,8 @@ def api_book():
         "start": {"dateTime": f"{date_iso}T{start_time}:00", "timeZone": "Europe/London"},
         "end":   {"dateTime": f"{date_iso}T{end_time}:00",   "timeZone": "Europe/London"},
         "attendees": attendees,
-        "body": {"contentType": "Text", "content": notes},
+        "body": {"contentType": "Text",
+                 "content": notes + (f"\n\nCustomer email: {cust_email}" if cust_email else "")},
         "showAs": "busy",
         "isOnlineMeeting": teams,
         "isReminderOn": True,
@@ -1167,7 +1182,8 @@ def api_book():
                         rep_owner_id=owner_id, made_by_name=booker_made_by,
                         street=location, postcode=postcode,
                         appt_type=appt_type, other_outcome=other_outcome,
-                        enquiry_type=enquiry_type,
+                        enquiry_type=enquiry_type, teams_meeting=teams,
+                        prev_appt=(lead.get(_SS_F_APPT_DT) or ""),
                     )
                     if notes:
                         _ss_create_note(lead_id, notes, owner_id=booker_owner_id)
@@ -1200,7 +1216,7 @@ def api_book():
             "updated":   " · CRM updated",
             "failed":    " · CRM update failed — update SharpSpring manually",
             "not_found": " · lead not found in CRM — update SharpSpring manually",
-            "skipped":   "",
+            "skipped":   " · CRM NOT updated — no lead was linked",
         }[crm_status]
         message = (
             f"Booked: {rep_name} · {date_iso} · {start_time}–{end_time} "

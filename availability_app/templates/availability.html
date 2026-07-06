@@ -192,6 +192,7 @@
   .lead-skip input{width:15px;height:15px;cursor:pointer;accent-color:var(--indigo)}
   .lead-none{margin-top:8px;font-size:12.5px;color:#b45309;font-weight:500}
   .lead-calendar-only{margin-top:8px;font-size:12.5px;color:var(--muted);font-weight:500}
+  .confirm-nocrm{display:block;margin-top:6px;background:var(--amber-soft);color:#92400e;font-size:12.5px;font-weight:600;padding:9px 12px;border-radius:9px;line-height:1.45}
   .appt-type-row{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
   .appt-type-field{flex:1;min-width:150px}
   .appt-type-field label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:4px}
@@ -725,9 +726,9 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
               <input type="text" placeholder="e.g. 7 Alder Close, Sandford, Wareham"
                 value={location} onChange={e => setLocation(e.target.value)} />
             </div>
-            {/* Customer email */}
+            {/* Customer email — reference only; the customer is never invited */}
             <div className="booking-field">
-              <label>Customer email (optional)</label>
+              <label>Customer email (optional — reference only, the customer is <strong>not</strong> sent an invite)</label>
               <input type="email" placeholder="customer@email.com" value={custEmail} onChange={e => setCustEmail(e.target.value)} />
             </div>
             {/* CC — multiple */}
@@ -837,7 +838,10 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
                     {apptType === 'water' && `Water = Appointment${otherOutcome ? ` · Heating = ${otherOutcome}` : ''}`}
                     {enquiryType && ` · Enquiry = ${enquiryType}`}
                   </span>
-                : <span style={{color:'var(--muted)'}}>SharpSpring will not be updated (calendar only)</span>}
+                : <span className="confirm-nocrm">
+                    ⚠ No CRM lead linked — SharpSpring will <strong>NOT</strong> be updated.
+                    {!skipCrm && ' Use "Find the lead" first if this should update the CRM.'}
+                  </span>}
               {notes && <><br/><span style={{fontSize:12,color:'var(--muted)'}}>{notes}</span></>}
             </div>
             <div className="confirm-actions">

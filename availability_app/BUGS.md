@@ -5,6 +5,46 @@ Status keys: 🔴 open · 🟡 in progress · ✅ fixed (deployed)
 
 ---
 
+## BUG-006 — Customers were receiving calendar invites ✅ fixed + deployed (2026-07-06)
+**Reported (urgent):** booking a rep also sent the customer an Outlook invite; clearing the email field didn't reliably stop it (the field auto-refills from the linked lead).
+
+### Root cause
+`api_book` added any `customer_email` as an **optional attendee** — Outlook emails every attendee an invite.
+
+### Fix
+The customer is **never** added as an attendee (root-level guarantee, independent of the UI). Their email is appended to the event **body** ("Customer email: …") so reps still see it, and the form label now states the customer is not sent an invite. Verified against a real event: attendees = booker + telesales + rep only, even with an email supplied.
+
+---
+
+## FIX-004 — Booking should set "Type of Appointment" (Physical / Video Call) ✅ fixed + deployed (2026-07-06) — owner-verified on preview
+**Requested:** the CRM's Type of Appointment picklist should be set automatically: Teams toggle ON → video, OFF → physical.
+
+### Analysis (confirmed via getFields)
+- Field: `type_of_appointment_606ee2f254f4d`, picklist with exactly **two** options: `Physical`, `Video Call` (no third option exists, despite memory of one).
+- The booking form already has the Teams toggle (`teams_meeting` in the payload) — the mapping is 1:1.
+
+### Fix plan
+- `_ss_update_lead` gains `appt_mode`: booking writes `Video Call` when the Teams toggle is on, else `Physical`.
+- Cancel leaves the field untouched (the cancelled status already tells the story).
+- Files: `availability_app/app.py` (`_ss_update_lead`, `api_book`).
+
+---
+
+## FIX-005 — Cancel leaves the old "Appointment Time & Date" in place ✅ fixed + deployed (2026-07-06) — owner-verified on preview
+Decisions: cancel AND rebook both stash the old time into Previous; cancel additionally clears the telesales **timestamp** and **Type of Appointment** (owner request after first verify). Note from testing: a cancel done on the **production** URL while the fix was preview-only produced the old behaviour — mixed-version confusion, resolved by this deploy. Cancel also now shows an amber "No CRM lead linked" warning path (see BUG-006 session): unlinked bookings say so loudly in the confirm modal and success popup.
+**Reported:** after cancelling from the diary, the lead still shows the appointment time. It should be cleared — and the "Previous Appointment Time & Date" field needs a decision.
+
+### Analysis (live-tested on the Zzz lead)
+- Cancel currently reverts statuses/owner/Booked but never touches `appointment_time___date_5ae8ca2f532bc` → stale time remains. Confirmed.
+- `previous_appointment_time___date_6a1d969b9f800` ("…AUTO UPDATED", type string): **the automation does NOT fire on API updates** — changed the appt time A→B and cleared it; Previous stayed empty (25s waits). Whatever updates it in the UI flow, API writes bypass it → we must write it ourselves.
+
+### Fix plan
+- On **cancel**: copy the lead's current appointment time into `previous_appointment_time___date_6a1d969b9f800`, then clear `appointment_time___date_5ae8ca2f532bc` (both pipelines' cancel paths — the lead dict is already fetched in the verify step, so no extra API call).
+- **Decision (owner):** should a **re-booking** (booking a lead that already has an appointment time) also stash the old time into Previous before overwriting? Recommended: yes — that matches the field's meaning and covers reschedules done through the tool.
+- Files: `availability_app/app.py` (`_ss_cancel_lead`, possibly `_ss_update_lead`).
+
+---
+
 ## BUG-001 — Lead search misses leads that exist ✅ fixed + deployed (2026-07-01)
 **Reported:** telesales searched "Gillie Gilbert" (an old lead) → didn't show up.
 

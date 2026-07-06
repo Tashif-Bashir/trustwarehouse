@@ -339,6 +339,39 @@ Doubles as an audit trail for the later sales/performance work.
 
 ---
 
+# Feature 4: West Midlands & East Midlands regions
+
+**Gap:** the app has 9 regions; the Midlands don't exist. Birmingham/Coventry/Stoke/Derby/Nottingham/Leicester etc. postcodes resolve to **no region** → "no regional rep" for a large chunk of England.
+
+## Rep assignments (owner-specified)
+| Region | Reps |
+|---|---|
+| **West Midlands** | Sam Chapman, Samantha Doyle, Chris Krammer |
+| **East Midlands** | Rob Chapman, Chris Krammer |
+
+(All keep their existing regions — these are additions: Sam/Samantha keep North West, Chris K & Rob keep Yorkshire & Humber.)
+
+## How regions flow (analysis)
+- `all_regions()` is **derived from rep data** (`app.reps.regions`) — the new regions appear in dropdowns as soon as the data is updated, no code needed for that part.
+- Postcode → region and city → region are **static maps in both engine copies** (`POSTCODE_TO_REGION`, `CITY_TO_REGION`) — these need code.
+- `_KNOWN_REGIONS` in app.py (Manage Reps checkboxes) is static — needs the two entries.
+- None of the Midlands postcode areas are currently mapped to anything, so this is purely additive — **no existing region loses a postcode** (MK stays South East, DN/S stay Yorkshire).
+
+## Postcode areas to add (official UK region definitions)
+| Region | Postcode areas |
+|---|---|
+| West Midlands | **B** (Birmingham), **CV** (Coventry), **DY** (Dudley), **ST** (Stoke), **TF** (Telford), **WR** (Worcester), **WS** (Walsall), **WV** (Wolverhampton), **HR** (Hereford) |
+| East Midlands | **DE** (Derby), **LE** (Leicester), **LN** (Lincoln), **NG** (Nottingham), **NN** (Northampton) |
+
+Cities added to the city map accordingly (birmingham, coventry, wolverhampton, walsall, dudley, solihull, west bromwich, stoke-on-trent, telford, stafford, worcester, hereford, nuneaton, tamworth, redditch → West Mids; derby, nottingham, leicester, lincoln, northampton, mansfield, chesterfield, loughborough, kettering, corby → East Mids).
+
+## Rollout order (shared-DB safety)
+1. Code on a branch: both engine maps + `_KNOWN_REGIONS` → preview.
+2. **Then** update `app.reps` regions data (instant everywhere; harmless before code ships — the region simply appears in dropdowns and works by manual selection; postcode typing starts resolving once code is live).
+3. Verify on preview (type `B1 1AA` → West Midlands with the 3 reps; `NG1 1AA` → East Midlands with the 2), merge → production.
+
+---
+
 # Deployment workflow (from Feature 3 onward): branch → Vercel preview → merge → production
 
 The team actively uses `trust-availability.vercel.app`, so new features are no longer deployed straight to production. Instead:

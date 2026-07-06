@@ -163,6 +163,7 @@ def _gcs() -> storage.Client:
 
 _KNOWN_REGIONS = [
     "North East", "Yorkshire & Humber", "North West",
+    "West Midlands", "East Midlands",
     "London", "South East", "East of England", "South West",
     "Wales", "Scotland",
 ]

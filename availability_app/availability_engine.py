@@ -201,6 +201,13 @@ POSTCODE_TO_REGION: dict[str, str] = {
     "DT": "South West", "EX": "South West", "GL": "South West",
     "PL": "South West", "SN": "South West", "TA": "South West",
     "TQ": "South West", "TR": "South West",
+    # West Midlands
+    "B":  "West Midlands", "CV": "West Midlands", "DY": "West Midlands",
+    "ST": "West Midlands", "TF": "West Midlands", "WR": "West Midlands",
+    "WS": "West Midlands", "WV": "West Midlands", "HR": "West Midlands",
+    # East Midlands
+    "DE": "East Midlands", "LE": "East Midlands", "LN": "East Midlands",
+    "NG": "East Midlands", "NN": "East Midlands",
     # Wales
     "CF": "Wales", "SA": "Wales", "NP": "Wales",
     "LL": "Wales", "SY": "Wales", "LD": "Wales",
@@ -271,6 +278,21 @@ CITY_TO_REGION: dict[str, str] = {
     "poole": "South West", "truro": "South West",
     "torquay": "South West", "taunton": "South West",
     "weston-super-mare": "South West", "yeovil": "South West",
+    # West Midlands
+    "birmingham": "West Midlands", "coventry": "West Midlands",
+    "wolverhampton": "West Midlands", "walsall": "West Midlands",
+    "dudley": "West Midlands", "solihull": "West Midlands",
+    "west bromwich": "West Midlands", "stoke": "West Midlands",
+    "stoke-on-trent": "West Midlands", "telford": "West Midlands",
+    "stafford": "West Midlands", "worcester": "West Midlands",
+    "hereford": "West Midlands", "nuneaton": "West Midlands",
+    "tamworth": "West Midlands", "redditch": "West Midlands",
+    # East Midlands
+    "derby": "East Midlands", "nottingham": "East Midlands",
+    "leicester": "East Midlands", "lincoln": "East Midlands",
+    "northampton": "East Midlands", "mansfield": "East Midlands",
+    "chesterfield": "East Midlands", "loughborough": "East Midlands",
+    "kettering": "East Midlands", "corby": "East Midlands",
     # Wales
     "cardiff": "Wales", "swansea": "Wales", "newport": "Wales",
     "wrexham": "Wales", "bangor": "Wales", "aberystwyth": "Wales",

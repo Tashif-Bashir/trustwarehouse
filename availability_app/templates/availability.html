@@ -415,6 +415,13 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
   const [confirming, setConfirming] = useState(false);
   const [booking,    setBooking]    = useState(false);
   const [result,     setResult]     = useState(null);
+  // Clicking a cell far down the grid opens this drawer at the top of the page —
+  // scroll it into view so nobody has to hunt for it.
+  const drawerRef = useRef(null);
+  useEffect(() => {
+    drawerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [rep.name, dayIso]);
+
   // Notes auto-grow: the box expands to fit the text (capped at half the screen)
   const notesRef = useRef(null);
   useEffect(() => {
@@ -564,7 +571,7 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
   }
 
   return (
-    <div className="drawer">
+    <div className="drawer" ref={drawerRef} style={{scrollMarginTop:'12px'}}>
       <div className="drawer-header">
         <div>
           <div className="drawer-title">{rep.name} · {fmtDate(dayIso)}{dayIsPast ? ' · Past' : ''}</div>

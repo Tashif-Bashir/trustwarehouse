@@ -509,14 +509,18 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10, st
         all_dates.append(d)
         d += timedelta(days=1)
 
-    # determine which reps to include
+    # determine which reps to include — regional reps first, then (when a region is
+    # selected) every other region's reps as a collapsed "book anyway" group, so
+    # telesales can handle border postcodes / reps willing to travel.
     if region:
         regional_reps = [r for r, regions in REP_REGION.items() if region in regions]
+        other_reps = [r for r in REP_REGION if r not in regional_reps]
     else:
         regional_reps = list(REP_REGION.keys())
+        other_reps = []
 
     # classify events per rep per day
-    rep_events: dict[str, dict[date, list[dict]]] = {r: {} for r in regional_reps + FALLBACK_REPS}
+    rep_events: dict[str, dict[date, list[dict]]] = {r: {} for r in regional_reps + FALLBACK_REPS + other_reps}
     for event in events:
         rep = _resolve_rep(event)
         if rep not in rep_events:
@@ -529,7 +533,7 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10, st
 
     result_reps = []
 
-    all_output_reps = regional_reps + FALLBACK_REPS
+    all_output_reps = regional_reps + FALLBACK_REPS + other_reps
     for rep in all_output_reps:
         rep_regions = REP_REGION.get(rep, ["Any"])
         is_fallback = rep in FALLBACK_REPS
@@ -626,6 +630,7 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10, st
             "name": rep,
             "regions": rep_regions,
             "is_fallback": is_fallback,
+            "is_other": rep in other_reps,
             "is_freelancer": rep in FREELANCER_REPS,
             "today_count": today_count,
             "days": days_out,

@@ -136,6 +136,10 @@
   .th-weekday{font-size:9px;font-weight:600;color:var(--muted);line-height:1;margin-top:1px}
   .row-divider td{padding:4px 0;border-bottom:1px dashed var(--line2)}
   .row-divider-label td{padding:6px 10px 2px;font-size:10.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--amber);background:none;border:none}
+  .other-toggle td{color:var(--muted);cursor:pointer;user-select:none}
+  .other-toggle:hover td{color:var(--indigo)}
+  .other-rep-row{opacity:.85}
+  .rep-other-region{font-size:11px;color:var(--indigo);font-weight:600;background:var(--indigo-soft);padding:1px 6px;border-radius:4px;width:fit-content;margin-top:1px}
 
   /* Slot drawer */
   .drawer{background:var(--panel);border-radius:14px;box-shadow:var(--shadow-md);padding:20px 22px;margin-bottom:24px;animation:slideDown .2s ease-out}
@@ -875,6 +879,7 @@ function App() {
   const [manualRegion, setManualRegion] = useState('');
   const [view, setView] = useState('week'); // 'week' | 'month'
   const [startDate, setStartDate] = useState(''); // '' = today, ISO string = custom
+  const [showOther, setShowOther] = useState(false); // other regions' reps (collapsed by default)
   const [grid, setGrid] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -968,8 +973,9 @@ function App() {
 
   const dates = grid?.dates || [];
   const reps = grid?.reps || [];
-  const regionalReps = reps.filter(r => !r.is_fallback);
+  const regionalReps = reps.filter(r => !r.is_fallback && !r.is_other);
   const fallbackReps = reps.filter(r => r.is_fallback);
+  const otherReps = reps.filter(r => r.is_other);
 
   // calculate stats
   const totalFree = regionalReps.reduce((acc, r) =>
@@ -1220,6 +1226,45 @@ function App() {
                             <div className="rep-cell">
                               <div className="rep-name">{rep.name}</div>
                               <div className="rep-fallback">Flexible coverage</div>
+                            </div>
+                          </td>
+                          {dates.map(d => (
+                            <DayCell
+                              key={d}
+                              dayIso={d}
+                              isPast={d < TODAY_ISO}
+                              compact={view === 'month'}
+                              slots={rep.days?.[d]}
+                              selected={selected?.repName === rep.name && selected?.day === d}
+                              onClick={() => setSelected(
+                                selected?.repName === rep.name && selected?.day === d
+                                  ? null : { repName: rep.name, day: d }
+                              )}
+                            />
+                          ))}
+                        </tr>
+                      ))}
+                    </>
+                  )}
+
+                  {/* Other regions' reps — collapsed by default; for border postcodes
+                      or reps willing to travel. Telesales judgement applies. */}
+                  {otherReps.length > 0 && (
+                    <>
+                      <tr className="row-divider"><td colSpan={dates.length + 1}/></tr>
+                      <tr className="row-divider-label other-toggle"
+                          onClick={() => setShowOther(o => !o)}>
+                        <td colSpan={dates.length + 1}>
+                          {showOther ? '▾' : '▸'} Other regions' reps ({otherReps.length}) — click to {showOther ? 'hide' : 'show'} · travel may apply
+                        </td>
+                      </tr>
+                      {showOther && otherReps.map(rep => (
+                        <tr key={rep.name} className="other-rep-row">
+                          <td>
+                            <div className="rep-cell">
+                              <div className="rep-name">{rep.name}</div>
+                              <div className="rep-other-region">{rep.regions?.join(', ')}</div>
+                              {rep.is_freelancer && <div className="rep-freelancer">Freelancer / Ambivo</div>}
                             </div>
                           </td>
                           {dates.map(d => (

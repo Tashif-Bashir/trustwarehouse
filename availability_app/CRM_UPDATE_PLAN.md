@@ -421,3 +421,13 @@ The team actively uses `trust-availability.vercel.app`, so new features are no l
 ## Local dev vs production
 
 The feature is gated on `lead_id` being present — if no lead is selected, the booking works exactly as it does today. So no feature flag is needed. Local testing uses the real SharpSpring API against the test lead (`2000146205551618`). Deploy only after local end-to-end passes.
+
+---
+
+# Feature 5: Book reps from other regions (collapsed grid section)
+
+**Ask:** telesales want to book reps outside the customer's region (border postcodes, reps willing to travel). Decision: instead of per-rep postcode exception lists (Option C of the border analysis — now superseded), show **all** other regions' reps in the grid below the fallback section, **collapsed by default** — human judgement, zero config to maintain.
+
+- Engine (`build_grid`, both copies): when a region is selected, every non-regional/non-fallback rep is emitted with `is_other: true` (full slot data included).
+- UI: "▸ Other regions' reps (N) — click to show · travel may apply" toggle row under Flexible Coverage; expanded rows show home-region badges; booking works identically from any row.
+- Verified: Yorkshire → 4 regional + 2 fallback + 9 other, all with slots.

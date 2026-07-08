@@ -221,10 +221,10 @@
   /* Confirm modal */
   .confirm-overlay{position:fixed;inset:0;background:rgba(20,23,40,.45);display:flex;align-items:center;justify-content:center;z-index:200;animation:fadeIn .15s ease-out}
   @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-  .confirm-box{background:var(--panel);border-radius:18px;padding:28px;max-width:400px;width:90%;box-shadow:var(--shadow-lg)}
-  .confirm-title{font-size:16px;font-weight:700;letter-spacing:-.2px;margin-bottom:12px}
-  .confirm-detail{font-size:13.5px;color:var(--ink2);line-height:1.7;margin-bottom:22px}
-  .confirm-actions{display:flex;gap:10px;justify-content:flex-end}
+  .confirm-box{background:var(--panel);border-radius:18px;padding:28px;max-width:400px;width:90%;box-shadow:var(--shadow-lg);max-height:85vh;max-height:85dvh;display:flex;flex-direction:column}
+  .confirm-title{font-size:16px;font-weight:700;letter-spacing:-.2px;margin-bottom:12px;flex:0 0 auto}
+  .confirm-detail{font-size:13.5px;color:var(--ink2);line-height:1.7;margin-bottom:22px;overflow-y:auto;min-height:0;flex:1 1 auto;overflow-wrap:break-word}
+  .confirm-actions{display:flex;gap:10px;justify-content:flex-end;flex:0 0 auto}
   /* Booking result */
   .booking-result{border-radius:10px;padding:14px 16px;margin-top:16px}
   .booking-result.ok{background:var(--mint-soft);color:#1a7a5a}

@@ -44,3 +44,7 @@ dashboard/static/
 
 .vercel
 uv.lock
+
+# Glenigan commercial app — licensed vendor data + examples, never commit
+commercial_app/reference/*
+!commercial_app/reference/README.md

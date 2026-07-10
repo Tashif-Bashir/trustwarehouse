@@ -44,15 +44,75 @@ so nothing is typed twice.
 - Response fields are NOT documented in the Swagger spec — the **example files
   in `reference/` + the Data Dictionary are the field reference.**
 
+## 2a. Current access — TEST INDEX (verified 10 Jul 2026)
+
+Per the onboarding email (Michael McVeigh, Glenigan) and our verified test call:
+
+- Our key hits a **static test index**: **4,722 projects** with company +
+  contact data. It does NOT update — so the `updatedproject` watching feature
+  can be *built* against `ProjectHistories` but only properly *tested* once we
+  get a live key.
+- Limits on this key: **50 results/page, 100 pages/query** (= 5,000 max per
+  query via pagination). Live-key limits TBC (§9).
+- `health` → 200, `project?Size=1` → 200. Auth confirmed working.
+- API support hours 09:00–17:00 Mon–Fri.
+- **Confidentiality**: the email, attachments and data are confidential, not
+  for circulation outside the company — hence `reference/` is gitignored and
+  the app will sit behind login.
+
+## 2b. Response shape (from `Results example.json` — the real reference)
+
+A project record has **128 fields**. The load-bearing ones:
+
+- **Identity/description**: `ProjectId`, `Heading`, `SchemeDescription`,
+  `LatestInformation` (plain-English current state — card material),
+  `LatestEvent(Date)`, `FirstPublished`, `LastModifiedDate`.
+- **Location**: full address fields, `ProjectPostcode`, `ProjectTown`,
+  `ProjectCounty`, `ProjectRegion`, `ProjectLocation` = **{lat, lon}** (feeds
+  the Three.js map directly), plus hierarchical facets
+  `ProjectLocationLevel1/2/3Facet` ("North East#Tyne & Wear#North Shields").
+- **Stage/status**: `PlanningStage(Parent)`, `ContractStage(Parent)`,
+  `ProjectStatus`, `DevelopmentType`, `PlanningTypes`, start/end dates with
+  date-type qualifiers.
+- **Size/value**: `Value` (in **£ millions**, `ValueType` calculated/reported),
+  `ProjectSize`, `Units`, `Storeys`, `FloorArea`, `SiteArea`.
+- **Sectors**: `PrimaryAndSecondarySectors` ("Health#Health Centres/Surgeries"),
+  parents for coarse filtering.
+- **Who's involved**: `RolesDetails` → role group (Client / Promoter,
+  Architect…) → companies (`OfficeId`, business type, contract stage) →
+  **named contacts** (`KeyCard_FullContact`, contact id, job title, LinkedIn
+  field, phones). `RoleList` = flat variant with addresses + postcodes.
+- **⚠ TPS compliance**: phone fields come in `…Phone1NoTps` /
+  `…Phone1WithTps` variants — TPS = do-not-call register. **The app must
+  surface the NoTps number for cold calls.** This is a compliance feature the
+  team currently gets from Glenigan's portal; we must not lose it.
+- **`ProjectHistories`**: typed change events (`ProjectHistoryEvent` e.g.
+  `PSTG` = planning stage change) with field name, old/new values, timestamp —
+  the watching feature is a diff over this list.
+- **Parsing gotcha**: multi-value strings use `~` between items and `#`
+  between hierarchy levels (e.g. "Windows#Rooflight~Site Works#Railings") —
+  handle centrally in silver, not ad-hoc in the app.
+
+**Query language**: the `_search` examples confirm full Elasticsearch bool
+queries against these fields (`term` on facets, `range` on `Value`, `nested`
+on `ProjectHistories`, relative dates like `now-1d/d`, sort by
+`LatestEventDate`). The feed filter will be one saved ES query.
+
+**Data Dictionary** (`reference/Glenigan Data Dictionary 2023.xlsx`): 13
+sheets — Project/Company/Office/Contact field definitions + lookup
+vocabularies (Category List, Contract Stages, Planning Stages, Application
+Types, Role List, Materials, Funding Types, London Boroughs, Procurement
+types). The lookup sheets become the app's filter dropdown options.
+
 ## 3. What we do NOT know yet (blockers for design)
 
-- **Subscription scope**: which sectors/regions/stages our key covers, and
-  whether companies + contacts are included. → Phase 0 test call.
-- **Response shape**: exact fields per project/company/contact. → inspect
-  `reference/Results example.json` + Data Dictionary.
-- **The team's actual workflow** — see Open Questions (§8).
-- **Volume**: how many projects match our profile (affects sync cadence and
-  whether the feed is daily or hourly).
+- ~~Subscription scope~~ → test index confirmed: 4,722 projects incl.
+  companies + contacts. **Live subscription scope still TBC** (sectors/regions
+  we'll get in production, and live rate limits).
+- ~~Response shape~~ → §2b done.
+- **The team's actual workflow** — see Open Questions (§8). ← the big one now
+- **Volume on a live key**: how many projects match our profile (affects sync
+  cadence).
 - **CRM shape for commercial**: which SharpSpring pipeline/fields the
   commercial team uses today (they may differ from domestic; `customer_type` /
   `pipeline_category` exist in the lead schema).

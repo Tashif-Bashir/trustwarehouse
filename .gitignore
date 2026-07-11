@@ -48,3 +48,8 @@ uv.lock
 # Glenigan commercial app — licensed vendor data + examples, never commit
 commercial_app/reference/*
 !commercial_app/reference/README.md
+
+# Ad-hoc probe scripts & analysis outputs (kept locally, never committed)
+scratch/
+.env.bak
+*.stackdump

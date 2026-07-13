@@ -447,7 +447,7 @@ def _slots_for_day(d: date, rep: str) -> list[str]:
             return []
     slots = []
     t = datetime(d.year, d.month, d.day, 9, 0)
-    end = datetime(d.year, d.month, d.day, 17, 0)
+    end = datetime(d.year, d.month, d.day, 17, 30)
     while t < end:
         slots.append(t.strftime("%H:%M"))
         t += timedelta(minutes=30)

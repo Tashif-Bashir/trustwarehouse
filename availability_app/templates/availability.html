@@ -778,14 +778,10 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
                 style={{fontSize:12,color:'var(--indigo)',fontWeight:600,background:'none',border:'none',cursor:'pointer',padding:'2px 0'}}>
                 + Add CC
               </button>
-              {USER_EMAIL
-                ? <div style={{fontSize:11,color:'var(--muted)',marginTop:4}}>
-                    Your email ({USER_EMAIL}) will be added automatically as a required attendee.
-                  </div>
-                : <div style={{fontSize:11,color:'var(--amber)',marginTop:4}}>
-                    Log in with a personal account to be auto-added to the invite.
-                  </div>
-              }
+              <div style={{fontSize:11,color:'var(--muted)',marginTop:4}}>
+                You won't be invited to the appointment — it's logged under your name
+                ("Booked by" in the appointment notes).
+              </div>
             </div>
             {/* Notes → body (auto-grows with the text so long notes never need inner scrolling) */}
             <div className="booking-field">

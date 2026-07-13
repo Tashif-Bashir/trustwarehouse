@@ -1100,12 +1100,10 @@ def api_book():
 
     _TELESALES = "telesales@trustelectricheating.co.uk"
 
+    # The booking agent is deliberately NOT an attendee — agents don't want
+    # invites to appointments they merely booked. Who-booked-it is preserved in
+    # app.bookings, the CRM note/picklist, and the "Booked by" line in the body.
     attendees = []
-    if booker_email and booker_email.lower() != _TELESALES:
-        attendees.append({
-            "emailAddress": {"address": booker_email, "name": booker_name},
-            "type": "required",
-        })
     # telesales inbox always receives every booking
     attendees.append({
         "emailAddress": {"address": _TELESALES, "name": "Telesales"},
@@ -1132,7 +1130,9 @@ def api_book():
         "end":   {"dateTime": f"{date_iso}T{end_time}:00",   "timeZone": "Europe/London"},
         "attendees": attendees,
         "body": {"contentType": "Text",
-                 "content": notes + (f"\n\nCustomer email: {cust_email}" if cust_email else "")},
+                 "content": notes
+                 + (f"\n\nCustomer email: {cust_email}" if cust_email else "")
+                 + f"\n\nBooked by: {booker_name}"},
         "showAs": "busy",
         "isOnlineMeeting": teams,
         "isReminderOn": True,

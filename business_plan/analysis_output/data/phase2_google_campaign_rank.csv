@@ -1,0 +1,39 @@
+campaign_name,spend,conversions,cost_per_conv
+Search - REGION - Yorkshire,2707.0,1.0,2707.0
+Search - REGION -  Midlands,1392.0,1.0,1392.0
+Search - REGION - South West,1367.0,2.0,684.0
+Search - REGION - Northern England,4269.0,7.0,610.0
+Pmax - REGION - Wales,4470.0,11.6,385.0
+[Out]  Search - England - electric radiators,3830.0,12.7,302.0
+[In]-Oxfordhsire + EoE,1627.0,6.0,271.0
+Pmax - REGION - Scotland,12616.0,51.4,245.0
+[In] Search - Wales,1172.0,5.0,234.0
+Pmax - REGION - North East,6531.0,28.6,228.0
+[In]  Pmax - East of England,7132.0,36.6,195.0
+Search - GENERAL  - Electric Heaters,8800.0,48.1,183.0
+[In]  Pmax - Oxfordshire,2639.0,14.4,183.0
+[In] Pmax - Cornwall + SW (Niall),20637.0,121.5,170.0
+Pmax - REGION - Yorkshire,16978.0,101.1,168.0
+Pmax - REGION - South West,7638.0,46.5,164.0
+[Out]-Yorkshire,3180.0,20.6,154.0
+Search - GENERAL - Storage Heaters,52555.0,373.1,141.0
+Pmax - REGION - London,8940.0,66.8,134.0
+[Out] Search - Electric Heating Only,3556.0,27.1,131.0
+[In]  Pmax - Wales,8944.0,68.9,130.0
+Pmax - REGION - Midlands,34176.0,263.9,130.0
+Pmax - REGION - Northern England,71937.0,557.7,129.0
+Search - GENERAL - Electric Radiators,15731.0,132.9,118.0
+[In] Search - England - Electric heating,6309.0,58.6,108.0
+[Out] Pmax - Cornwall,6012.0,59.5,101.0
+[In] Search - Midlands,9400.0,93.7,100.0
+[Out] Search - Storage Heaters,15398.0,154.9,99.0
+Pmax - GENERAL - Retargeting,25094.0,270.1,93.0
+[Out]-Electric heaters terms,4006.0,43.1,93.0
+Pmax - GENERAL,138240.0,1503.3,92.0
+[Out] Pmax - Northern,9333.0,108.0,86.0
+[Out] Pmax - midlands,8314.0,109.1,76.0
+[Out] Pmax - General,41672.0,624.4,67.0
+[Out] Pmax - London,4458.0,85.9,52.0
+[Out] Pmax - retargeting,3734.0,75.7,49.0
+Search - GENERAL - Branded,28214.0,610.7,46.0
+[In] Pmax - General - UK competitor,2734.0,82.8,33.0

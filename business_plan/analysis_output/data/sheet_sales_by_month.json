@@ -1,0 +1,125 @@
+{
+ "2024-01": {
+  "sales": null,
+  "note": "no customer column: name|amount|chc|sector|sat on sales|vat|week|campaign|units"
+ },
+ "2024-02": {
+  "sales": null,
+  "note": "no customer column: name|amount|chc|sector|sat on sales|vat|week|campaign|units"
+ },
+ "2024-03": {
+  "sales": null,
+  "note": "no customer column: name|amount|chc|sector|sat on sales|vat|week|campaign|units"
+ },
+ "2024-04": {
+  "sales": null,
+  "note": "no customer column: name|amount|chc|sector|sat on sales|vat|week|campaign|units"
+ },
+ "2024-05": {
+  "sales": null,
+  "note": "no customer column: name|amount|chc|sector|sat on sales|vat|week|campaign|units"
+ },
+ "2024-06": {
+  "sales": null,
+  "note": "no customer column: name|amount|chc|sector|sat on sales|vat|week|campaign|units"
+ },
+ "2024-07": {
+  "sales": null,
+  "note": "no customer column: name|amount|person|sector|sat on sales|vat|week|campaign|units|mkt: url"
+ },
+ "2024-08": {
+  "sales": 179,
+  "domestic": 0,
+  "revenue": 347247.59
+ },
+ "2024-09": {
+  "sales": 238,
+  "domestic": 0,
+  "revenue": 463941.15
+ },
+ "2024-10": {
+  "sales": 248,
+  "domestic": 0,
+  "revenue": 500149.78
+ },
+ "2024-11": {
+  "sales": 281,
+  "domestic": 0,
+  "revenue": 553851.79
+ },
+ "2024-12": {
+  "sales": 184,
+  "domestic": 0,
+  "revenue": 228801.93
+ },
+ "2025-01": {
+  "sales": 152,
+  "domestic": 146,
+  "revenue": 440213.16
+ },
+ "2025-02": {
+  "sales": 88,
+  "domestic": 76,
+  "revenue": 282163.31
+ },
+ "2025-03": {
+  "sales": 83,
+  "domestic": 74,
+  "revenue": 241243.92
+ },
+ "2025-04": {
+  "sales": 137,
+  "domestic": 127,
+  "revenue": 495178.75
+ },
+ "2025-05": {
+  "sales": 51,
+  "domestic": 50,
+  "revenue": 180777.83
+ },
+ "2025-06": {
+  "sales": 88,
+  "domestic": 76,
+  "revenue": 383435.56
+ },
+ "2025-07": {
+  "sales": 118,
+  "domestic": 106,
+  "revenue": 366098.41
+ },
+ "2026-01": {
+  "sales": 133,
+  "domestic": 108,
+  "revenue": 392236.47
+ },
+ "2026-02": {
+  "sales": 113,
+  "domestic": 87,
+  "revenue": 344706.55
+ },
+ "2026-03": {
+  "sales": 121,
+  "domestic": 96,
+  "revenue": 374623.58
+ },
+ "2026-04": {
+  "sales": 145,
+  "domestic": 130,
+  "revenue": 506972.01
+ },
+ "2026-05": {
+  "sales": 72,
+  "domestic": 65,
+  "revenue": 235146.75
+ },
+ "2026-06": {
+  "sales": 105,
+  "domestic": 95,
+  "revenue": 425614.87
+ },
+ "2026-07": {
+  "sales": 33,
+  "domestic": 27,
+  "revenue": 129578.74
+ }
+}

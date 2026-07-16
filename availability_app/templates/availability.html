@@ -178,6 +178,7 @@
   .booking-field textarea{resize:vertical;min-height:110px;max-height:50vh;overflow-y:auto}
   .booking-actions{display:flex;gap:8px;margin-top:14px;align-items:center;justify-content:flex-end}
   .conflict-notice{background:var(--rose-soft);color:#c0392b;font-size:12px;font-weight:600;padding:8px 12px;border-radius:8px;margin-top:10px}
+  .input-missing{border-color:#c0392b !important;background:var(--rose-soft) !important}
   /* Lead search */
   .lead-search{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px}
   .lead-search-label{font-size:11px;font-weight:700;color:var(--ink2);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:8px}
@@ -464,7 +465,20 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
   // Blocks the appointment actually occupies = start .. (bookingEnd − 30). The end slot is a boundary, not occupied.
   const occupiedSlots = slots.filter(s => selStart && bookingEnd && s.time >= selStart && s.time < bookingEnd);
   const hasConflict   = occupiedSlots.some(s => s.status === 'booked' || s.status === 'off' || s.status === 'past');
-  const canBook       = !!(selStart && custName.trim() && postcode.trim() && !hasConflict && !result && !dayIsPast);
+  const [missingFields, setMissingFields] = useState([]);
+  useEffect(() => {
+    if (selStart) setMissingFields(m => m.filter(x => x !== 'a time slot'));
+  }, [selStart]);
+
+  function handleBookClick() {
+    const missing = [];
+    if (!selStart)         missing.push('a time slot');
+    if (!custName.trim())  missing.push('Customer name');
+    if (!postcode.trim())  missing.push('Postcode');
+    setMissingFields(missing);
+    if (missing.length) return;
+    setConfirming(true);
+  }
 
   function handleSlotClick(slot) {
     if (result || (slot.status !== 'free' && slot.status !== 'buffer') || dayIsPast) return;
@@ -518,7 +532,8 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
     setLeadId(l.id); setLeadName(l.name || '(no name)');
     if (l.name)     setCustName(l.name);
     if (l.postcode) setPostcode(l.postcode.toUpperCase());
-    if (l.email)    setCustEmail(l.email);
+    // customer email deliberately NOT auto-filled — telesales found it annoying;
+    // the CRM often holds junk/auto-generated addresses. They can type it if needed.
     // Pre-fill from the search result immediately (may be up to ~30 min stale)...
     applyEnquiryType(l.enquiry_type);
     setOtherOutcome('');
@@ -730,12 +745,21 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
             <div style={{display:'flex',gap:10}}>
               <div className="booking-field" style={{flex:2}}>
                 <label>Customer name *</label>
-                <input type="text" placeholder="e.g. Susan Barber" value={custName} onChange={e => setCustName(e.target.value)} />
+                <input type="text" placeholder="e.g. Susan Barber" value={custName}
+                  className={missingFields.includes('Customer name') ? 'input-missing' : ''}
+                  onChange={e => {
+                    setCustName(e.target.value);
+                    setMissingFields(m => m.filter(x => x !== 'Customer name'));
+                  }} />
               </div>
               <div className="booking-field" style={{flex:1}}>
                 <label>Postcode *</label>
                 <input type="text" placeholder="YO16 6XY" value={postcode}
-                  onChange={e => setPostcode(e.target.value.toUpperCase())}
+                  className={missingFields.includes('Postcode') ? 'input-missing' : ''}
+                  onChange={e => {
+                    setPostcode(e.target.value.toUpperCase());
+                    setMissingFields(m => m.filter(x => x !== 'Postcode'));
+                  }}
                   style={{textTransform:'uppercase',letterSpacing:'.5px'}} />
               </div>
             </div>
@@ -800,9 +824,12 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
           {hasConflict && (
             <div className="conflict-notice">⚠ Range includes a booked or off slot — adjust end time.</div>
           )}
+          {missingFields.length > 0 && (
+            <div className="conflict-notice">⚠ Please fill in: {missingFields.join(', ')}</div>
+          )}
           <div className="booking-actions">
             <button className="btn btn-ghost btn-sm" onClick={clearSelection}>Clear</button>
-            <button className="btn btn-primary" disabled={!canBook} onClick={() => setConfirming(true)}>
+            <button className="btn btn-primary" disabled={!!result || dayIsPast || hasConflict} onClick={handleBookClick}>
               {Ic.calendar} Book Appointment
             </button>
           </div>

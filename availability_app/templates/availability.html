@@ -745,7 +745,7 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
             <div style={{display:'flex',gap:10}}>
               <div className="booking-field" style={{flex:2}}>
                 <label>Customer name *</label>
-                <input type="text" placeholder="e.g. Susan Barber" value={custName}
+                <input type="text" value={custName}
                   className={missingFields.includes('Customer name') ? 'input-missing' : ''}
                   onChange={e => {
                     setCustName(e.target.value);
@@ -754,7 +754,7 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
               </div>
               <div className="booking-field" style={{flex:1}}>
                 <label>Postcode *</label>
-                <input type="text" placeholder="YO16 6XY" value={postcode}
+                <input type="text" value={postcode}
                   className={missingFields.includes('Postcode') ? 'input-missing' : ''}
                   onChange={e => {
                     setPostcode(e.target.value.toUpperCase());
@@ -766,13 +766,13 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
             {/* Location → calendar event Location + CRM address */}
             <div className="booking-field">
               <label>Location / address (optional)</label>
-              <input type="text" placeholder="e.g. 7 Alder Close, Sandford, Wareham"
+              <input type="text"
                 value={location} onChange={e => setLocation(e.target.value)} />
             </div>
             {/* Customer email — reference only; the customer is never invited */}
             <div className="booking-field">
               <label>Customer email (optional — reference only, the customer is <strong>not</strong> sent an invite)</label>
-              <input type="email" placeholder="customer@email.com" value={custEmail} onChange={e => setCustEmail(e.target.value)} />
+              <input type="email" value={custEmail} onChange={e => setCustEmail(e.target.value)} />
             </div>
             {/* CC — multiple */}
             <div className="booking-field">
@@ -781,7 +781,6 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
                 <div key={i} style={{display:'flex',gap:6,marginBottom:6}}>
                   <input
                     type="email"
-                    placeholder="e.g. chrisk@trustelectricheating.co.uk"
                     value={addr}
                     onChange={e => {
                       const next = [...ccEmails];
@@ -812,7 +811,6 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
               <label>Notes (goes in body)</label>
               <textarea
                 ref={notesRef}
-                placeholder="Customer details, property info, heating notes…"
                 value={notes} onChange={e => setNotes(e.target.value)} rows={5} />
             </div>
             {/* Teams toggle */}

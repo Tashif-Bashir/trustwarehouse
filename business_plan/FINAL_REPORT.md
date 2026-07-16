@@ -19,8 +19,10 @@ A lead cost ~£30 in late 2024; it costs ~£80–86 now *(chart 1)*. That happen
 steps — **March 2025 and March 2026 — both times the ad budget was raised heavily just as seasonal
 demand fell** (March is one of the weakest months for heating interest). Most of the extra money
 went to Google, whose return fell from ~£5.80 back per £1 to ~£2.70 as it was force-fed *(chart 2)* —
-while Facebook, whose return was improving, was cut. On top of that: **roughly 1 in 4 leads we pay
-for never receives a phone call** (up to 4 in 10 during the busy winter), nobody dials after 5pm
+while Facebook, whose return was improving, was cut. On top of that: **nearly 1 in 5 leads we pay
+for has a valid phone number, no reason not to call it, and never receives a call** (worse in the
+busy winter — and that's *after* excluding invalid numbers and leads the team correctly marked
+uncallable), nobody dials after 5pm
 although ~30% of leads arrive in the evening or weekend, and during the first half of 2026 the
 business quietly lost several proven sales reps whose replacements are still ramping up.
 
@@ -53,9 +55,11 @@ One number to remember: **acquiring a new customer cost ~£500 a year ago; it co
 - **Speed-to-lead**: median time to first call is 11–15 *hours*; only ~25% called within 10 minutes.
   When staffed, the team is exceptional (1-minute median for office-hours arrivals) — the problem is
   coverage, not effort.
-- **The never-called block**: ~25% of leads get no call within 14 days (40% in winter peak). These
-  still convert at 15% by themselves — called leads convert at 22–27%. This is the single most
-  recoverable operational loss (£150–300k/yr potential).
+- **The never-called block** (validated net of uncallable numbers): **18.5% of phone-bearing leads —
+  ~3,400/yr — have a valid number, no uncallable marking, and never get dialled** (~30% in the
+  winter peak). Invalid-format numbers (470) and team-marked 'No Number' leads (631) are excluded
+  from this figure. These missed leads still convert at 15% by ringing in themselves — called leads
+  convert at 22–27%. The single most recoverable operational loss (£150–300k/yr potential).
 - **Nothing is dialled after 17:00** (verified zero) vs ~30% of leads arriving out of hours.
 - **Possible inbound leak**: under the new phone system the answered rate reads ~51% (was 90%+).
   Partly a measurement change, but ~200 calls/week appear to die in the phone menu.
@@ -92,7 +96,7 @@ name hygiene. None block the actions below.
 |---|---|---|---|
 | 1 | **Test-call the IVR / verify inbound answering** (1 hour) | Office manager + Tashif | Confirms or kills a potentially £10k+/week leak |
 | 2 | **Rebooking blitz: 333 cancelled appointments** | Telesales lead | ~80 appointments at zero media cost |
-| 3 | **Never-called daily worklist** (warehouse generates it) | Telesales lead | Kills the 25% never-called loss going forward |
+| 3 | **Never-called daily worklist** (warehouse generates it, valid numbers only) | Telesales lead | Kills the 18.5% truly-missed loss going forward |
 | 4 | **Kill regional-Search campaigns + "TEST"** | Marketing/agency | ~£26k/yr direct waste stopped |
 | 5 | **Auto-SMS on out-of-hours lead arrival** ("we'll call at 9am — reply with a better time") | Tashif (build) | Holds the 30% out-of-hours wave warm |
 | 6 | **Status-required working rule** (no lead closed without an outcome) | Telesales lead | Reverses the June hygiene slip; restores measurement |

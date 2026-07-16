@@ -34,9 +34,13 @@ Distribution (leads with phones, Jun 2025 – Jul 2026; first outbound call matc
 
 - **Median time to first call: 11–15 hours** (663–937 min) every single month.
   p90: **3–6 days**. Only **21–31% called within 10 minutes** (company target: ≤5 min average).
-- **The never-called block: ~25% of leads got no dial within 14 days.** Worse in the winter peak —
-  **Nov 2025–Mar 2026 ran at 60–72% called** (i.e. up to 40% never attempted) while volume was high;
-  recovered to 87–90% in May–Jul 2026 as volume collapsed. **This is a capacity ceiling, measured.**
+- **The never-called block** (validated decomposition, `phase3_nevercalled_validation.py`): of
+  18,304 phone-bearing leads (Jun 25–Jun 26), 4,496 (24.6%) got no dial within 14 days — but 470
+  had invalid-format numbers and 631 were worked and marked uncallable ('No Number'/'Not a Lead').
+  **The true gap: 3,395 leads (18.5%) with valid numbers and no uncallable marking were simply
+  never dialled** (2,759 excluding the 636 who booked anyway by ringing in). Proportionally worse
+  in the winter peak (~30% truly missed Nov 2025–Mar 2026); recovered May–Jul 2026 as volume
+  collapsed. **A capacity ceiling, measured — net of uncallable numbers.**
 - Conversion by speed bucket surprises: ≤10min 23.4%, >24h 27.5%, never-called 15.1%. The >24h
   bucket outperforming is confounded (callbacks/self-selected engaged leads book late) — the clean,
   honest claim is: **any call beats no call by ~8–12 points of appointment rate**, and a quarter of

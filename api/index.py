@@ -354,49 +354,133 @@ def _telesales_whiteboard():
     """Mirror of the team's office whiteboard. Axes:
       Daily  = appointments BOOKED today (productivity — what each agent
                generated today, regardless of when those sits will happen).
-      Weekly = appointments BOOKED this Mon-Sun week (productivity).
+      Weekly = appointments BOOKED this Mon-Fri week (productivity).
       Month  = appointments SCHEDULED to sit in this calendar month
                (this is what the 85/agent monthly target is measured
                against). Mixed axis is intentional — matches the office
-               whiteboard one-for-one."""
-    agents_list = "', '".join(TELESALES_AGENTS)
-    try:
-        return _q(f"""
-            SELECT
+               whiteboard one-for-one.
+
+    Today/week union TWO sources, deduped on (lead_id, booked day):
+      - CRM (silver_sharpspring_leads) — complete (captures manual and
+        WhatsApp bookings) but ~30 min stale (bronze sync cadence), and
+        lossy for past days: booked-at is a single overwritable field, so
+        rebooks and manual edits erase earlier booking events.
+      - app.bookings — the booking app's own event log, written the moment
+        the booking is made and never deleted (cancels update the row).
+        Live to the second, immutable, but only sees app-made bookings.
+    Booking events count PERMANENTLY (owner decision 18 Jul 2026, same as
+    gold_agent_performance_daily): a lead whose status later moves to
+    'Appointment Cancelled' stays counted on the day it was booked."""
+    from zoneinfo import ZoneInfo
+
+    crm_case = """
               CASE
                 WHEN LOWER(appointment_made_by) IN ('lily','lily harpham') THEN 'Lily'
                 WHEN LOWER(appointment_made_by) IN ('sue','susan england') THEN 'Sue'
                 WHEN LOWER(appointment_made_by) IN ('alicja','alicja aleksiuk') THEN 'Alicja Aleksiuk'
                 WHEN LOWER(appointment_made_by) IN ('alisha','alisha moore') THEN 'Alisha'
                 ELSE appointment_made_by
-              END AS agent_name,
-              -- today/week: count by WHEN it was booked (productivity)
-              COUNTIF(appointment_booked_at IS NOT NULL
-                      AND DATE(SAFE_CAST(appointment_booked_at AS TIMESTAMP), 'Europe/London')
-                          = CURRENT_DATE('Europe/London')) AS today_appts,
-              COUNTIF(appointment_booked_at IS NOT NULL
-                      AND DATE(SAFE_CAST(appointment_booked_at AS TIMESTAMP), 'Europe/London')
-                          BETWEEN DATE_TRUNC(CURRENT_DATE('Europe/London'), WEEK(MONDAY))
-                          AND DATE_ADD(DATE_TRUNC(CURRENT_DATE('Europe/London'), WEEK(MONDAY)), INTERVAL 4 DAY)) AS week_appts,
-              -- month: count by WHEN it sits (diary pipeline against 85/agent target)
-              -- does NOT require appointment_booked_at — some sits are booked without
-              -- the booked_at field being populated in CRM (e.g. Lily's 4 June sits)
-              COUNTIF(appointment_date IS NOT NULL
-                      AND appointment_date BETWEEN DATE_TRUNC(CURRENT_DATE('Europe/London'), MONTH)
-                          AND LAST_DAY(CURRENT_DATE('Europe/London'))) AS month_appts
+              END"""
+
+    # CRM booking events this week (row-level so we can dedupe against the
+    # app log). Filter matches gold_agent_performance_daily: flag still 'Yes'
+    # (covers sold leads, whose status moves on) OR a status that proves an
+    # appointment existed — including 'Appointment Cancelled' so cancels
+    # don't erase the booking from the day it was made.
+    try:
+        crm_events = _q(f"""
+            SELECT lead_id,
+              {crm_case} AS agent_name,
+              DATE(SAFE_CAST(appointment_booked_at AS TIMESTAMP), 'Europe/London') AS booked_date
             FROM `{PROJECT}.silver.silver_sharpspring_leads`
             WHERE appointment_made_by IS NOT NULL
-              AND (appointment_booked_at IS NOT NULL OR appointment_date IS NOT NULL)
-              -- Count only ACTIVE appointments by the team's field, Domestic Lead
-              -- Status: 'Appointment' + 'WhatsApp Appointment'. This excludes
-              -- 'Appointment Cancelled' (the real cancel flag) — appointment_status
-              -- never holds cancellations, so the old filter did nothing.
+              AND appointment_booked_at IS NOT NULL
+              AND DATE(SAFE_CAST(appointment_booked_at AS TIMESTAMP), 'Europe/London')
+                  BETWEEN DATE_TRUNC(CURRENT_DATE('Europe/London'), WEEK(MONDAY))
+                      AND CURRENT_DATE('Europe/London')
+              AND (appointment_booked = 'Yes'
+                   OR LOWER(COALESCE(domestic_appointment_status, '')) IN
+                      ('appointment', 'whatsapp appointment', 'appointment cancelled'))
+        """)
+    except Exception:
+        crm_events = pd.DataFrame()
+
+    # Live layer: the booking app's event log (app dataset, US region — must
+    # stay a separate query, cross-region joins are impossible).
+    try:
+        app_events = _q(f"""
+            SELECT lead_id,
+              CASE
+                WHEN LOWER(booker_name) LIKE 'lily%'                                    THEN 'Lily'
+                WHEN LOWER(booker_name) LIKE 'sue%' OR LOWER(booker_name) LIKE 'susan%' THEN 'Sue'
+                WHEN LOWER(booker_name) LIKE 'alicja%'                                  THEN 'Alicja Aleksiuk'
+                WHEN LOWER(booker_name) LIKE 'alisha%'                                  THEN 'Alisha'
+                ELSE booker_name
+              END AS agent_name,
+              DATE(booked_at, 'Europe/London') AS booked_date
+            FROM `{PROJECT}.app.bookings`
+            WHERE DATE(booked_at, 'Europe/London')
+                  BETWEEN DATE_TRUNC(CURRENT_DATE('Europe/London'), WEEK(MONDAY))
+                      AND CURRENT_DATE('Europe/London')
+              AND customer NOT LIKE 'Zzz Testlead%'
+              AND lead_id IS NOT NULL
+        """)
+    except Exception:
+        app_events = pd.DataFrame()
+
+    # month: count by WHEN it sits (diary pipeline against 85/agent target).
+    # Unchanged semantics: only ACTIVE sits count toward the target — a
+    # cancelled sit is not a sit, so 'Appointment Cancelled' stays excluded
+    # here (the manager's convention). Does NOT require appointment_booked_at —
+    # some sits are booked without it being populated (e.g. Lily's 4 June sits).
+    agents_list = "', '".join(TELESALES_AGENTS)
+    try:
+        month_df = _q(f"""
+            SELECT
+              {crm_case} AS agent_name,
+              COUNT(*) AS month_appts
+            FROM `{PROJECT}.silver.silver_sharpspring_leads`
+            WHERE appointment_made_by IS NOT NULL
+              AND appointment_date IS NOT NULL
+              AND appointment_date BETWEEN DATE_TRUNC(CURRENT_DATE('Europe/London'), MONTH)
+                  AND LAST_DAY(CURRENT_DATE('Europe/London'))
               AND LOWER(COALESCE(domestic_appointment_status, '')) IN ('appointment', 'whatsapp appointment')
             GROUP BY agent_name
             HAVING agent_name IN ('{agents_list}')
         """)
     except Exception:
-        return pd.DataFrame()
+        month_df = pd.DataFrame()
+
+    # Union the two event streams: one booking event per (lead, day). CRM
+    # first so its canonical naming wins when both sources have the row.
+    events = {}
+    for df in (crm_events, app_events):
+        if df.empty:
+            continue
+        for _, r in df.iterrows():
+            events.setdefault((str(r['lead_id']), str(r['booked_date'])), str(r['agent_name']))
+
+    today = datetime.now(ZoneInfo('Europe/London')).date()
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=4)  # Mon-Fri, matches the whiteboard
+
+    rows = {a: {'agent_name': a, 'today_appts': 0, 'week_appts': 0, 'month_appts': 0}
+            for a in TELESALES_AGENTS}
+    for (lead_id, booked_date), agent in events.items():
+        if agent not in rows:
+            continue
+        d = date.fromisoformat(booked_date)
+        if d == today:
+            rows[agent]['today_appts'] += 1
+        if week_start <= d <= week_end:
+            rows[agent]['week_appts'] += 1
+    if not month_df.empty:
+        for _, r in month_df.iterrows():
+            agent = str(r['agent_name'])
+            if agent in rows:
+                rows[agent]['month_appts'] = int(r['month_appts'])
+
+    return pd.DataFrame(list(rows.values()))
 
 def _ga4_sessions(d0, d1):
     # GA4 Data API returns dates as YYYYMMDD strings (no dashes).

@@ -41,20 +41,21 @@ export default function SummaryCards({ agents }: { agents: AgentMetrics[] }) {
     agents.reduce((sum, a) => sum + pick(a), 0)
 
   return (
-    <section className="grid grid-cols-2 gap-5 lg:grid-cols-4">
+    <section className="grid grid-cols-2 gap-5 lg:grid-cols-5">
       <Card label="Outbound calls" value={total((a) => a.outboundCalls)} format={String} delayMs={80} />
       <Card label="Calls over 30s" value={total((a) => a.callsOver30s)} format={String} delayMs={160} />
+      <Card label="Calls over 2 min" value={total((a) => a.callsOver2m)} format={String} delayMs={240} />
       <Card
         label="Total talktime"
         value={total((a) => a.talktimeSeconds)}
         format={formatTalktime}
-        delayMs={240}
+        delayMs={320}
       />
       <Card
         label="Appointments"
         value={total((a) => a.appointmentsBooked)}
         format={String}
-        delayMs={320}
+        delayMs={400}
       />
     </section>
   )

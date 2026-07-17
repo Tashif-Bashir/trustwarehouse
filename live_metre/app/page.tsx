@@ -79,7 +79,7 @@ export default function Wallboard() {
 
       {agents.length > 0 && <Leaderboard agents={agents} flashingIds={flashingIds} />}
 
-      <section className="grid grid-cols-1 gap-10 md:grid-cols-3">
+      <section className="grid grid-cols-1 gap-10 md:grid-cols-2 2xl:grid-cols-4">
         <ColumnChart
           title="Outbound calls"
           delayMs={480}
@@ -106,8 +106,22 @@ export default function Wallboard() {
           }))}
         />
         <ColumnChart
-          title="Talktime (mins)"
+          title="Calls over 2 min"
           delayMs={640}
+          columns={agents.map((a) => ({
+            id: a.id,
+            name: a.name,
+            color: a.color,
+            value: a.callsOver2m,
+            label:
+              a.outboundCalls > 0
+                ? `${a.callsOver2m} (${Math.round((a.callsOver2m / a.outboundCalls) * 100)}%)`
+                : '0',
+          }))}
+        />
+        <ColumnChart
+          title="Talktime (mins)"
+          delayMs={720}
           columns={agents.map((a) => ({
             id: a.id,
             name: a.name,

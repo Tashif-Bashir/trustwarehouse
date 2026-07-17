@@ -4,6 +4,7 @@ export interface AgentMetrics {
   color: string
   outboundCalls: number
   callsOver30s: number
+  callsOver2m: number
   talktimeSeconds: number
   appointmentsBooked: number
 }

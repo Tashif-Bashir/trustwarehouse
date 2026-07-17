@@ -46,6 +46,7 @@ interface CallRow {
   agent: string
   outbound_calls: number
   calls_over_30s: number
+  calls_over_2m: number
   talk_seconds: number
 }
 
@@ -53,10 +54,11 @@ async function queryCalls(): Promise<Map<string, CallRow>> {
   const [rows] = await client().query({
     query: `
       SELECT
-        JSON_VALUE(\`from\`, '$.name')       AS agent,
-        COUNT(*)                             AS outbound_calls,
-        COUNTIF(COALESCE(duration, 0) > 30)  AS calls_over_30s,
-        SUM(COALESCE(duration, 0))           AS talk_seconds
+        JSON_VALUE(\`from\`, '$.name')        AS agent,
+        COUNT(*)                              AS outbound_calls,
+        COUNTIF(COALESCE(duration, 0) > 30)   AS calls_over_30s,
+        COUNTIF(COALESCE(duration, 0) >= 120) AS calls_over_2m,
+        SUM(COALESCE(duration, 0))            AS talk_seconds
       FROM \`${PROJECT}.bronze.ascend_calls\`
       WHERE direction = 'outbound'
         AND DATE(start, 'Europe/London') = CURRENT_DATE('Europe/London')
@@ -144,6 +146,7 @@ export async function getBronzeMetrics(): Promise<Metrics> {
         ...agent,
         outboundCalls: Number(c?.outbound_calls ?? 0),
         callsOver30s: Number(c?.calls_over_30s ?? 0),
+        callsOver2m: Number(c?.calls_over_2m ?? 0),
         talktimeSeconds: Number(c?.talk_seconds ?? 0),
         appointmentsBooked: appointments.get(agent.id) ?? 0,
       }

@@ -52,6 +52,7 @@ export async function getMockMetrics(): Promise<Metrics> {
   const agents = AGENTS.map((agent, idx) => {
     let outboundCalls = 0
     let callsOver30s = 0
+    let callsOver2m = 0
     let talktimeSeconds = 0
     let appointmentsBooked = 0
 
@@ -66,12 +67,13 @@ export async function getMockMetrics(): Promise<Metrics> {
           : 20 + Math.floor(rand() ** 1.6 * 400)
         talktimeSeconds += secs
         if (secs > 30) callsOver30s++
+        if (secs >= 120) callsOver2m++
         // a decent conversation sometimes turns into an appointment
         if (secs >= 120 && rand() < 0.12) appointmentsBooked++
       }
     }
 
-    return { ...agent, outboundCalls, callsOver30s, talktimeSeconds, appointmentsBooked }
+    return { ...agent, outboundCalls, callsOver30s, callsOver2m, talktimeSeconds, appointmentsBooked }
   })
 
   return { asOf: new Date().toISOString(), source: 'Ascend (mock data)', agents }

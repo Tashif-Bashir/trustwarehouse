@@ -310,6 +310,18 @@
   .kpi-delta.good{ background:var(--mint-soft); color:#1FA77F; }
   .kpi-delta.bad{ background:var(--rose-soft); color:var(--rose); }
   .kpi-sub{ font-size:11px; color:var(--muted); margin-top:10px; }
+  /* Telesales mode toggle + full-screen Live Metre takeover */
+  .ts-mode{ display:inline-flex; gap:2px; background:var(--panel); border:1px solid var(--line); border-radius:999px; padding:3px; margin-bottom:14px; }
+  .ts-mode button{ padding:5px 14px; border-radius:999px; font-size:12.5px; font-weight:500; color:var(--muted); }
+  .ts-mode button.active{ background:linear-gradient(135deg,#5B6CFF 0%,#8B5CF6 100%); color:#fff; }
+  .metre-overlay{ position:fixed; inset:0; z-index:1000; background:#000; animation:metre-erupt .38s cubic-bezier(.16,1,.3,1); }
+  .metre-overlay iframe{ width:100%; height:100%; border:0; display:block; }
+  .metre-exit{ position:fixed; top:12px; left:14px; z-index:1001; opacity:.3; transition:opacity .2s; }
+  .metre-exit:hover{ opacity:1; }
+  .metre-exit .ts-mode{ margin:0; background:rgba(20,20,24,.92); border-color:rgba(255,255,255,.15); }
+  .metre-exit .ts-mode button{ color:#9aa1ab; }
+  @keyframes metre-erupt{ from{ opacity:0; transform:scale(.965); } to{ opacity:1; transform:none; } }
+
   /* Insights panel (Telesales) */
   .insights-card{ margin-bottom:14px; }
   .insights-count{ font-size:11px; color:var(--muted); font-weight:600; padding:3px 10px; background:var(--bg-2); border-radius:99px; }
@@ -2280,7 +2292,18 @@ function InsightsPanel({ insights }) {
   );
 }
 
-function TelesalesView({ data }) {
+/* ── Telesales mode toggle — Dashboard ↔ Live metre (the wallboard app,
+   embedded full-screen from trust-live-metre.vercel.app). ── */
+function TsModeToggle({ mode, setMode }) {
+  return (
+    <div className="ts-mode">
+      <button className={mode === 'dashboard' ? 'active' : ''} onClick={() => setMode('dashboard')}>Dashboard</button>
+      <button className={mode === 'metre' ? 'active' : ''} onClick={() => setMode('metre')}>Live metre</button>
+    </div>
+  );
+}
+
+function TelesalesView({ data, tsMode, setTsMode }) {
   const agents = data.agents || [];
   const T = data.totals || {};
   const tgtPerAgent = data.team_target_per_agent || 85;
@@ -2295,6 +2318,7 @@ function TelesalesView({ data }) {
   //   - To go (team target 340 minus this month's sits)
   return (
     <>
+      <TsModeToggle mode={tsMode} setMode={setTsMode}/>
       <div className="g4">
         <Kpi label="Today" value={fmt(T.today_appts)} icon={Ic.appt}
              iconBg="var(--violet-soft)" iconColor="var(--violet)" delay={0}/>
@@ -2562,6 +2586,16 @@ function App() {
   );
   React.useEffect(() => { sessionStorage.setItem('dash:tab', activeTab); }, [activeTab]);
 
+  /* Telesales view mode — 'dashboard' or 'metre' (the Live Telesales Metre
+     wallboard embedded full-screen). Persisted so a wall display stays on
+     the metre through page reloads. The overlay renders at App level,
+     OUTSIDE the viewKey wrapper, so the periodic view remount (~every data
+     refresh) never reloads the iframe. */
+  const [tsMode, setTsMode] = React.useState(
+    () => localStorage.getItem('dash:tsmode') || 'dashboard'
+  );
+  React.useEffect(() => { localStorage.setItem('dash:tsmode', tsMode); }, [tsMode]);
+
   const [period, setPeriod] = React.useState({ id: '30d', label: 'Last 30 days' });
   const [data,   setData]   = React.useState(null);
   const [loading, setLoading] = React.useState(false);
@@ -2661,7 +2695,7 @@ function App() {
         {!loading && !error && data && (
           <div key={viewKey} className="view-fade">
             {activeTab === 'Marketing'  && <MarketingView  data={data.marketing}/>}
-            {activeTab === 'Telesales' && <TelesalesView  data={data.telesales} marketingData={data.marketing}/>}
+            {activeTab === 'Telesales' && <TelesalesView  data={data.telesales} marketingData={data.marketing} tsMode={tsMode} setTsMode={setTsMode}/>}
             {activeTab === 'Sales' && (
               <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'60vh',gap:'16px'}}>
                 <div style={{fontSize:'48px'}}>🚧</div>
@@ -2672,6 +2706,15 @@ function App() {
           </div>
         )}
       </main>
+
+      {activeTab === 'Telesales' && tsMode === 'metre' && (
+        <div className="metre-overlay">
+          <iframe src="https://trust-live-metre.vercel.app" title="Live telesales metre"/>
+          <div className="metre-exit">
+            <TsModeToggle mode={tsMode} setMode={setTsMode}/>
+          </div>
+        </div>
+      )}
 
       <MobileNav activeTab={activeTab} setActiveTab={setActiveTab}/>
     </div>

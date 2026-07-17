@@ -67,11 +67,13 @@ export default function Wallboard() {
 
   return (
     <main className="mx-auto flex max-w-[1500px] flex-col gap-10 p-6 lg:p-10">
-      <Header
-        source={metrics?.source ?? '—'}
-        secondsAgo={secondsAgo}
-        stale={stale}
-      />
+      <div className="fade-up">
+        <Header
+          source={metrics?.source ?? '—'}
+          secondsAgo={secondsAgo}
+          stale={stale}
+        />
+      </div>
 
       <SummaryCards agents={agents} />
 
@@ -80,6 +82,7 @@ export default function Wallboard() {
       <section className="grid grid-cols-1 gap-10 md:grid-cols-3">
         <ColumnChart
           title="Outbound calls"
+          delayMs={480}
           columns={agents.map((a) => ({
             id: a.id,
             name: a.name,
@@ -90,6 +93,7 @@ export default function Wallboard() {
         />
         <ColumnChart
           title="Calls over 30s"
+          delayMs={560}
           columns={agents.map((a) => ({
             id: a.id,
             name: a.name,
@@ -103,6 +107,7 @@ export default function Wallboard() {
         />
         <ColumnChart
           title="Talktime (mins)"
+          delayMs={640}
           columns={agents.map((a) => ({
             id: a.id,
             name: a.name,

@@ -1,3 +1,6 @@
+'use client'
+
+import { useCountUp } from '@/lib/useCountUp'
 import type { AgentMetrics } from '@/lib/types'
 
 export function formatTalktime(totalSeconds: number): string {
@@ -6,27 +9,53 @@ export function formatTalktime(totalSeconds: number): string {
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`
 }
 
+function Card({
+  label,
+  value,
+  format,
+  delayMs,
+}: {
+  label: string
+  value: number
+  format: (v: number) => string
+  delayMs: number
+}) {
+  const display = useCountUp(value)
+  return (
+    <div
+      className="fade-up rounded-xl border-[0.5px] border-hairline bg-surface px-7 py-6"
+      style={{ animationDelay: `${delayMs}ms` }}
+    >
+      <p className="text-sm font-medium uppercase tracking-[0.18em] text-neutral-400">
+        {label}
+      </p>
+      <p className="mt-2 font-display text-7xl font-semibold leading-none tracking-tight tabular-nums">
+        {format(display)}
+      </p>
+    </div>
+  )
+}
+
 export default function SummaryCards({ agents }: { agents: AgentMetrics[] }) {
   const total = (pick: (a: AgentMetrics) => number) =>
     agents.reduce((sum, a) => sum + pick(a), 0)
 
-  const cards = [
-    { label: 'Outbound calls', value: String(total((a) => a.outboundCalls)) },
-    { label: 'Calls over 30s', value: String(total((a) => a.callsOver30s)) },
-    { label: 'Total talktime', value: formatTalktime(total((a) => a.talktimeSeconds)) },
-    { label: 'Appointments', value: String(total((a) => a.appointmentsBooked)) },
-  ]
-
   return (
     <section className="grid grid-cols-2 gap-5 lg:grid-cols-4">
-      {cards.map((card) => (
-        <div key={card.label} className="rounded-xl bg-neutral-900 px-7 py-6">
-          <p className="text-lg text-neutral-400">{card.label}</p>
-          <p className="mt-2 text-6xl font-semibold tabular-nums tracking-tight">
-            {card.value}
-          </p>
-        </div>
-      ))}
+      <Card label="Outbound calls" value={total((a) => a.outboundCalls)} format={String} delayMs={80} />
+      <Card label="Calls over 30s" value={total((a) => a.callsOver30s)} format={String} delayMs={160} />
+      <Card
+        label="Total talktime"
+        value={total((a) => a.talktimeSeconds)}
+        format={formatTalktime}
+        delayMs={240}
+      />
+      <Card
+        label="Appointments"
+        value={total((a) => a.appointmentsBooked)}
+        format={String}
+        delayMs={320}
+      />
     </section>
   )
 }

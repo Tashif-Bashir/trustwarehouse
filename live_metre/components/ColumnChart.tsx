@@ -9,6 +9,7 @@ interface Column {
 interface ColumnChartProps {
   title: string
   columns: Column[]
+  delayMs?: number
 }
 
 // Round up to a "nice" axis step (1 / 2 / 2.5 / 5 × 10^n).
@@ -21,20 +22,23 @@ function niceStep(rough: number): number {
 
 const INTERVALS = 4 // gridlines at 0, 25, 50, 75, 100% of the axis max
 
-export default function ColumnChart({ title, columns }: ColumnChartProps) {
+export default function ColumnChart({ title, columns, delayMs = 0 }: ColumnChartProps) {
   const rawMax = Math.max(1, ...columns.map((c) => c.value))
   const step = niceStep(rawMax / INTERVALS)
   const axisMax = step * INTERVALS
   const ticks = Array.from({ length: INTERVALS + 1 }, (_, i) => step * (INTERVALS - i))
 
   return (
-    <div>
-      <h3 className="text-2xl font-semibold">{title}</h3>
-      <div className="mt-5 flex gap-3">
+    <div className="fade-up" style={{ animationDelay: `${delayMs}ms` }}>
+      <h3 className="font-display text-3xl font-semibold uppercase tracking-wide">{title}</h3>
+      <div className="mt-6 flex gap-3">
         {/* y axis labels */}
-        <div className="flex h-64 flex-col justify-between text-right text-sm tabular-nums text-neutral-500">
+        <div className="flex h-64 flex-col justify-between text-right font-display text-base font-medium tabular-nums text-neutral-500">
           {ticks.map((tick) => (
-            <span key={tick} className="-translate-y-1/2 leading-none first:translate-y-0 last:translate-y-0">
+            <span
+              key={tick}
+              className="-translate-y-1/2 leading-none first:translate-y-0 last:translate-y-0"
+            >
               {Number.isInteger(tick) ? tick : tick.toFixed(1)}
             </span>
           ))}
@@ -45,7 +49,7 @@ export default function ColumnChart({ title, columns }: ColumnChartProps) {
             {ticks.map((tick, i) => (
               <div
                 key={tick}
-                className="absolute inset-x-0 border-t-[0.5px] border-white/10"
+                className="absolute inset-x-0 border-t-[0.5px] border-white/[0.07]"
                 style={{ top: `${(i / INTERVALS) * 100}%` }}
               />
             ))}
@@ -53,7 +57,7 @@ export default function ColumnChart({ title, columns }: ColumnChartProps) {
               {columns.map((col) => (
                 <div key={col.id} className="flex h-full w-16 flex-col items-center justify-end">
                   {col.label !== undefined && (
-                    <span className="mb-1.5 text-sm tabular-nums text-neutral-400">
+                    <span className="mb-2 font-display text-lg font-medium tabular-nums text-neutral-300">
                       {col.label}
                     </span>
                   )}
@@ -62,6 +66,7 @@ export default function ColumnChart({ title, columns }: ColumnChartProps) {
                     style={{
                       height: `${(col.value / axisMax) * 100}%`,
                       backgroundColor: col.color,
+                      boxShadow: `0 0 14px color-mix(in srgb, ${col.color} 18%, transparent)`,
                     }}
                   />
                 </div>
@@ -69,9 +74,12 @@ export default function ColumnChart({ title, columns }: ColumnChartProps) {
             </div>
           </div>
           {/* agent names under the columns */}
-          <div className="flex items-start justify-around gap-4 px-2 pt-2">
+          <div className="flex items-start justify-around gap-4 px-2 pt-2.5">
             {columns.map((col) => (
-              <span key={col.id} className="w-16 text-center text-lg font-medium text-neutral-200">
+              <span
+                key={col.id}
+                className="w-16 text-center font-display text-xl font-medium text-neutral-200"
+              >
                 {col.name}
               </span>
             ))}

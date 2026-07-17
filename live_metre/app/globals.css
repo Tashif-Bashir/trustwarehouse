@@ -2,6 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Atmosphere: a faint top vignette so the board isn't dead-flat black, and a
+   fine grain overlay that stops gradient banding on big TV panels. */
+.vignette {
+  background:
+    radial-gradient(1100px 520px at 50% -8%, #17181d 0%, #0b0b0d 55%, #070708 100%)
+    fixed;
+}
+
+.noise::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
 @keyframes pulse-dot {
   0%,
   100% {
@@ -16,6 +34,24 @@
   animation: pulse-dot 1.6s ease-in-out infinite;
 }
 
+/* One orchestrated page-load reveal — sections stagger in with inline
+   animation-delay. */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.fade-up {
+  opacity: 0;
+  animation: fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 /* Brief row highlight when an agent books an appointment. --agent is set
    inline per row so the flash matches the agent's own colour. */
 @keyframes row-flash {
@@ -23,7 +59,7 @@
     background-color: transparent;
   }
   15% {
-    background-color: color-mix(in srgb, var(--agent) 24%, transparent);
+    background-color: color-mix(in srgb, var(--agent) 22%, transparent);
   }
   100% {
     background-color: transparent;

@@ -15,19 +15,25 @@ with calls as (
     and call_status = 'COMPLETED'
 ),
 
--- Appointments BOOKED on this day (date the agent clicked save in CRM).
--- Use Europe/London so the date axis matches the call_date axis (which is
--- already London-anchored). Without the timezone, BigQuery defaults to UTC
--- and late-evening UK bookings drift to the previous calendar day.
+-- Appointments BOOKED on this day — counts the booking EVENT permanently
+-- (owner decision 18 Jul 2026): a cancellation must not retroactively erase
+-- the booking from the day it was made. A booking counts while the flag is
+-- 'Yes' (live) AND stays counted once the status moves to 'Appointment
+-- Cancelled', provided the booked-at timestamp survives — the booking app
+-- preserves it on cancel as of 18 Jul 2026 (it used to clear it; a handful
+-- of app cancellations from 7-17 Jul are unrecoverable and undercounted).
+-- Europe/London so the date axis matches call_date (late-evening UK bookings
+-- would otherwise drift a day under UTC).
 appointments as (
     select
         {{ normalise_agent_name('appointment_made_by') }}                           as agent_name,
         DATE(SAFE_CAST(appointment_booked_at AS TIMESTAMP), 'Europe/London')        as appt_booked_date,
         count(*)                                                                    as appointments_booked
     from {{ ref('silver_sharpspring_leads') }}
-    where appointment_booked = 'Yes'
-    and appointment_made_by is not null
-    and appointment_booked_at is not null
+    where appointment_made_by is not null
+      and appointment_booked_at is not null
+      and (appointment_booked = 'Yes'
+           or lower(coalesce(domestic_appointment_status, '')) = 'appointment cancelled')
     group by agent_name, DATE(SAFE_CAST(appointment_booked_at AS TIMESTAMP), 'Europe/London')
 ),
 

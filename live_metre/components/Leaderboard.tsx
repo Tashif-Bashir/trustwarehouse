@@ -1,17 +1,9 @@
 'use client'
 
-import { SCORING } from '@/lib/config'
 import { useCountUp } from '@/lib/useCountUp'
 import type { AgentMetrics } from '@/lib/types'
 
 const ROW_HEIGHT = 72 // px — fixed so rank changes animate via `top`
-
-export function performanceScore(agent: AgentMetrics): number {
-  return Math.round(
-    agent.appointmentsBooked * SCORING.appointmentPoints +
-      (agent.talktimeSeconds / 60) * SCORING.talkMinutePoints
-  )
-}
 
 function TrophyIcon({ className }: { className?: string }) {
   return (
@@ -23,20 +15,18 @@ function TrophyIcon({ className }: { className?: string }) {
 
 function Row({
   agent,
-  score,
   rank,
-  maxScore,
+  maxAppts,
   isLeader,
   flashing,
 }: {
   agent: AgentMetrics
-  score: number
   rank: number
-  maxScore: number
+  maxAppts: number
   isLeader: boolean
   flashing: boolean
 }) {
-  const displayScore = useCountUp(score)
+  const displayAppts = useCountUp(agent.appointmentsBooked)
   return (
     <div
       className={`absolute inset-x-0 flex items-center gap-6 rounded-lg transition-[top] duration-700 ease-in-out ${
@@ -49,7 +39,7 @@ function Row({
         <div
           className="absolute inset-y-0 left-0 rounded-lg transition-[width] duration-700 ease-in-out"
           style={{
-            width: `${(score / maxScore) * 100}%`,
+            width: `${(agent.appointmentsBooked / maxAppts) * 100}%`,
             backgroundColor: agent.color,
             // the neon-strip glow — each bar radiates its own team colour
             boxShadow: `0 0 ${isLeader ? 26 : 16}px color-mix(in srgb, ${agent.color} ${
@@ -58,9 +48,9 @@ function Row({
           }}
         />
       </div>
-      <div className="flex w-60 shrink-0 items-center justify-end gap-3">
+      <div className="flex w-44 shrink-0 items-center justify-end gap-3">
         <span className="font-display text-3xl font-medium tabular-nums">
-          {displayScore} <span className="text-neutral-500">·</span> {agent.appointmentsBooked}{' '}
+          {displayAppts}{' '}
           <span className="text-2xl text-neutral-400">
             appt{agent.appointmentsBooked === 1 ? '' : 's'}
           </span>
@@ -79,29 +69,28 @@ interface LeaderboardProps {
 }
 
 export default function Leaderboard({ agents, flashingIds }: LeaderboardProps) {
-  const scored = agents.map((agent) => ({ agent, score: performanceScore(agent) }))
-  // Stable sort: descending score, config order breaks ties (empty morning).
-  const ranked = [...scored].sort((a, b) => b.score - a.score)
-  const rankById = new Map(ranked.map((entry, rank) => [entry.agent.id, rank]))
-  const maxScore = Math.max(1, ...scored.map((entry) => entry.score))
-  const leaderId = ranked[0].score > 0 ? ranked[0].agent.id : null
+  // Rank purely by appointments booked today (owner decision 18 Jul 2026 —
+  // no composite score). Stable sort: config order breaks ties.
+  const ranked = [...agents].sort((a, b) => b.appointmentsBooked - a.appointmentsBooked)
+  const rankById = new Map(ranked.map((agent, rank) => [agent.id, rank]))
+  const maxAppts = Math.max(1, ...agents.map((a) => a.appointmentsBooked))
+  const leaderId = ranked[0].appointmentsBooked > 0 ? ranked[0].id : null
 
   return (
     <section className="fade-up" style={{ animationDelay: '400ms' }}>
       <h2 className="font-display text-3xl font-semibold uppercase tracking-wide">
         Performance today{' '}
         <span className="font-body text-lg font-normal normal-case tracking-normal text-neutral-400">
-          — weighted: talktime + appointments
+          — appointments booked
         </span>
       </h2>
       <div className="relative mt-5" style={{ height: agents.length * ROW_HEIGHT }}>
-        {scored.map(({ agent, score }) => (
+        {agents.map((agent) => (
           <Row
             key={agent.id}
             agent={agent}
-            score={score}
             rank={rankById.get(agent.id) ?? 0}
-            maxScore={maxScore}
+            maxAppts={maxAppts}
             isLeader={agent.id === leaderId}
             flashing={flashingIds.has(agent.id)}
           />

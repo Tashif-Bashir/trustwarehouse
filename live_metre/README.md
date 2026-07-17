@@ -9,10 +9,13 @@ as its own project.
 Everything tunable lives in `lib/config.ts`:
 
 - **Agent roster + colours** — colour follows the agent, never the rank.
-- **`SCORING`** — the leaderboard weighting (appointment points vs talktime
-  minute points).
+- **`SOURCE_NAMES`** — the exact per-source agent names (Ascend / booking
+  app / CRM); update on renames or new starters.
 - **`POLL_INTERVAL_MS` / `STALE_AFTER_MS`** — refresh cadence and when the
   Live pill turns amber.
+
+The leaderboard ranks purely by appointments booked today (no composite
+score — owner decision 18 Jul 2026).
 
 ## Data source
 

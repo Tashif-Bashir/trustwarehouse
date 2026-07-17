@@ -44,14 +44,6 @@ export const SOURCE_NAMES: Record<
   },
 }
 
-// Performance score = appointments * appointmentPoints
-//                   + talktime minutes * talkMinutePoints
-// An appointment is worth ~25 minutes of talktime by default — tune freely.
-export const SCORING = {
-  appointmentPoints: 25,
-  talkMinutePoints: 1,
-}
-
 // Frontend polling cadence and the threshold after which the feed is
 // declared stale (amber pill).
 export const POLL_INTERVAL_MS = 20_000

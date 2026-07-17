@@ -343,8 +343,9 @@ def _ss_cancel_lead(lead: dict, booker_owner_id: str, appt_type: str = "heating"
         "id": str(lead.get("id")),
         _SS_F_APPT_BOOKED: "No",
         _SS_F_APPT_DT: "",    # a cancelled appointment has no time...
-        _SS_F_BOOKED_TS: "",  # ...no telesales booking timestamp...
         _SS_F_APPT_TYPE: "",  # ...and no Physical/Video type
+        # _SS_F_BOOKED_TS deliberately KEPT: the booking event happened, and the
+        # dashboard counts bookings permanently by this timestamp (18 Jul 2026).
     }
     old_appt = lead.get(_SS_F_APPT_DT) or ""
     if old_appt:

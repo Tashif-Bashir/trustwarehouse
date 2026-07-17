@@ -4,10 +4,15 @@ import type { Metrics } from '../types'
 
 // Real data provider.
 //
-//   Calls        <- bronze.ascend_calls (europe-west2), synced from the Ascend
-//                   phone system every 60s by the warehouse VM. Ascend
-//                   `duration` is pure talk time; a CDR row exists only once
-//                   a call has ENDED.
+//   Calls        <- silver.silver_ascend_calls (europe-west2), rebuilt by the
+//                   warehouse VM every ~60s sync cycle. Deliberately NOT
+//                   bronze.ascend_calls: the bronze sync merges its 2h
+//                   lookback window by delete-then-reinsert, so a query
+//                   landing mid-merge transiently loses up to 2h of recent
+//                   calls (observed live 18 Jul 2026 — the board's bars
+//                   visibly shrank for one refresh). Silver is an atomic
+//                   CREATE OR REPLACE, so it is always complete. A CDR row
+//                   exists only once a call has ENDED.
 //   Appointments <- union of app.bookings (US region — the booking app's own
 //                   event log, live to the second) and the CRM (silver, ~30
 //                   min behind, catches manual/WhatsApp bookings), deduped
@@ -54,15 +59,15 @@ async function queryCalls(): Promise<Map<string, CallRow>> {
   const [rows] = await client().query({
     query: `
       SELECT
-        JSON_VALUE(\`from\`, '$.name')        AS agent,
-        COUNT(*)                              AS outbound_calls,
-        COUNTIF(COALESCE(duration, 0) > 30)   AS calls_over_30s,
-        COUNTIF(COALESCE(duration, 0) >= 120) AS calls_over_2m,
-        SUM(COALESCE(duration, 0))            AS talk_seconds
-      FROM \`${PROJECT}.bronze.ascend_calls\`
-      WHERE direction = 'outbound'
-        AND DATE(start, 'Europe/London') = CURRENT_DATE('Europe/London')
-        AND JSON_VALUE(\`from\`, '$.name') IN UNNEST(@names)
+        colleague_name                                   AS agent,
+        COUNT(*)                                         AS outbound_calls,
+        COUNTIF(COALESCE(talk_time_seconds, 0) > 30)     AS calls_over_30s,
+        COUNTIF(COALESCE(talk_time_seconds, 0) >= 120)   AS calls_over_2m,
+        SUM(COALESCE(talk_time_seconds, 0))              AS talk_seconds
+      FROM \`${PROJECT}.silver.silver_ascend_calls\`
+      WHERE direction = 'OUTBOUND'
+        AND DATE(TIMESTAMP_MILLIS(start_time), 'Europe/London') = CURRENT_DATE('Europe/London')
+        AND colleague_name IN UNNEST(@names)
       GROUP BY agent
     `,
     params: { names: [...byAscend.keys()] },
@@ -133,26 +138,47 @@ async function queryAppointments(): Promise<Map<string, number>> {
   return counts
 }
 
-let cache: { data: Metrics; at: number } | null = null
+let cache: { data: Metrics; at: number; ukDate: string } | null = null
+
+function ukToday(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/London',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+}
 
 export async function getBronzeMetrics(): Promise<Metrics> {
-  if (cache && Date.now() - cache.at < CACHE_TTL_MS) return cache.data
+  if (cache && Date.now() - cache.at < CACHE_TTL_MS && cache.ukDate === ukToday()) {
+    return cache.data
+  }
 
   try {
     const [calls, appointments] = await Promise.all([queryCalls(), queryAppointments()])
+    const today = ukToday()
+    const prevByAgent = new Map(
+      cache && cache.ukDate === today ? cache.data.agents.map((a) => [a.id, a]) : []
+    )
     const agents = AGENTS.map((agent) => {
       const c = calls.get(agent.id)
+      // Monotonic guard: cumulative call counts can only rise within a day.
+      // If a source read ever comes back lower than what we already served
+      // (any transient upstream gap), hold the higher number — the next
+      // refresh catches up. Appointments stay live (a genuine CRM
+      // correction should show).
+      const prev = prevByAgent.get(agent.id)
       return {
         ...agent,
-        outboundCalls: Number(c?.outbound_calls ?? 0),
-        callsOver30s: Number(c?.calls_over_30s ?? 0),
-        callsOver2m: Number(c?.calls_over_2m ?? 0),
-        talktimeSeconds: Number(c?.talk_seconds ?? 0),
+        outboundCalls: Math.max(Number(c?.outbound_calls ?? 0), prev?.outboundCalls ?? 0),
+        callsOver30s: Math.max(Number(c?.calls_over_30s ?? 0), prev?.callsOver30s ?? 0),
+        callsOver2m: Math.max(Number(c?.calls_over_2m ?? 0), prev?.callsOver2m ?? 0),
+        talktimeSeconds: Math.max(Number(c?.talk_seconds ?? 0), prev?.talktimeSeconds ?? 0),
         appointmentsBooked: appointments.get(agent.id) ?? 0,
       }
     })
     const data: Metrics = { asOf: new Date().toISOString(), source: 'Ascend', agents }
-    cache = { data, at: Date.now() }
+    cache = { data, at: Date.now(), ukDate: today }
     return data
   } catch (err) {
     // BigQuery hiccup: serve the last good numbers if we have any — the

@@ -43,7 +43,8 @@ case "$SOURCE" in
     SELECTOR=""  # no dbt step
     ;;
   ascend)
-    SELECTOR=""  # bronze only for now — silver_ascend_calls comes once schema settles
+    # mirrors the old wildix selector — keeps dashboard call metrics near-live
+    SELECTOR="silver_ascend_calls silver_calls_unified gold_lead_activity gold_lead_calls gold_agent_performance_daily"
     ;;
   unleashed)
     SELECTOR="silver_unleashed_customers silver_unleashed_products silver_unleashed_sales_orders silver_unleashed_stock_on_hand gold_sales_orders gold_sales_reconciled"

@@ -84,10 +84,36 @@ models:
           - unique
           - not_null
 
+  - name: silver_ascend_calls
+    description: >
+      One row per call from Ascend (Focus Group) bronze, mapped to the same
+      column contract as silver_wildix_calls so downstream models work across
+      the 1 Jul 2026 phone-system cutover. Ascend duration = talk time;
+      answered flag maps to COMPLETED/MISSED; IVR/voicemail endpoints get a
+      NULL colleague_name so they never appear as agents.
+    columns:
+      - name: call_id
+        description: Ascend call id (unique — one row per call, no legs).
+        tests:
+          - not_null
+          - unique
+
+  - name: silver_calls_unified
+    description: >
+      Unified call history across the phone migration — Wildix rows before
+      1 Jul 2026 (legs preserved exactly as history always counted them),
+      Ascend rows from 1 Jul 2026. All downstream call models read this.
+    columns:
+      - name: phone_system
+        description: "'wildix' or 'ascend' — which side of the cutover the row is from."
+        tests:
+          - not_null
+
   - name: silver_wildix_calls
     description: >
       One row per call leg from Wildix bronze. Typed and cleaned.
       Note: a single customer call may produce multiple rows (one per leg).
+      FROZEN since 1 Jul 2026 (system replaced by Ascend) — kept for history.
     columns:
       - name: call_id
         description: Wildix call ID (id field). Not unique alone — use (call_id, wms_id).

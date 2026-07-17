@@ -10,7 +10,7 @@ with calls as (
         talk_time_seconds,
         duration_seconds,
         remote_phone
-    from {{ ref('silver_wildix_calls') }}
+    from {{ ref('silver_calls_unified') }}
     where direction in ('OUTBOUND', 'INBOUND')
     and call_status = 'COMPLETED'
 ),
@@ -118,7 +118,7 @@ missed as (
         DATE(TIMESTAMP_MILLIS(start_time), 'Europe/London')                        as call_date,
         colleague_name                                                              as agent_name,
         count(*)                                                                    as missed_calls
-    from {{ ref('silver_wildix_calls') }}
+    from {{ ref('silver_calls_unified') }}
     where call_status = 'MISSED'
     group by call_date, colleague_name
 ),

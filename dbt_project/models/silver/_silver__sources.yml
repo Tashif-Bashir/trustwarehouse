@@ -12,6 +12,7 @@ sources:
       - name: sharpspring_notes
       - name: wildix_calls
       - name: wildix_colleagues
+      - name: ascend_calls
       - name: google_ads_api_campaign_daily
       - name: google_ads_api_geo_target_constants
       - name: meta_api_campaign_daily

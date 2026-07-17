@@ -26,7 +26,7 @@ with calls_filtered as (
         colleague_name,
         colleague_department,
         colleague_extension
-    from {{ ref('silver_wildix_calls') }}
+    from {{ ref('silver_calls_unified') }}
     -- only customer-facing legs of a call; INTERNAL = agent-to-agent transfer leg
     where direction in ('OUTBOUND', 'INBOUND')
       -- COMPLETED = answered, MISSED = dial attempt where customer didn't pick up.

@@ -74,7 +74,7 @@ outbound_calls as (
         DATE(TIMESTAMP_MILLIS(min(start_time)), 'Europe/London')             as call_date,
         sum(talk_time_seconds)                                               as talk_time_seconds,
         array_agg(colleague_name order by talk_time_seconds desc limit 1)[offset(0)] as agent_name
-    from {{ ref('silver_wildix_calls') }}
+    from {{ ref('silver_calls_unified') }}
     where direction = 'OUTBOUND'
       and call_status = 'COMPLETED'
       and remote_phone is not null

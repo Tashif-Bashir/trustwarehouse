@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.pulse-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+/* Brief row highlight when an agent books an appointment. --agent is set
+   inline per row so the flash matches the agent's own colour. */
+@keyframes row-flash {
+  0% {
+    background-color: transparent;
+  }
+  15% {
+    background-color: color-mix(in srgb, var(--agent) 14%, white);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.row-flash {
+  animation: row-flash 2.4s ease;
+}

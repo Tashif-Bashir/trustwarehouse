@@ -1,0 +1,32 @@
+// Single place to tune the wallboard. Everything the business might want to
+// change lives here: the agent roster (colour follows the agent, never the
+// rank), the performance weighting, and the polling cadence.
+
+export interface AgentConfig {
+  id: string
+  name: string
+  color: string
+}
+
+export const AGENTS: AgentConfig[] = [
+  { id: 'lily', name: 'Lily', color: '#2a78d6' },
+  { id: 'sue', name: 'Sue', color: '#1baf7a' },
+  { id: 'alicja', name: 'Alicja', color: '#e87ba4' },
+  { id: 'alisha', name: 'Alisha', color: '#eb6834' },
+]
+
+// Performance score = appointments * appointmentPoints
+//                   + talktime minutes * talkMinutePoints
+// An appointment is worth ~25 minutes of talktime by default — tune freely.
+export const SCORING = {
+  appointmentPoints: 25,
+  talkMinutePoints: 1,
+}
+
+// Frontend polling cadence and the threshold after which the feed is
+// declared stale (amber pill).
+export const POLL_INTERVAL_MS = 20_000
+export const STALE_AFTER_MS = 60_000
+
+// The mock provider simulates dialling inside these UK working hours.
+export const WORKDAY = { startHour: 8, startMinute: 30, endHour: 17, endMinute: 30 }

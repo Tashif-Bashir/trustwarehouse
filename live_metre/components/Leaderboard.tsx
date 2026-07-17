@@ -1,7 +1,7 @@
 import { SCORING } from '@/lib/config'
 import type { AgentMetrics } from '@/lib/types'
 
-const ROW_HEIGHT = 76 // px — fixed so rank changes animate via `top`
+const ROW_HEIGHT = 68 // px — fixed so rank changes animate via `top`
 
 export function performanceScore(agent: AgentMetrics): number {
   return Math.round(
@@ -32,15 +32,20 @@ export default function Leaderboard({ agents, flashingIds }: LeaderboardProps) {
   const leaderId = ranked[0].score > 0 ? ranked[0].agent.id : null
 
   return (
-    <section className="rounded-xl border-[0.5px] border-slate-200 bg-white px-6 py-5">
-      <h2 className="text-base text-slate-500">Performance leaderboard</h2>
-      <div className="relative mt-3" style={{ height: agents.length * ROW_HEIGHT }}>
+    <section>
+      <h2 className="text-2xl font-semibold">
+        Performance today{' '}
+        <span className="font-normal text-neutral-400">
+          — weighted: talktime + appointments
+        </span>
+      </h2>
+      <div className="relative mt-4" style={{ height: agents.length * ROW_HEIGHT }}>
         {scored.map(({ agent, score }) => {
           const rank = rankById.get(agent.id) ?? 0
           return (
             <div
               key={agent.id}
-              className={`absolute inset-x-0 flex items-center gap-5 rounded-lg px-2 transition-[top] duration-700 ease-in-out ${
+              className={`absolute inset-x-0 flex items-center gap-6 rounded-lg transition-[top] duration-700 ease-in-out ${
                 flashingIds.has(agent.id) ? 'row-flash' : ''
               }`}
               style={{
@@ -49,28 +54,21 @@ export default function Leaderboard({ agents, flashingIds }: LeaderboardProps) {
                 ['--agent' as string]: agent.color,
               }}
             >
-              <div className="flex w-32 items-center gap-2 text-xl font-medium">
-                {agent.name}
-                {agent.id === leaderId && (
-                  <TrophyIcon className="h-5 w-5 shrink-0 text-amber-500" />
-                )}
-              </div>
-              <div className="relative h-6 flex-1 overflow-hidden rounded bg-slate-50">
-                {[25, 50, 75].map((pct) => (
-                  <div
-                    key={pct}
-                    className="absolute inset-y-0 border-l-[0.5px] border-slate-200"
-                    style={{ left: `${pct}%` }}
-                  />
-                ))}
+              <div className="w-28 shrink-0 text-2xl font-semibold">{agent.name}</div>
+              <div className="relative h-9 flex-1 overflow-hidden rounded-lg bg-neutral-900">
                 <div
-                  className="absolute inset-y-0 left-0 rounded transition-[width] duration-700 ease-in-out"
+                  className="absolute inset-y-0 left-0 rounded-lg transition-[width] duration-700 ease-in-out"
                   style={{ width: `${(score / maxScore) * 100}%`, backgroundColor: agent.color }}
                 />
               </div>
-              <div className="w-16 text-right text-3xl font-medium tabular-nums">{score}</div>
-              <div className="w-24 text-right text-base text-slate-500 tabular-nums">
-                {agent.appointmentsBooked} appt{agent.appointmentsBooked === 1 ? '' : 's'}
+              <div className="flex w-56 shrink-0 items-center justify-end gap-3 text-right">
+                <span className="text-2xl font-medium tabular-nums">
+                  {score} <span className="text-neutral-400">·</span> {agent.appointmentsBooked}{' '}
+                  appt{agent.appointmentsBooked === 1 ? '' : 's'}
+                </span>
+                {agent.id === leaderId && (
+                  <TrophyIcon className="h-6 w-6 shrink-0 text-amber-400" />
+                )}
               </div>
             </div>
           )

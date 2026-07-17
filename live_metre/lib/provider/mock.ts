@@ -74,5 +74,5 @@ export async function getMockMetrics(): Promise<Metrics> {
     return { ...agent, outboundCalls, callsOver30s, talktimeSeconds, appointmentsBooked }
   })
 
-  return { asOf: new Date().toISOString(), source: 'mock data (drifting)', agents }
+  return { asOf: new Date().toISOString(), source: 'Ascend (mock data)', agents }
 }

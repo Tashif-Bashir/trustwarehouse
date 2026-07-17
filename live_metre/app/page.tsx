@@ -1,10 +1,10 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import ColumnChart from '@/components/ColumnChart'
 import Header from '@/components/Header'
 import Leaderboard from '@/components/Leaderboard'
-import MiniBarChart from '@/components/MiniBarChart'
-import SummaryCards, { formatTalktime } from '@/components/SummaryCards'
+import SummaryCards from '@/components/SummaryCards'
 import { POLL_INTERVAL_MS, STALE_AFTER_MS } from '@/lib/config'
 import type { Metrics } from '@/lib/types'
 
@@ -66,7 +66,7 @@ export default function Wallboard() {
   const agents = metrics?.agents ?? []
 
   return (
-    <main className="mx-auto flex max-w-[1400px] flex-col gap-5 p-6 lg:p-10">
+    <main className="mx-auto flex max-w-[1500px] flex-col gap-10 p-6 lg:p-10">
       <Header
         source={metrics?.source ?? '—'}
         secondsAgo={secondsAgo}
@@ -77,10 +77,10 @@ export default function Wallboard() {
 
       {agents.length > 0 && <Leaderboard agents={agents} flashingIds={flashingIds} />}
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <MiniBarChart
+      <section className="grid grid-cols-1 gap-10 md:grid-cols-3">
+        <ColumnChart
           title="Outbound calls"
-          bars={agents.map((a) => ({
+          columns={agents.map((a) => ({
             id: a.id,
             name: a.name,
             color: a.color,
@@ -88,9 +88,9 @@ export default function Wallboard() {
             label: String(a.outboundCalls),
           }))}
         />
-        <MiniBarChart
+        <ColumnChart
           title="Calls over 30s"
-          bars={agents.map((a) => ({
+          columns={agents.map((a) => ({
             id: a.id,
             name: a.name,
             color: a.color,
@@ -101,14 +101,14 @@ export default function Wallboard() {
                 : '0',
           }))}
         />
-        <MiniBarChart
-          title="Outbound talktime"
-          bars={agents.map((a) => ({
+        <ColumnChart
+          title="Talktime (mins)"
+          columns={agents.map((a) => ({
             id: a.id,
             name: a.name,
             color: a.color,
-            value: a.talktimeSeconds,
-            label: formatTalktime(a.talktimeSeconds),
+            value: Math.round(a.talktimeSeconds / 60),
+            label: String(Math.round(a.talktimeSeconds / 60)),
           }))}
         />
       </section>

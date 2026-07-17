@@ -23,7 +23,7 @@
     background-color: transparent;
   }
   15% {
-    background-color: color-mix(in srgb, var(--agent) 14%, white);
+    background-color: color-mix(in srgb, var(--agent) 24%, transparent);
   }
   100% {
     background-color: transparent;

@@ -1,0 +1,160 @@
+import { BigQuery } from '@google-cloud/bigquery'
+import { AGENTS, SOURCE_NAMES } from '../config'
+import type { Metrics } from '../types'
+
+// Real data provider.
+//
+//   Calls        <- bronze.ascend_calls (europe-west2), synced from the Ascend
+//                   phone system every 60s by the warehouse VM. Ascend
+//                   `duration` is pure talk time; a CDR row exists only once
+//                   a call has ENDED.
+//   Appointments <- union of app.bookings (US region — the booking app's own
+//                   event log, live to the second) and the CRM (silver, ~30
+//                   min behind, catches manual/WhatsApp bookings), deduped
+//                   per lead. Counting is permanent: a booking cancelled
+//                   later still counts on the day it was booked.
+//
+// The two datasets live in different BigQuery regions, so they are always
+// separate queries — never joined in SQL.
+
+const PROJECT = 'trustwarehouse'
+const CACHE_TTL_MS = 15_000 // several wall screens share one BigQuery fetch
+
+let bq: BigQuery | null = null
+
+function client(): BigQuery {
+  if (!bq) {
+    const json = process.env.GOOGLE_CREDENTIALS_JSON
+    bq = json
+      ? new BigQuery({ projectId: PROJECT, credentials: JSON.parse(json) })
+      : new BigQuery({ projectId: PROJECT }) // local dev: ADC / GOOGLE_APPLICATION_CREDENTIALS
+  }
+  return bq
+}
+
+// reverse lookups: source-specific name -> agent id
+const byAscend = new Map<string, string>()
+const byBooker = new Map<string, string>()
+const byCrm = new Map<string, string>()
+for (const [id, names] of Object.entries(SOURCE_NAMES)) {
+  names.ascend.forEach((n) => byAscend.set(n, id))
+  names.appBookers.forEach((n) => byBooker.set(n, id))
+  names.crm.forEach((n) => byCrm.set(n, id))
+}
+
+interface CallRow {
+  agent: string
+  outbound_calls: number
+  calls_over_30s: number
+  talk_seconds: number
+}
+
+async function queryCalls(): Promise<Map<string, CallRow>> {
+  const [rows] = await client().query({
+    query: `
+      SELECT
+        JSON_VALUE(\`from\`, '$.name')       AS agent,
+        COUNT(*)                             AS outbound_calls,
+        COUNTIF(COALESCE(duration, 0) > 30)  AS calls_over_30s,
+        SUM(COALESCE(duration, 0))           AS talk_seconds
+      FROM \`${PROJECT}.bronze.ascend_calls\`
+      WHERE direction = 'outbound'
+        AND DATE(start, 'Europe/London') = CURRENT_DATE('Europe/London')
+        AND JSON_VALUE(\`from\`, '$.name') IN UNNEST(@names)
+      GROUP BY agent
+    `,
+    params: { names: [...byAscend.keys()] },
+    location: 'europe-west2',
+  })
+  const out = new Map<string, CallRow>()
+  for (const row of rows as CallRow[]) {
+    const id = byAscend.get(row.agent)
+    if (id) out.set(id, row)
+  }
+  return out
+}
+
+// Booking events today, one per lead, agent-id attributed. Each source is
+// fetched independently and failures degrade to the other source rather
+// than blanking the board.
+async function queryAppointments(): Promise<Map<string, number>> {
+  const crmPromise = client()
+    .query({
+      query: `
+        SELECT lead_id, appointment_made_by AS name
+        FROM \`${PROJECT}.silver.silver_sharpspring_leads\`
+        WHERE appointment_made_by IN UNNEST(@names)
+          AND appointment_booked_at IS NOT NULL
+          AND DATE(SAFE_CAST(appointment_booked_at AS TIMESTAMP), 'Europe/London')
+              = CURRENT_DATE('Europe/London')
+          AND (appointment_booked = 'Yes'
+               OR LOWER(COALESCE(domestic_appointment_status, '')) IN
+                  ('appointment', 'whatsapp appointment', 'appointment cancelled'))
+      `,
+      params: { names: [...byCrm.keys()] },
+      location: 'europe-west2',
+    })
+    .then(([rows]) => rows as { lead_id: string; name: string }[])
+    .catch(() => [])
+
+  const appPromise = client()
+    .query({
+      query: `
+        SELECT lead_id, booker_name AS name
+        FROM \`${PROJECT}.app.bookings\`
+        WHERE booker_name IN UNNEST(@names)
+          AND DATE(booked_at, 'Europe/London') = CURRENT_DATE('Europe/London')
+          AND customer NOT LIKE 'Zzz Testlead%'
+          AND lead_id IS NOT NULL
+      `,
+      params: { names: [...byBooker.keys()] },
+      location: 'US',
+    })
+    .then(([rows]) => rows as { lead_id: string; name: string }[])
+    .catch(() => [])
+
+  const [crmRows, appRows] = await Promise.all([crmPromise, appPromise])
+
+  // dedupe on lead: CRM first so its attribution wins when both have the row
+  const agentByLead = new Map<string, string>()
+  for (const row of crmRows) {
+    const id = byCrm.get(row.name)
+    if (id) agentByLead.set(String(row.lead_id), id)
+  }
+  for (const row of appRows) {
+    const id = byBooker.get(row.name)
+    if (id && !agentByLead.has(String(row.lead_id))) agentByLead.set(String(row.lead_id), id)
+  }
+
+  const counts = new Map<string, number>()
+  for (const id of agentByLead.values()) counts.set(id, (counts.get(id) ?? 0) + 1)
+  return counts
+}
+
+let cache: { data: Metrics; at: number } | null = null
+
+export async function getBronzeMetrics(): Promise<Metrics> {
+  if (cache && Date.now() - cache.at < CACHE_TTL_MS) return cache.data
+
+  try {
+    const [calls, appointments] = await Promise.all([queryCalls(), queryAppointments()])
+    const agents = AGENTS.map((agent) => {
+      const c = calls.get(agent.id)
+      return {
+        ...agent,
+        outboundCalls: Number(c?.outbound_calls ?? 0),
+        callsOver30s: Number(c?.calls_over_30s ?? 0),
+        talktimeSeconds: Number(c?.talk_seconds ?? 0),
+        appointmentsBooked: appointments.get(agent.id) ?? 0,
+      }
+    })
+    const data: Metrics = { asOf: new Date().toISOString(), source: 'Ascend', agents }
+    cache = { data, at: Date.now() }
+    return data
+  } catch (err) {
+    // BigQuery hiccup: serve the last good numbers if we have any — the
+    // frontend's stale pill covers prolonged outages.
+    if (cache) return cache.data
+    throw err
+  }
+}

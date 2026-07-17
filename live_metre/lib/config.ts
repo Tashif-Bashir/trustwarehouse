@@ -15,6 +15,35 @@ export const AGENTS: AgentConfig[] = [
   { id: 'alisha', name: 'Alisha', color: '#eb6834' },
 ]
 
+// Exact names each data source uses for an agent (confirmed against real
+// rows, 18 Jul 2026). The bronze provider attributes by these; if an agent
+// is renamed in Ascend/the CRM, update here.
+export const SOURCE_NAMES: Record<
+  string,
+  { ascend: string[]; appBookers: string[]; crm: string[] }
+> = {
+  lily: {
+    ascend: ['Lily'],
+    appBookers: ['Lily Harpman', 'Lily Harpham'],
+    crm: ['Lily Harpham', 'Lily'],
+  },
+  sue: {
+    ascend: ['Sue'],
+    appBookers: ['Sue England'],
+    crm: ['Susan England', 'Sue'],
+  },
+  alicja: {
+    ascend: ['Alicja Aleksiuk'],
+    appBookers: ['Alicja Aleksiuk'],
+    crm: ['Alicja Aleksiuk', 'Alicja'],
+  },
+  alisha: {
+    ascend: ['Alisha'],
+    appBookers: ['Alisha Moore'],
+    crm: ['Alisha Moore', 'Alisha'],
+  },
+}
+
 // Performance score = appointments * appointmentPoints
 //                   + talktime minutes * talkMinutePoints
 // An appointment is worth ~25 minutes of talktime by default — tune freely.

@@ -734,11 +734,11 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
                 </>
               )}
               {skipCrm && (
-                <div className="lead-calendar-only">Calendar only — SharpSpring will not be updated.</div>
+                <div className="lead-calendar-only">Calendar only — SharpSpring will not be updated and this booking will NOT count on the telesales boards.</div>
               )}
               <label className="lead-skip">
                 <input type="checkbox" checked={skipCrm} onChange={e => setSkipCrm(e.target.checked)} />
-                Book calendar only — don't update SharpSpring
+                Book calendar only — don't update SharpSpring (won't count on the boards)
               </label>
             </div>
             {/* Row 1: name + postcode side by side */}
@@ -879,16 +879,23 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
                     {apptType === 'water' && `Water = Appointment${otherOutcome ? ` · Heating = ${otherOutcome}` : ''}`}
                     {enquiryType && ` · Enquiry = ${enquiryType}`}
                   </span>
+                : skipCrm
+                ? <span className="confirm-nocrm">
+                    ⚠ Calendar only — SharpSpring will <strong>NOT</strong> be updated and this
+                    booking will <strong>not count</strong> on the telesales boards.
+                  </span>
                 : <span className="confirm-nocrm">
-                    ⚠ No CRM lead linked — SharpSpring will <strong>NOT</strong> be updated.
-                    {!skipCrm && ' Use "Find the lead" first if this should update the CRM.'}
+                    ⚠ No CRM lead linked. Use "Find the lead" so the CRM updates — or tick
+                    "calendar only" if this genuinely shouldn't touch SharpSpring.
                   </span>}
               {notes && <><br/><span style={{fontSize:12,color:'var(--muted)'}}>{notes}</span></>}
             </div>
             <div className="confirm-actions">
               <button className="btn btn-ghost" onClick={() => setConfirming(false)} disabled={booking}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleBook} disabled={booking}>
-                {booking ? 'Submitting…' : 'Confirm'}
+              <button className="btn btn-primary" onClick={handleBook}
+                disabled={booking || (!leadId && !skipCrm)}
+                title={!leadId && !skipCrm ? 'Link a lead or tick "calendar only" first' : undefined}>
+                {booking ? 'Submitting…' : (!leadId && !skipCrm) ? 'Link lead or tick calendar-only' : 'Confirm'}
               </button>
             </div>
           </div>

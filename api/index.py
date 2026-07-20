@@ -423,7 +423,10 @@ def _telesales_whiteboard():
                   BETWEEN DATE_TRUNC(CURRENT_DATE('Europe/London'), WEEK(MONDAY))
                       AND CURRENT_DATE('Europe/London')
               AND customer NOT LIKE 'Zzz Testlead%'
-              AND lead_id IS NOT NULL
+              -- unlinked (calendar-only) rows can't dedupe against the CRM and
+              -- reschedules aren't new bookings — neither counts (22 Jul 2026)
+              AND lead_id IS NOT NULL AND lead_id != ''
+              AND COALESCE(is_rebook, FALSE) = FALSE
         """)
     except Exception:
         app_events = pd.DataFrame()

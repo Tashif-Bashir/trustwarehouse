@@ -282,12 +282,13 @@ def _record_booking(**kv) -> None:
             f"INSERT INTO {BQ_BOOKINGS}"
             f" (event_id, lead_id, booker_username, booker_owner_id, booker_name,"
             f"  rep_name, rep_owner_id, customer, postcode, appt_date, appt_start, appt_end,"
-            f"  appt_type, booked_at, status)"
+            f"  appt_type, booked_at, status, is_rebook)"
             f" VALUES (@event_id, @lead_id, @booker_username, @booker_owner_id, @booker_name,"
             f"  @rep_name, @rep_owner_id, @customer, @postcode, @appt_date, @appt_start, @appt_end,"
-            f"  @appt_type, @booked_ts, 'active')",
+            f"  @appt_type, @booked_ts, 'active', @is_rebook)",
             job_config=bigquery.QueryJobConfig(query_parameters=_bq_params(
-                booked_ts=datetime.now(timezone.utc).isoformat(), **kv,
+                booked_ts=datetime.now(timezone.utc).isoformat(),
+                is_rebook=bool(kv.pop("is_rebook", False)), **kv,
             )),
         ).result()
     except Exception:
@@ -569,7 +570,7 @@ def _ss_update_lead(lead_id: str, *, date_iso: str, start_time: str,
                     street: str = "", postcode: str = "",
                     appt_type: str = "heating", other_outcome: str = "",
                     enquiry_type: str = "", teams_meeting: bool = False,
-                    prev_appt: str = "") -> bool:
+                    prev_appt: str = "", stamp_booked_ts: bool = True) -> bool:
     """Write the appointment fields to a lead. Returns True on success.
 
     rep_owner_id reassigns the lead to the field rep (omitting ownerID makes SharpSpring
@@ -594,10 +595,13 @@ def _ss_update_lead(lead_id: str, *, date_iso: str, start_time: str,
         _SS_F_APPT_DT: new_appt,
         _SS_F_APPT_BOOKED: "Yes",
         _SS_F_APPT_TYPE: "Video Call" if teams_meeting else "Physical",
+    }
+    if stamp_booked_ts:
         # SharpSpring stores/displays this as UK local time, so write UK wall-clock
         # (auto-handles BST/GMT) — not UTC, which reads an hour behind in summer.
-        _SS_F_BOOKED_TS: _now_uk().strftime("%Y-%m-%d %H:%M:%S"),
-    }
+        # NOT stamped on reschedules — moving an appointment is not a new booking,
+        # and the dashboards count booking events by this timestamp (22 Jul 2026).
+        obj[_SS_F_BOOKED_TS] = _now_uk().strftime("%Y-%m-%d %H:%M:%S")
     # Re-booking: stash the old appointment time before overwriting it.
     if prev_appt and prev_appt != new_appt:
         obj[_SS_F_PREV_APPT] = prev_appt
@@ -1170,12 +1174,22 @@ def api_book():
         # ── CRM write-back — runs only after the calendar booking succeeds, and
         #    never blocks it. Locked ordering: verify lead → update → note. ──
         crm_status = "skipped"
+        is_rebook = False
         if lead_id and not skip_crm:
             try:
                 lead = _ss_get_lead(lead_id)
                 if lead is None:
                     crm_status = "not_found"
                 else:
+                    # Reschedule detection: the lead already has a live booking
+                    # (flag Yes + booked-at present). Moving an appointment is
+                    # not a new booking — keep the original booked-at stamp so
+                    # the dashboards don't count the same appointment twice.
+                    # A booking after a proper cancel (flag = No) counts fresh.
+                    is_rebook = (
+                        (lead.get(_SS_F_APPT_BOOKED) or "") == "Yes"
+                        and bool((lead.get(_SS_F_BOOKED_TS) or "").strip())
+                    )
                     # Reassign to the field rep if we know their owner id; otherwise
                     # preserve the lead's current owner (never let it default to the API account).
                     owner_id = _rep_owner_id(rep_name) or (lead.get("ownerID") or "")
@@ -1186,10 +1200,11 @@ def api_book():
                         appt_type=appt_type, other_outcome=other_outcome,
                         enquiry_type=enquiry_type, teams_meeting=teams,
                         prev_appt=(lead.get(_SS_F_APPT_DT) or ""),
+                        stamp_booked_ts=not is_rebook,
                     )
                     if notes:
                         _ss_create_note(lead_id, notes, owner_id=booker_owner_id)
-                    crm_status = "updated" if updated else "failed"
+                    crm_status = ("rescheduled" if is_rebook else "updated") if updated else "failed"
             except Exception:
                 app.logger.exception("CRM write-back failed (booking still succeeded)")
                 crm_status = "failed"
@@ -1197,9 +1212,11 @@ def api_book():
         # ── Record the booking so it can be cancelled later from the diary. ──
         # Store lead_id only when the CRM was actually updated, so cancel reverts
         # CRM only for bookings that changed it; others cancel calendar-only.
+        # is_rebook marks reschedules so the telesales boards don't count the
+        # same appointment as booked again today.
         _record_booking(
             event_id=event_id,
-            lead_id=(lead_id if crm_status == "updated" else ""),
+            lead_id=(lead_id if crm_status in ("updated", "rescheduled") else ""),
             booker_username=session.get("username", ""),
             booker_owner_id=booker_owner_id,
             booker_name=booker_name,
@@ -1211,14 +1228,16 @@ def api_book():
             appt_start=start_time,
             appt_end=end_time,
             appt_type=appt_type,
+            is_rebook=is_rebook,
         )
 
         booked_by = f" — booked by {booker_name}" if booker_email else ""
         crm_tail = {
-            "updated":   " · CRM updated",
-            "failed":    " · CRM update failed — update SharpSpring manually",
-            "not_found": " · lead not found in CRM — update SharpSpring manually",
-            "skipped":   " · CRM NOT updated — no lead was linked",
+            "updated":     " · CRM updated",
+            "rescheduled": " · CRM updated (reschedule — original booking date kept)",
+            "failed":      " · CRM update failed — update SharpSpring manually",
+            "not_found":   " · lead not found in CRM — update SharpSpring manually",
+            "skipped":     " · CRM NOT updated — no lead was linked",
         }[crm_status]
         message = (
             f"Booked: {rep_name} · {date_iso} · {start_time}–{end_time} "

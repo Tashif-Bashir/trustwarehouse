@@ -112,7 +112,10 @@ async function queryAppointments(): Promise<Map<string, number>> {
         WHERE booker_name IN UNNEST(@names)
           AND DATE(booked_at, 'Europe/London') = CURRENT_DATE('Europe/London')
           AND customer NOT LIKE 'Zzz Testlead%'
-          AND lead_id IS NOT NULL
+          -- unlinked (calendar-only) rows can't be deduped against the CRM
+          -- and reschedules aren't new bookings — neither counts (22 Jul 2026)
+          AND lead_id IS NOT NULL AND lead_id != ''
+          AND COALESCE(is_rebook, FALSE) = FALSE
       `,
       params: { names: [...byBooker.keys()] },
       location: 'US',

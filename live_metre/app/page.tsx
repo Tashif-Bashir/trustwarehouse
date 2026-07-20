@@ -81,32 +81,32 @@ export default function Wallboard() {
 
       <section className="grid grid-cols-1 gap-10 md:grid-cols-3">
         <ColumnChart
-          title="Outbound calls"
+          title="Total calls (in + out)"
           delayMs={480}
           columns={agents.map((a) => ({
             id: a.id,
             name: a.name,
             color: a.color,
-            value: a.outboundCalls,
-            label: String(a.outboundCalls),
+            value: a.totalCalls,
+            label: String(a.totalCalls),
           }))}
         />
         <ColumnChart
-          title="Calls over 2 min"
+          title="Calls over 1 min"
           delayMs={560}
           columns={agents.map((a) => ({
             id: a.id,
             name: a.name,
             color: a.color,
-            value: a.callsOver2m,
+            value: a.callsOver1m,
             label:
-              a.outboundCalls > 0
-                ? `${a.callsOver2m} (${Math.round((a.callsOver2m / a.outboundCalls) * 100)}%)`
+              a.totalCalls > 0
+                ? `${a.callsOver1m} (${Math.round((a.callsOver1m / a.totalCalls) * 100)}%)`
                 : '0',
           }))}
         />
         <ColumnChart
-          title="Talktime (mins)"
+          title="Total talktime (mins)"
           delayMs={640}
           columns={agents.map((a) => ({
             id: a.id,

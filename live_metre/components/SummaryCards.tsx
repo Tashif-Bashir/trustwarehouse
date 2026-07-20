@@ -42,10 +42,10 @@ export default function SummaryCards({ agents }: { agents: AgentMetrics[] }) {
 
   return (
     <section className="grid grid-cols-2 gap-5 lg:grid-cols-4">
-      <Card label="Outbound calls" value={total((a) => a.outboundCalls)} format={String} delayMs={80} />
-      <Card label="Calls over 2 min" value={total((a) => a.callsOver2m)} format={String} delayMs={160} />
+      <Card label="Total calls (in + out)" value={total((a) => a.totalCalls)} format={String} delayMs={80} />
+      <Card label="Calls over 1 min" value={total((a) => a.callsOver1m)} format={String} delayMs={160} />
       <Card
-        label="Total talktime"
+        label="Total talktime (in + out)"
         value={total((a) => a.talktimeSeconds)}
         format={formatTalktime}
         delayMs={240}

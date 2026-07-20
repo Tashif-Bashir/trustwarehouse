@@ -49,23 +49,29 @@ for (const [id, names] of Object.entries(SOURCE_NAMES)) {
 
 interface CallRow {
   agent: string
-  outbound_calls: number
-  calls_over_30s: number
-  calls_over_2m: number
+  total_calls: number
+  calls_over_1m: number
   talk_seconds: number
 }
 
+// A call counts when it's an outbound dial (answered or not — dialling is
+// activity) or an ANSWERED inbound; missed inbound isn't the agent's call
+// and internal calls are excluded entirely (owner decision 21 Jul 2026).
 async function queryCalls(): Promise<Map<string, CallRow>> {
   const [rows] = await client().query({
     query: `
       SELECT
-        colleague_name                                   AS agent,
-        COUNT(*)                                         AS outbound_calls,
-        COUNTIF(COALESCE(talk_time_seconds, 0) > 30)     AS calls_over_30s,
-        COUNTIF(COALESCE(talk_time_seconds, 0) >= 120)   AS calls_over_2m,
-        SUM(COALESCE(talk_time_seconds, 0))              AS talk_seconds
+        colleague_name AS agent,
+        COUNTIF(direction = 'OUTBOUND'
+                OR (direction = 'INBOUND' AND call_status = 'COMPLETED'))  AS total_calls,
+        COUNTIF((direction = 'OUTBOUND'
+                 OR (direction = 'INBOUND' AND call_status = 'COMPLETED'))
+                AND COALESCE(talk_time_seconds, 0) >= 60)                  AS calls_over_1m,
+        SUM(IF(direction = 'OUTBOUND'
+               OR (direction = 'INBOUND' AND call_status = 'COMPLETED'),
+               COALESCE(talk_time_seconds, 0), 0))                         AS talk_seconds
       FROM \`${PROJECT}.silver.silver_ascend_calls\`
-      WHERE direction = 'OUTBOUND'
+      WHERE direction IN ('OUTBOUND', 'INBOUND')
         AND DATE(TIMESTAMP_MILLIS(start_time), 'Europe/London') = CURRENT_DATE('Europe/London')
         AND colleague_name IN UNNEST(@names)
       GROUP BY agent
@@ -173,9 +179,8 @@ export async function getBronzeMetrics(): Promise<Metrics> {
       const prev = prevByAgent.get(agent.id)
       return {
         ...agent,
-        outboundCalls: Math.max(Number(c?.outbound_calls ?? 0), prev?.outboundCalls ?? 0),
-        callsOver30s: Math.max(Number(c?.calls_over_30s ?? 0), prev?.callsOver30s ?? 0),
-        callsOver2m: Math.max(Number(c?.calls_over_2m ?? 0), prev?.callsOver2m ?? 0),
+        totalCalls: Math.max(Number(c?.total_calls ?? 0), prev?.totalCalls ?? 0),
+        callsOver1m: Math.max(Number(c?.calls_over_1m ?? 0), prev?.callsOver1m ?? 0),
         talktimeSeconds: Math.max(Number(c?.talk_seconds ?? 0), prev?.talktimeSeconds ?? 0),
         appointmentsBooked: appointments.get(agent.id) ?? 0,
       }

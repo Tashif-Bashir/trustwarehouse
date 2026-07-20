@@ -2,10 +2,11 @@ export interface AgentMetrics {
   id: string
   name: string
   color: string
-  outboundCalls: number
-  callsOver30s: number
-  callsOver2m: number
-  talktimeSeconds: number
+  // outbound dials (answered or not) + answered inbound; internal and
+  // missed-inbound excluded (owner decision 21 Jul 2026)
+  totalCalls: number
+  callsOver1m: number // >= 60s talk, same in+out scope
+  talktimeSeconds: number // in+out talk time, same scope
   appointmentsBooked: number
 }
 

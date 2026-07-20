@@ -323,6 +323,15 @@ def _is_time_off(event: dict) -> bool:
     return bool(_OOO_RE.search(subject))
 
 
+def _is_banner(event: dict) -> bool:
+    """All-day informational banner (e.g. 'Stephen Bishop Starting-...').
+
+    Not time-off, but not an appointment either — it must be invisible to
+    availability: without this, a banner's 00:00-00:00 span marks every
+    slot of the day as booked (observed 21 Jul 2026)."""
+    return bool(event.get("isAllDay")) and not _is_time_off(event)
+
+
 # ---------------------------------------------------------------------------
 # Rep resolver
 # ---------------------------------------------------------------------------
@@ -544,7 +553,7 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10, st
         is_fallback = rep in FALLBACK_REPS
         today_count = len([
             e for e in rep_events.get(rep, {}).get(actual_today, [])
-            if not _is_time_off(e)
+            if not _is_time_off(e) and not _is_banner(e)
         ])
 
         days_out: dict[str, list[dict]] = {}
@@ -552,7 +561,8 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10, st
             slots = _slots_for_day(d, rep)
             if not slots:
                 continue
-            day_events = rep_events.get(rep, {}).get(d, [])
+            # banners are invisible to availability (neither off nor booked)
+            day_events = [e for e in rep_events.get(rep, {}).get(d, []) if not _is_banner(e)]
 
             # build booked/off intervals
             booked_intervals: list[tuple[datetime, datetime]] = []
@@ -700,7 +710,7 @@ def build_rep_diary(events: list[dict]) -> dict:
     rep_appts: dict[str, list[dict]] = {r: [] for r in all_reps}
 
     for event in events:
-        if _is_time_off(event):
+        if _is_time_off(event) or _is_banner(event):
             continue
         rep = _resolve_rep(event)
         if not rep or rep not in rep_appts:

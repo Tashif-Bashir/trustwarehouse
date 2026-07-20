@@ -1,3 +1,5 @@
+import Avatar from '@/components/Avatar'
+
 interface Column {
   id: string
   name: string
@@ -73,14 +75,14 @@ export default function ColumnChart({ title, columns, delayMs = 0 }: ColumnChart
               ))}
             </div>
           </div>
-          {/* agent names under the columns */}
+          {/* agent avatars + names under the columns */}
           <div className="flex items-start justify-around gap-4 px-2 pt-2.5">
             {columns.map((col) => (
-              <span
-                key={col.id}
-                className="w-16 text-center font-display text-xl font-medium text-neutral-200"
-              >
-                {col.name}
+              <span key={col.id} className="flex w-16 flex-col items-center gap-1">
+                <Avatar id={col.id} name={col.name} color={col.color} size={28} />
+                <span className="text-center font-display text-lg font-medium text-neutral-200">
+                  {col.name}
+                </span>
               </span>
             ))}
           </div>

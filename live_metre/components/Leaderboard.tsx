@@ -1,5 +1,6 @@
 'use client'
 
+import Avatar from '@/components/Avatar'
 import { TROPHY_MIN_APPTS } from '@/lib/config'
 import { useCountUp } from '@/lib/useCountUp'
 import type { AgentMetrics } from '@/lib/types'
@@ -35,7 +36,10 @@ function Row({
       }`}
       style={{ top: rank * ROW_HEIGHT, height: ROW_HEIGHT, ['--agent' as string]: agent.color }}
     >
-      <div className="w-28 shrink-0 font-display text-3xl font-semibold">{agent.name}</div>
+      <div className="flex w-44 shrink-0 items-center gap-3">
+        <Avatar id={agent.id} name={agent.name} color={agent.color} />
+        <span className="font-display text-3xl font-semibold">{agent.name}</span>
+      </div>
       <div className="relative h-9 flex-1 overflow-visible rounded-lg bg-surface">
         <div
           className="absolute inset-y-0 left-0 rounded-lg transition-[width] duration-700 ease-in-out"

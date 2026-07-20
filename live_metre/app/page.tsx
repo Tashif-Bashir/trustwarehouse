@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import Celebration from '@/components/Celebration'
 import ColumnChart from '@/components/ColumnChart'
 import Header from '@/components/Header'
 import Leaderboard from '@/components/Leaderboard'
 import SummaryCards from '@/components/SummaryCards'
-import { POLL_INTERVAL_MS, STALE_AFTER_MS } from '@/lib/config'
-import type { Metrics } from '@/lib/types'
+import { CELEBRATION, POLL_INTERVAL_MS, STALE_AFTER_MS } from '@/lib/config'
+import type { AgentMetrics, Metrics } from '@/lib/types'
 
 export default function Wallboard() {
   const [metrics, setMetrics] = useState<Metrics | null>(null)
@@ -59,6 +60,54 @@ export default function Wallboard() {
       if (flashTimeout.current) clearTimeout(flashTimeout.current)
     }
   }, [])
+
+  // ── End-of-day celebration: 16:59 UK on weekdays, once per day per
+  //    screen; ?celebrate=1 forces a demo run any time. ──
+  const [celebrating, setCelebrating] = useState<AgentMetrics[] | null>(null)
+  const celebrationTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const demoDone = useRef(false)
+
+  useEffect(() => {
+    if (celebrating) return
+    const list = metrics?.agents ?? []
+    if (!list.length) return
+    const max = Math.max(...list.map((a) => a.appointmentsBooked))
+    if (max < 1) return // nothing to celebrate on a dead day
+
+    const forced = new URLSearchParams(window.location.search).has('celebrate')
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(
+      new Date(nowMs)
+    )
+    if (forced) {
+      if (demoDone.current) return
+      demoDone.current = true
+    } else {
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        weekday: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).formatToParts(new Date(nowMs))
+      const get = (t: string) => parts.find((p) => p.type === t)?.value ?? ''
+      if (CELEBRATION.weekdaysOnly && ['Sat', 'Sun'].includes(get('weekday'))) return
+      const mins = Number(get('hour')) * 60 + Number(get('minute'))
+      const start = CELEBRATION.hour * 60 + CELEBRATION.minute
+      if (mins < start || mins >= start + CELEBRATION.graceMinutes) return
+      if (localStorage.getItem('metre:celebrated') === today) return
+      localStorage.setItem('metre:celebrated', today)
+    }
+
+    setCelebrating(list.filter((a) => a.appointmentsBooked === max))
+    celebrationTimer.current = setTimeout(() => setCelebrating(null), CELEBRATION.durationMs)
+  }, [nowMs, metrics, celebrating])
+
+  useEffect(
+    () => () => {
+      if (celebrationTimer.current) clearTimeout(celebrationTimer.current)
+    },
+    []
+  )
 
   const secondsAgo =
     lastFetchedAt === null ? null : Math.max(0, Math.floor((nowMs - lastFetchedAt) / 1000))
@@ -117,6 +166,8 @@ export default function Wallboard() {
           }))}
         />
       </section>
+
+      {celebrating && <Celebration winners={celebrating} />}
     </main>
   )
 }

@@ -48,6 +48,18 @@ export const SOURCE_NAMES: Record<
 // appointments today wears one (not just the leader — team decision).
 export const TROPHY_MIN_APPTS = 5
 
+// End-of-day celebration: at this UK time on working days, every screen
+// showing the board celebrates the day's top performer(s) full-screen for
+// durationMs, then returns to the live board. Fires once per day per
+// browser; graceMinutes lets a screen that wakes late still celebrate.
+export const CELEBRATION = {
+  hour: 16,
+  minute: 59,
+  graceMinutes: 5,
+  durationMs: 30_000,
+  weekdaysOnly: true,
+}
+
 // Frontend polling cadence and the threshold after which the feed is
 // declared stale (amber pill).
 export const POLL_INTERVAL_MS = 20_000

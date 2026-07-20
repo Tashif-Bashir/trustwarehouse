@@ -52,6 +52,31 @@
   animation: fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* End-of-day celebration takeover */
+.celebration {
+  background: radial-gradient(1000px 600px at 50% 18%, #17181d 0%, #0a0a0b 70%, #070708 100%);
+}
+
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-8vh) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(112vh) rotate(720deg);
+    opacity: 0.85;
+  }
+}
+
+.confetti {
+  position: absolute;
+  top: -8vh;
+  border-radius: 2px;
+  animation-name: confetti-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
 /* Brief row highlight when an agent books an appointment. --agent is set
    inline per row so the flash matches the agent's own colour. */
 @keyframes row-flash {

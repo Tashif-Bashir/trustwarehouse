@@ -44,6 +44,10 @@ export const SOURCE_NAMES: Record<
   },
 }
 
+// The leaderboard trophy is earned, not automatic: it only appears once
+// the day's leader has booked at least this many appointments.
+export const TROPHY_MIN_APPTS = 5
+
 // Frontend polling cadence and the threshold after which the feed is
 // declared stale (amber pill).
 export const POLL_INTERVAL_MS = 20_000

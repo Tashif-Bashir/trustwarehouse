@@ -1,5 +1,6 @@
 'use client'
 
+import { TROPHY_MIN_APPTS } from '@/lib/config'
 import { useCountUp } from '@/lib/useCountUp'
 import type { AgentMetrics } from '@/lib/types'
 
@@ -74,7 +75,8 @@ export default function Leaderboard({ agents, flashingIds }: LeaderboardProps) {
   const ranked = [...agents].sort((a, b) => b.appointmentsBooked - a.appointmentsBooked)
   const rankById = new Map(ranked.map((agent, rank) => [agent.id, rank]))
   const maxAppts = Math.max(1, ...agents.map((a) => a.appointmentsBooked))
-  const leaderId = ranked[0].appointmentsBooked > 0 ? ranked[0].id : null
+  // Trophy is earned: leader must have at least TROPHY_MIN_APPTS today.
+  const leaderId = ranked[0].appointmentsBooked >= TROPHY_MIN_APPTS ? ranked[0].id : null
 
   return (
     <section className="fade-up" style={{ animationDelay: '400ms' }}>

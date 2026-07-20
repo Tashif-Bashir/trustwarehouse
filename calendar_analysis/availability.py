@@ -310,12 +310,40 @@ _OOO_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Subset of OOO wording that means the WHOLE day is off regardless of the
+# typed times. The team enters day-offs as e.g. 08:30-17:00, which left the
+# 17:00 slot bookable ("KRIS DAY OFF", 21 Jul 2026). Partial wording
+# (finish early, training, busy, wfh...) keeps respecting the typed window.
+_FULL_DAY_OOO_RE = re.compile(
+    r"\b(ooo|out of office|holiday|hols|annual leave|a/?l\b|day off|dayoff|"
+    r"off\b|sick|no appts|bank holiday|leave)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_full_day_off(event: dict) -> bool:
+    return bool(_FULL_DAY_OOO_RE.search(event.get("subject") or ""))
+
 
 def _is_time_off(event: dict) -> bool:
-    if event.get("isAllDay"):
-        return True
     subject = event.get("subject") or ""
+    if event.get("isAllDay"):
+        # All-day events are time-off only when the subject says so (or has
+        # no subject at all — an untitled block is a block). The old blanket
+        # all-day=off rule swallowed informational banners like the
+        # "Stephen Bishop Starting- ..." first-day markers (21 Jul 2026) and
+        # marked a rep Off on a day he had three real appointments.
+        return not subject.strip() or bool(_OOO_RE.search(subject))
     return bool(_OOO_RE.search(subject))
+
+
+def _is_banner(event: dict) -> bool:
+    """All-day informational banner (e.g. 'Stephen Bishop Starting-...').
+
+    Not time-off, but not an appointment either — it must be invisible to
+    availability: without this, a banner's 00:00-00:00 span marks every
+    slot of the day as booked (observed 21 Jul 2026)."""
+    return bool(event.get("isAllDay")) and not _is_time_off(event)
 
 
 # ---------------------------------------------------------------------------
@@ -539,7 +567,7 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10, st
         is_fallback = rep in FALLBACK_REPS
         today_count = len([
             e for e in rep_events.get(rep, {}).get(actual_today, [])
-            if not _is_time_off(e)
+            if not _is_time_off(e) and not _is_banner(e)
         ])
 
         days_out: dict[str, list[dict]] = {}
@@ -547,7 +575,8 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10, st
             slots = _slots_for_day(d, rep)
             if not slots:
                 continue
-            day_events = rep_events.get(rep, {}).get(d, [])
+            # banners are invisible to availability (neither off nor booked)
+            day_events = [e for e in rep_events.get(rep, {}).get(d, []) if not _is_banner(e)]
 
             # build booked/off intervals
             booked_intervals: list[tuple[datetime, datetime]] = []
@@ -559,8 +588,10 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10, st
                 if s is None or e is None:
                     continue
                 if _is_time_off(event):
-                    # all-day: block entire day
-                    if event.get("isAllDay"):
+                    # all-day events and full-day wording block the whole
+                    # day; partial wording (finish early etc.) blocks only
+                    # the typed window
+                    if event.get("isAllDay") or _is_full_day_off(event):
                         off_intervals.append((
                             datetime(d.year, d.month, d.day, 0, 0),
                             datetime(d.year, d.month, d.day, 23, 59),
@@ -695,7 +726,7 @@ def build_rep_diary(events: list[dict]) -> dict:
     rep_appts: dict[str, list[dict]] = {r: [] for r in all_reps}
 
     for event in events:
-        if _is_time_off(event):
+        if _is_time_off(event) or _is_banner(event):
             continue
         rep = _resolve_rep(event)
         if not rep or rep not in rep_appts:

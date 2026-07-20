@@ -312,9 +312,14 @@ _OOO_RE = re.compile(
 
 
 def _is_time_off(event: dict) -> bool:
-    if event.get("isAllDay"):
-        return True
     subject = event.get("subject") or ""
+    if event.get("isAllDay"):
+        # All-day events are time-off only when the subject says so (or has
+        # no subject at all — an untitled block is a block). The old blanket
+        # all-day=off rule swallowed informational banners like the
+        # "Stephen Bishop Starting- ..." first-day markers (21 Jul 2026) and
+        # marked a rep Off on a day he had three real appointments.
+        return not subject.strip() or bool(_OOO_RE.search(subject))
     return bool(_OOO_RE.search(subject))
 
 

@@ -44,8 +44,8 @@ export const SOURCE_NAMES: Record<
   },
 }
 
-// The leaderboard trophy is earned, not automatic: it only appears once
-// the day's leader has booked at least this many appointments.
+// The trophy is a daily TARGET: every agent who books at least this many
+// appointments today wears one (not just the leader — team decision).
 export const TROPHY_MIN_APPTS = 5
 
 // Frontend polling cadence and the threshold after which the feed is

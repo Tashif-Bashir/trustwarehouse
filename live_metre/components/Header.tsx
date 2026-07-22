@@ -1,4 +1,5 @@
 interface HeaderProps {
+  title?: string
   source: string
   secondsAgo: number | null // null = nothing fetched yet
   stale: boolean
@@ -11,12 +12,12 @@ function refreshedLabel(secondsAgo: number | null): string {
   return `refreshed ${Math.floor(secondsAgo / 60)}m ago`
 }
 
-export default function Header({ source, secondsAgo, stale }: HeaderProps) {
+export default function Header({ title = 'Live telesales metre', source, secondsAgo, stale }: HeaderProps) {
   return (
     <header className="flex items-start justify-between gap-4">
       <div>
         <h1 className="font-display text-5xl font-semibold uppercase tracking-wide">
-          Live telesales metre
+          {title}
         </h1>
         <p className="mt-1.5 text-lg text-neutral-400">
           {source} · today · {refreshedLabel(secondsAgo)}

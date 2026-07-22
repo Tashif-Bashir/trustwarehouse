@@ -1,5 +1,5 @@
 import { BigQuery } from '@google-cloud/bigquery'
-import { AGENTS, SOURCE_NAMES } from '../config'
+import { BOARDS, SOURCE_NAMES, TEAM_ASCEND_NAMES } from '../config'
 import type { Metrics } from '../types'
 
 // Real data provider.
@@ -37,7 +37,7 @@ function client(): BigQuery {
   return bq
 }
 
-// reverse lookups: source-specific name -> agent id
+// reverse lookups: source-specific name -> agent id (telesales board)
 const byAscend = new Map<string, string>()
 const byBooker = new Map<string, string>()
 const byCrm = new Map<string, string>()
@@ -45,6 +45,17 @@ for (const [id, names] of Object.entries(SOURCE_NAMES)) {
   names.ascend.forEach((n) => byAscend.set(n, id))
   names.appBookers.forEach((n) => byBooker.set(n, id))
   names.crm.forEach((n) => byCrm.set(n, id))
+}
+
+// sales & ops board: Ascend names only (no appointments on that board)
+const byAscendTeam = new Map<string, string>()
+for (const [id, names] of Object.entries(TEAM_ASCEND_NAMES)) {
+  names.forEach((n) => byAscendTeam.set(n, id))
+}
+
+const ASCEND_MAP: Record<string, Map<string, string>> = {
+  telesales: byAscend,
+  team: byAscendTeam,
 }
 
 interface CallRow {
@@ -57,7 +68,7 @@ interface CallRow {
 // A call counts when it's an outbound dial (answered or not — dialling is
 // activity) or an ANSWERED inbound; missed inbound isn't the agent's call
 // and internal calls are excluded entirely (owner decision 21 Jul 2026).
-async function queryCalls(): Promise<Map<string, CallRow>> {
+async function queryCalls(nameMap: Map<string, string>): Promise<Map<string, CallRow>> {
   const [rows] = await client().query({
     query: `
       SELECT
@@ -76,13 +87,26 @@ async function queryCalls(): Promise<Map<string, CallRow>> {
         AND colleague_name IN UNNEST(@names)
       GROUP BY agent
     `,
-    params: { names: [...byAscend.keys()] },
+    params: { names: [...nameMap.keys()] },
     location: 'europe-west2',
   })
   const out = new Map<string, CallRow>()
   for (const row of rows as CallRow[]) {
-    const id = byAscend.get(row.agent)
-    if (id) out.set(id, row)
+    const id = nameMap.get(row.agent)
+    if (!id) continue
+    // merge if two source-name variants map to the same agent
+    const prev = out.get(id)
+    out.set(
+      id,
+      prev
+        ? {
+            agent: row.agent,
+            total_calls: Number(prev.total_calls) + Number(row.total_calls),
+            calls_over_1m: Number(prev.calls_over_1m) + Number(row.calls_over_1m),
+            talk_seconds: Number(prev.talk_seconds) + Number(row.talk_seconds),
+          }
+        : row
+    )
   }
   return out
 }
@@ -147,7 +171,7 @@ async function queryAppointments(): Promise<Map<string, number>> {
   return counts
 }
 
-let cache: { data: Metrics; at: number; ukDate: string } | null = null
+const caches: Record<string, { data: Metrics; at: number; ukDate: string }> = {}
 
 function ukToday(): string {
   return new Intl.DateTimeFormat('en-CA', {
@@ -158,18 +182,23 @@ function ukToday(): string {
   }).format(new Date())
 }
 
-export async function getBronzeMetrics(): Promise<Metrics> {
+export async function getBronzeMetrics(boardId: string = 'telesales'): Promise<Metrics> {
+  const board = BOARDS[boardId] ?? BOARDS.telesales
+  const cache = caches[board.id]
   if (cache && Date.now() - cache.at < CACHE_TTL_MS && cache.ukDate === ukToday()) {
     return cache.data
   }
 
   try {
-    const [calls, appointments] = await Promise.all([queryCalls(), queryAppointments()])
+    const [calls, appointments] = await Promise.all([
+      queryCalls(ASCEND_MAP[board.id]),
+      board.features.appointments ? queryAppointments() : Promise.resolve(new Map<string, number>()),
+    ])
     const today = ukToday()
     const prevByAgent = new Map(
       cache && cache.ukDate === today ? cache.data.agents.map((a) => [a.id, a]) : []
     )
-    const agents = AGENTS.map((agent) => {
+    const agents = board.agents.map((agent) => {
       const c = calls.get(agent.id)
       // Monotonic guard: cumulative call counts can only rise within a day.
       // If a source read ever comes back lower than what we already served
@@ -186,7 +215,7 @@ export async function getBronzeMetrics(): Promise<Metrics> {
       }
     })
     const data: Metrics = { asOf: new Date().toISOString(), source: 'Ascend', agents }
-    cache = { data, at: Date.now(), ukDate: today }
+    caches[board.id] = { data, at: Date.now(), ukDate: today }
     return data
   } catch (err) {
     // BigQuery hiccup: serve the last good numbers if we have any — the

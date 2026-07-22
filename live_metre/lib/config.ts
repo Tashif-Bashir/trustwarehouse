@@ -6,6 +6,7 @@ export interface AgentConfig {
   id: string
   name: string
   color: string
+  role?: string
 }
 
 export const AGENTS: AgentConfig[] = [
@@ -14,6 +15,46 @@ export const AGENTS: AgentConfig[] = [
   { id: 'alicja', name: 'Alicja', color: '#e87ba4' },
   { id: 'alisha', name: 'Alisha', color: '#eb6834' },
 ]
+
+// Second wallboard: sales & ops (own screen). Calls only — no
+// appointments, no leaderboard, no celebration (owner, 22 Jul 2026).
+export const TEAM_AGENTS: AgentConfig[] = [
+  { id: 'lucy', name: 'Lucy', color: '#2a78d6', role: 'Commercial' },
+  { id: 'gemma', name: 'Gemma', color: '#1baf7a', role: 'Operations' },
+  { id: 'dec', name: 'Dec', color: '#eb6834', role: 'Internal Sales' },
+  { id: 'josh', name: 'Josh', color: '#e87ba4', role: 'Internal Sales' },
+]
+
+// Exact Ascend caller names for the sales & ops board (verified in call
+// data: 'Lucy', 'Gemma Taylor', 'Dec', 'Josh Baron').
+export const TEAM_ASCEND_NAMES: Record<string, string[]> = {
+  lucy: ['Lucy'],
+  gemma: ['Gemma Taylor', 'Gemma'],
+  dec: ['Dec', 'Declan'],
+  josh: ['Josh Baron', 'Josh'],
+}
+
+export interface BoardSpec {
+  id: 'telesales' | 'team'
+  title: string
+  agents: AgentConfig[]
+  features: { appointments: boolean; leaderboard: boolean; celebration: boolean }
+}
+
+export const BOARDS: Record<string, BoardSpec> = {
+  telesales: {
+    id: 'telesales',
+    title: 'Live telesales metre',
+    agents: AGENTS,
+    features: { appointments: true, leaderboard: true, celebration: true },
+  },
+  team: {
+    id: 'team',
+    title: 'Live sales & ops metre',
+    agents: TEAM_AGENTS,
+    features: { appointments: false, leaderboard: false, celebration: false },
+  },
+}
 
 // Exact names each data source uses for an agent (confirmed against real
 // rows, 18 Jul 2026). The bronze provider attributes by these; if an agent

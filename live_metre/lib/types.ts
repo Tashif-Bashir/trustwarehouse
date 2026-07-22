@@ -2,6 +2,7 @@ export interface AgentMetrics {
   id: string
   name: string
   color: string
+  role?: string
   // outbound dials (answered or not) + answered inbound; internal and
   // missed-inbound excluded (owner decision 21 Jul 2026)
   totalCalls: number

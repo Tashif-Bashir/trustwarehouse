@@ -2292,16 +2292,22 @@ function InsightsPanel({ insights }) {
   );
 }
 
-/* ── Telesales mode toggle — Dashboard ↔ Live metre (the wallboard app,
-   embedded full-screen from trust-live-metre.vercel.app). ── */
+/* ── Telesales mode toggle — Dashboard ↔ the two live wallboards
+   (embedded full-screen from trust-live-metre.vercel.app). ── */
 function TsModeToggle({ mode, setMode }) {
   return (
     <div className="ts-mode">
       <button className={mode === 'dashboard' ? 'active' : ''} onClick={() => setMode('dashboard')}>Dashboard</button>
       <button className={mode === 'metre' ? 'active' : ''} onClick={() => setMode('metre')}>Live metre</button>
+      <button className={mode === 'salesops' ? 'active' : ''} onClick={() => setMode('salesops')}>Sales &amp; ops</button>
     </div>
   );
 }
+
+const METRE_URLS = {
+  metre: 'https://trust-live-metre.vercel.app',
+  salesops: 'https://trust-live-metre.vercel.app/sales-ops',
+};
 
 function TelesalesView({ data, tsMode, setTsMode }) {
   const agents = data.agents || [];
@@ -2707,9 +2713,9 @@ function App() {
         )}
       </main>
 
-      {activeTab === 'Telesales' && tsMode === 'metre' && (
+      {activeTab === 'Telesales' && METRE_URLS[tsMode] && (
         <div className="metre-overlay">
-          <iframe src="https://trust-live-metre.vercel.app" title="Live telesales metre"/>
+          <iframe src={METRE_URLS[tsMode]} title="Live wallboard"/>
           <div className="metre-exit">
             <TsModeToggle mode={tsMode} setMode={setTsMode}/>
           </div>

@@ -1,11 +1,32 @@
 # Commercial Projects Tool — Plan
 
-**Status: DISCOVERY.** Nothing is built. This is a living document — the same
-role `CRM_UPDATE_PLAN.md` played for the booking app. Sections marked
-**HYPOTHESIS** are our best guess and must be confirmed (or reshuffled) by the
-commercial team before that phase is built.
+**Status: ON HOLD (owner decision, 22 Jul 2026).** Nothing is built. Two facts
+reshaped the plan before pausing:
 
-Last updated: 10 Jul 2026
+1. **No production Glenigan API key — out of budget.** All API-ingestion
+   phases below are parked; the team works the Glenigan web portal manually.
+   The test key/`reference/` findings remain valid if a key is ever bought.
+2. **First real pain point captured + designed (not built): cold-call logging
+   OUTSIDE the CRM.** The team cold-calls Glenigan contacts; these must never
+   enter SharpSpring, but need a record + the conversation. Agreed design:
+   - BigQuery log table (the `app.bookings` pattern): caller, number,
+     company/contact, free-text Glenigan project ref (pasted from the
+     portal), outcome, notes. Zero SharpSpring contact; a lead is promoted
+     to the CRM by a human only when it turns warm.
+   - Conversations captured automatically: extend the Ascend transcription
+     pipeline to the commercial team's outbound calls regardless of CRM
+     lead match (proposed threshold ≥60s).
+   - A simple logging page in the usual app stack: each rep's calls
+     auto-populated from Ascend CDRs; tap → outcome + project ref + note.
+   - Open at pause: exact team roster → Ascend name mapping (Lucy seen in
+     call data; Olivia/Merv unverified); threshold sign-off.
+
+This remains a living document — the same role `CRM_UPDATE_PLAN.md` played
+for the booking app. Sections marked **HYPOTHESIS** are our best guess and
+must be confirmed (or reshuffled) by the commercial team before that phase
+is built.
+
+Last updated: 22 Jul 2026
 
 ---
 

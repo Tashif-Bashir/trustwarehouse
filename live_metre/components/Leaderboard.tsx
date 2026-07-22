@@ -1,5 +1,6 @@
 'use client'
 
+import Avatar from '@/components/Avatar'
 import { TROPHY_MIN_APPTS } from '@/lib/config'
 import { useCountUp } from '@/lib/useCountUp'
 import type { AgentMetrics } from '@/lib/types'
@@ -18,13 +19,13 @@ function Row({
   agent,
   rank,
   maxAppts,
-  isLeader,
+  hasTrophy,
   flashing,
 }: {
   agent: AgentMetrics
   rank: number
   maxAppts: number
-  isLeader: boolean
+  hasTrophy: boolean
   flashing: boolean
 }) {
   const displayAppts = useCountUp(agent.appointmentsBooked)
@@ -35,16 +36,20 @@ function Row({
       }`}
       style={{ top: rank * ROW_HEIGHT, height: ROW_HEIGHT, ['--agent' as string]: agent.color }}
     >
-      <div className="w-28 shrink-0 font-display text-3xl font-semibold">{agent.name}</div>
+      <div className="flex w-44 shrink-0 items-center gap-3">
+        <Avatar id={agent.id} name={agent.name} color={agent.color} />
+        <span className="font-display text-3xl font-semibold">{agent.name}</span>
+      </div>
       <div className="relative h-9 flex-1 overflow-visible rounded-lg bg-surface">
         <div
           className="absolute inset-y-0 left-0 rounded-lg transition-[width] duration-700 ease-in-out"
           style={{
             width: `${(agent.appointmentsBooked / maxAppts) * 100}%`,
             backgroundColor: agent.color,
-            // the neon-strip glow — each bar radiates its own team colour
-            boxShadow: `0 0 ${isLeader ? 26 : 16}px color-mix(in srgb, ${agent.color} ${
-              isLeader ? 38 : 24
+            // the neon-strip glow — each bar radiates its own team colour;
+            // stronger once the trophy target is reached
+            boxShadow: `0 0 ${hasTrophy ? 26 : 16}px color-mix(in srgb, ${agent.color} ${
+              hasTrophy ? 38 : 24
             }%, transparent)`,
           }}
         />
@@ -56,7 +61,7 @@ function Row({
             appt{agent.appointmentsBooked === 1 ? '' : 's'}
           </span>
         </span>
-        {isLeader && (
+        {hasTrophy && (
           <TrophyIcon className="h-7 w-7 shrink-0 text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]" />
         )}
       </div>
@@ -75,8 +80,8 @@ export default function Leaderboard({ agents, flashingIds }: LeaderboardProps) {
   const ranked = [...agents].sort((a, b) => b.appointmentsBooked - a.appointmentsBooked)
   const rankById = new Map(ranked.map((agent, rank) => [agent.id, rank]))
   const maxAppts = Math.max(1, ...agents.map((a) => a.appointmentsBooked))
-  // Trophy is earned: leader must have at least TROPHY_MIN_APPTS today.
-  const leaderId = ranked[0].appointmentsBooked >= TROPHY_MIN_APPTS ? ranked[0].id : null
+  // Trophy is a TARGET, not a race (team decision 21 Jul 2026): EVERYONE
+  // who books TROPHY_MIN_APPTS today wears one, not just the leader.
 
   return (
     <section className="fade-up" style={{ animationDelay: '400ms' }}>
@@ -93,7 +98,7 @@ export default function Leaderboard({ agents, flashingIds }: LeaderboardProps) {
             agent={agent}
             rank={rankById.get(agent.id) ?? 0}
             maxAppts={maxAppts}
-            isLeader={agent.id === leaderId}
+            hasTrophy={agent.appointmentsBooked >= TROPHY_MIN_APPTS}
             flashing={flashingIds.has(agent.id)}
           />
         ))}

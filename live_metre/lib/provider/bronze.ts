@@ -1,5 +1,5 @@
 import { BigQuery } from '@google-cloud/bigquery'
-import { AGENTS, SOURCE_NAMES } from '../config'
+import { BOARDS, SOURCE_NAMES, TEAM_ASCEND_NAMES } from '../config'
 import type { Metrics } from '../types'
 
 // Real data provider.
@@ -37,7 +37,7 @@ function client(): BigQuery {
   return bq
 }
 
-// reverse lookups: source-specific name -> agent id
+// reverse lookups: source-specific name -> agent id (telesales board)
 const byAscend = new Map<string, string>()
 const byBooker = new Map<string, string>()
 const byCrm = new Map<string, string>()
@@ -47,36 +47,66 @@ for (const [id, names] of Object.entries(SOURCE_NAMES)) {
   names.crm.forEach((n) => byCrm.set(n, id))
 }
 
+// sales & ops board: Ascend names only (no appointments on that board)
+const byAscendTeam = new Map<string, string>()
+for (const [id, names] of Object.entries(TEAM_ASCEND_NAMES)) {
+  names.forEach((n) => byAscendTeam.set(n, id))
+}
+
+const ASCEND_MAP: Record<string, Map<string, string>> = {
+  telesales: byAscend,
+  team: byAscendTeam,
+}
+
 interface CallRow {
   agent: string
-  outbound_calls: number
-  calls_over_30s: number
-  calls_over_2m: number
+  total_calls: number
+  calls_over_1m: number
   talk_seconds: number
 }
 
-async function queryCalls(): Promise<Map<string, CallRow>> {
+// A call counts when it's an outbound dial (answered or not — dialling is
+// activity) or an ANSWERED inbound; missed inbound isn't the agent's call
+// and internal calls are excluded entirely (owner decision 21 Jul 2026).
+async function queryCalls(nameMap: Map<string, string>): Promise<Map<string, CallRow>> {
   const [rows] = await client().query({
     query: `
       SELECT
-        colleague_name                                   AS agent,
-        COUNT(*)                                         AS outbound_calls,
-        COUNTIF(COALESCE(talk_time_seconds, 0) > 30)     AS calls_over_30s,
-        COUNTIF(COALESCE(talk_time_seconds, 0) >= 120)   AS calls_over_2m,
-        SUM(COALESCE(talk_time_seconds, 0))              AS talk_seconds
+        colleague_name AS agent,
+        COUNTIF(direction = 'OUTBOUND'
+                OR (direction = 'INBOUND' AND call_status = 'COMPLETED'))  AS total_calls,
+        COUNTIF((direction = 'OUTBOUND'
+                 OR (direction = 'INBOUND' AND call_status = 'COMPLETED'))
+                AND COALESCE(talk_time_seconds, 0) >= 60)                  AS calls_over_1m,
+        SUM(IF(direction = 'OUTBOUND'
+               OR (direction = 'INBOUND' AND call_status = 'COMPLETED'),
+               COALESCE(talk_time_seconds, 0), 0))                         AS talk_seconds
       FROM \`${PROJECT}.silver.silver_ascend_calls\`
-      WHERE direction = 'OUTBOUND'
+      WHERE direction IN ('OUTBOUND', 'INBOUND')
         AND DATE(TIMESTAMP_MILLIS(start_time), 'Europe/London') = CURRENT_DATE('Europe/London')
         AND colleague_name IN UNNEST(@names)
       GROUP BY agent
     `,
-    params: { names: [...byAscend.keys()] },
+    params: { names: [...nameMap.keys()] },
     location: 'europe-west2',
   })
   const out = new Map<string, CallRow>()
   for (const row of rows as CallRow[]) {
-    const id = byAscend.get(row.agent)
-    if (id) out.set(id, row)
+    const id = nameMap.get(row.agent)
+    if (!id) continue
+    // merge if two source-name variants map to the same agent
+    const prev = out.get(id)
+    out.set(
+      id,
+      prev
+        ? {
+            agent: row.agent,
+            total_calls: Number(prev.total_calls) + Number(row.total_calls),
+            calls_over_1m: Number(prev.calls_over_1m) + Number(row.calls_over_1m),
+            talk_seconds: Number(prev.talk_seconds) + Number(row.talk_seconds),
+          }
+        : row
+    )
   }
   return out
 }
@@ -112,7 +142,10 @@ async function queryAppointments(): Promise<Map<string, number>> {
         WHERE booker_name IN UNNEST(@names)
           AND DATE(booked_at, 'Europe/London') = CURRENT_DATE('Europe/London')
           AND customer NOT LIKE 'Zzz Testlead%'
-          AND lead_id IS NOT NULL
+          -- unlinked (calendar-only) rows can't be deduped against the CRM
+          -- and reschedules aren't new bookings — neither counts (22 Jul 2026)
+          AND lead_id IS NOT NULL AND lead_id != ''
+          AND COALESCE(is_rebook, FALSE) = FALSE
       `,
       params: { names: [...byBooker.keys()] },
       location: 'US',
@@ -138,7 +171,7 @@ async function queryAppointments(): Promise<Map<string, number>> {
   return counts
 }
 
-let cache: { data: Metrics; at: number; ukDate: string } | null = null
+const caches: Record<string, { data: Metrics; at: number; ukDate: string }> = {}
 
 function ukToday(): string {
   return new Intl.DateTimeFormat('en-CA', {
@@ -149,18 +182,23 @@ function ukToday(): string {
   }).format(new Date())
 }
 
-export async function getBronzeMetrics(): Promise<Metrics> {
+export async function getBronzeMetrics(boardId: string = 'telesales'): Promise<Metrics> {
+  const board = BOARDS[boardId] ?? BOARDS.telesales
+  const cache = caches[board.id]
   if (cache && Date.now() - cache.at < CACHE_TTL_MS && cache.ukDate === ukToday()) {
     return cache.data
   }
 
   try {
-    const [calls, appointments] = await Promise.all([queryCalls(), queryAppointments()])
+    const [calls, appointments] = await Promise.all([
+      queryCalls(ASCEND_MAP[board.id]),
+      board.features.appointments ? queryAppointments() : Promise.resolve(new Map<string, number>()),
+    ])
     const today = ukToday()
     const prevByAgent = new Map(
       cache && cache.ukDate === today ? cache.data.agents.map((a) => [a.id, a]) : []
     )
-    const agents = AGENTS.map((agent) => {
+    const agents = board.agents.map((agent) => {
       const c = calls.get(agent.id)
       // Monotonic guard: cumulative call counts can only rise within a day.
       // If a source read ever comes back lower than what we already served
@@ -170,15 +208,14 @@ export async function getBronzeMetrics(): Promise<Metrics> {
       const prev = prevByAgent.get(agent.id)
       return {
         ...agent,
-        outboundCalls: Math.max(Number(c?.outbound_calls ?? 0), prev?.outboundCalls ?? 0),
-        callsOver30s: Math.max(Number(c?.calls_over_30s ?? 0), prev?.callsOver30s ?? 0),
-        callsOver2m: Math.max(Number(c?.calls_over_2m ?? 0), prev?.callsOver2m ?? 0),
+        totalCalls: Math.max(Number(c?.total_calls ?? 0), prev?.totalCalls ?? 0),
+        callsOver1m: Math.max(Number(c?.calls_over_1m ?? 0), prev?.callsOver1m ?? 0),
         talktimeSeconds: Math.max(Number(c?.talk_seconds ?? 0), prev?.talktimeSeconds ?? 0),
         appointmentsBooked: appointments.get(agent.id) ?? 0,
       }
     })
     const data: Metrics = { asOf: new Date().toISOString(), source: 'Ascend', agents }
-    cache = { data, at: Date.now(), ukDate: today }
+    caches[board.id] = { data, at: Date.now(), ukDate: today }
     return data
   } catch (err) {
     // BigQuery hiccup: serve the last good numbers if we have any — the

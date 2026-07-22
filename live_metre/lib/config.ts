@@ -6,6 +6,7 @@ export interface AgentConfig {
   id: string
   name: string
   color: string
+  role?: string
 }
 
 export const AGENTS: AgentConfig[] = [
@@ -14,6 +15,46 @@ export const AGENTS: AgentConfig[] = [
   { id: 'alicja', name: 'Alicja', color: '#e87ba4' },
   { id: 'alisha', name: 'Alisha', color: '#eb6834' },
 ]
+
+// Second wallboard: sales & ops (own screen). Calls only — no
+// appointments, no leaderboard, no celebration (owner, 22 Jul 2026).
+export const TEAM_AGENTS: AgentConfig[] = [
+  { id: 'lucy', name: 'Lucy', color: '#2a78d6', role: 'Commercial' },
+  { id: 'gemma', name: 'Gemma', color: '#1baf7a', role: 'Operations' },
+  { id: 'dec', name: 'Dec', color: '#eb6834', role: 'Internal Sales' },
+  { id: 'josh', name: 'Josh', color: '#e87ba4', role: 'Internal Sales' },
+]
+
+// Exact Ascend caller names for the sales & ops board (verified in call
+// data: 'Lucy', 'Gemma Taylor', 'Dec', 'Josh Baron').
+export const TEAM_ASCEND_NAMES: Record<string, string[]> = {
+  lucy: ['Lucy'],
+  gemma: ['Gemma Taylor', 'Gemma'],
+  dec: ['Dec', 'Declan'],
+  josh: ['Josh Baron', 'Josh'],
+}
+
+export interface BoardSpec {
+  id: 'telesales' | 'team'
+  title: string
+  agents: AgentConfig[]
+  features: { appointments: boolean; leaderboard: boolean; celebration: boolean }
+}
+
+export const BOARDS: Record<string, BoardSpec> = {
+  telesales: {
+    id: 'telesales',
+    title: 'Live telesales metre',
+    agents: AGENTS,
+    features: { appointments: true, leaderboard: true, celebration: true },
+  },
+  team: {
+    id: 'team',
+    title: 'Live sales & ops metre',
+    agents: TEAM_AGENTS,
+    features: { appointments: false, leaderboard: false, celebration: false },
+  },
+}
 
 // Exact names each data source uses for an agent (confirmed against real
 // rows, 18 Jul 2026). The bronze provider attributes by these; if an agent
@@ -44,9 +85,21 @@ export const SOURCE_NAMES: Record<
   },
 }
 
-// The leaderboard trophy is earned, not automatic: it only appears once
-// the day's leader has booked at least this many appointments.
+// The trophy is a daily TARGET: every agent who books at least this many
+// appointments today wears one (not just the leader — team decision).
 export const TROPHY_MIN_APPTS = 5
+
+// End-of-day celebration: at this UK time on working days, every screen
+// showing the board celebrates the day's top performer(s) full-screen for
+// durationMs, then returns to the live board. Fires once per day per
+// browser; graceMinutes lets a screen that wakes late still celebrate.
+export const CELEBRATION = {
+  hour: 16,
+  minute: 59,
+  graceMinutes: 5,
+  durationMs: 30_000,
+  weekdaysOnly: true,
+}
 
 // Frontend polling cadence and the threshold after which the feed is
 // declared stale (amber pill).

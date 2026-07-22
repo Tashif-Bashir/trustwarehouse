@@ -282,13 +282,14 @@ def _record_booking(**kv) -> None:
             f"INSERT INTO {BQ_BOOKINGS}"
             f" (event_id, lead_id, booker_username, booker_owner_id, booker_name,"
             f"  rep_name, rep_owner_id, customer, postcode, appt_date, appt_start, appt_end,"
-            f"  appt_type, booked_at, status, is_rebook)"
+            f"  appt_type, booked_at, status, is_rebook, entered_by)"
             f" VALUES (@event_id, @lead_id, @booker_username, @booker_owner_id, @booker_name,"
             f"  @rep_name, @rep_owner_id, @customer, @postcode, @appt_date, @appt_start, @appt_end,"
-            f"  @appt_type, @booked_ts, 'active', @is_rebook)",
+            f"  @appt_type, @booked_ts, 'active', @is_rebook, @entered_by)",
             job_config=bigquery.QueryJobConfig(query_parameters=_bq_params(
                 booked_ts=datetime.now(timezone.utc).isoformat(),
-                is_rebook=bool(kv.pop("is_rebook", False)), **kv,
+                is_rebook=bool(kv.pop("is_rebook", False)),
+                entered_by=str(kv.pop("entered_by", "") or ""), **kv,
             )),
         ).result()
     except Exception:
@@ -501,6 +502,9 @@ _SS_F_PREV_APPT    = "previous_appointment_time___date_6a1d969b9f800"  # Previou
 # Appointment types the booking form can submit, and allowed other-side outcomes
 APPT_TYPES     = ("heating", "water", "both")
 OTHER_OUTCOMES = ("", "Follow Up", "Not Interested")
+# Agents you can book on behalf of (the telesales team) — must have
+# sharpspring_name + owner id set in app.users.
+BOOK_FOR_USERNAMES = ("lily", "sue", "alicja", "alisha")
 ENQUIRY_TYPES  = ("", "Heating", "Water", "Heating and Water")  # '' = don't write
 
 
@@ -1099,9 +1103,28 @@ def api_book():
     booker_name  = session.get("name", "Telesales")
 
     # Booking user's SharpSpring identity — for note attribution + "Appointment Booked By"
-    _booker = _get_user(session.get("username", "")) or {}
-    booker_owner_id = _booker.get("sharpspring_owner_id") or ""
-    booker_made_by  = _booker.get("sharpspring_name") or ""
+    _actual = _get_user(session.get("username", "")) or {}
+    actual_owner_id = _actual.get("sharpspring_owner_id") or ""
+    booker_owner_id = actual_owner_id
+    booker_made_by  = _actual.get("sharpspring_name") or ""
+
+    # ── Book on behalf of an absent colleague (telesales only): attribution
+    #    (CRM Made By, lead owner on cancel, board credit) goes to them;
+    #    entered_by keeps the honest record of who physically booked it. ──
+    entered_by_name = booker_name
+    booker_username = session.get("username", "")
+    booked_for = (data.get("booked_for") or "").strip().lower()
+    if booked_for and booked_for != booker_username and booked_for in BOOK_FOR_USERNAMES:
+        behalf = _get_user(booked_for)
+        if behalf and (behalf.get("sharpspring_name") or "").strip():
+            booker_username = booked_for
+            booker_name     = behalf.get("name") or booked_for.title()
+            booker_owner_id = behalf.get("sharpspring_owner_id") or ""
+            booker_made_by  = behalf.get("sharpspring_name") or ""
+        else:
+            booked_for = ""
+    else:
+        booked_for = ""
 
     _TELESALES = "telesales@trustelectricheating.co.uk"
 
@@ -1137,7 +1160,8 @@ def api_book():
         "body": {"contentType": "Text",
                  "content": notes
                  + (f"\n\nCustomer email: {cust_email}" if cust_email else "")
-                 + f"\n\nBooked by: {booker_name}"},
+                 + f"\n\nBooked by: {booker_name}"
+                 + (f" (entered by {entered_by_name})" if booked_for else "")},
         "showAs": "busy",
         "isOnlineMeeting": teams,
         "isReminderOn": True,
@@ -1202,8 +1226,13 @@ def api_book():
                         prev_appt=(lead.get(_SS_F_APPT_DT) or ""),
                         stamp_booked_ts=not is_rebook,
                     )
-                    if notes:
-                        _ss_create_note(lead_id, notes, owner_id=booker_owner_id)
+                    if notes or booked_for:
+                        # note stays authored by whoever actually typed it
+                        note_text = notes + (
+                            f"\n\nBooked on behalf of {booker_name} — entered by {entered_by_name}"
+                            if booked_for else ""
+                        )
+                        _ss_create_note(lead_id, note_text.strip(), owner_id=actual_owner_id)
                     crm_status = ("rescheduled" if is_rebook else "updated") if updated else "failed"
             except Exception:
                 app.logger.exception("CRM write-back failed (booking still succeeded)")
@@ -1217,9 +1246,10 @@ def api_book():
         _record_booking(
             event_id=event_id,
             lead_id=(lead_id if crm_status in ("updated", "rescheduled") else ""),
-            booker_username=session.get("username", ""),
+            booker_username=booker_username,
             booker_owner_id=booker_owner_id,
             booker_name=booker_name,
+            entered_by=(session.get("username", "") if booked_for else ""),
             rep_name=rep_name,
             rep_owner_id=_rep_owner_id(rep_name),
             customer=customer,
@@ -1232,6 +1262,8 @@ def api_book():
         )
 
         booked_by = f" — booked by {booker_name}" if booker_email else ""
+        if booked_for:
+            booked_by = f" — booked by {booker_name} (entered by {entered_by_name})"
         crm_tail = {
             "updated":     " · CRM updated",
             "rescheduled": " · CRM updated (reschedule — original booking date kept)",

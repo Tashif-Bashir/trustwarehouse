@@ -442,6 +442,8 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
   const [leadId,        setLeadId]        = useState('');
   const [leadName,      setLeadName]      = useState('');
   const [skipCrm,       setSkipCrm]       = useState(false);
+  const [bookedFor,     setBookedFor]     = useState('');  // '' = myself
+  const BOOK_FOR_LABELS = {lily:'Lily', sue:'Sue', alicja:'Alicja', alisha:'Alisha'};
   // Heating / water appointment type + the telesales call on the other pipeline
   const [apptType,     setApptType]     = useState('heating');
   const [otherOutcome, setOtherOutcome] = useState('');
@@ -570,6 +572,7 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
           teams_meeting: teamsEnabled,
           lead_id: leadId,
           skip_crm: skipCrm,
+          booked_for: bookedFor,
           appt_type: apptType,
           other_outcome: apptType === 'both' ? '' : otherOutcome,
           enquiry_type: enquiryType,
@@ -741,6 +744,23 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
                 Book calendar only — don't update SharpSpring (won't count on the boards)
               </label>
             </div>
+            {/* Booked by — covering for an absent colleague credits them; an
+                entered-by audit trail records who physically booked it */}
+            <div className="booking-field" style={{marginBottom:10}}>
+              <label>Booked by</label>
+              <select value={bookedFor} onChange={e => setBookedFor(e.target.value)}>
+                <option value="">Myself</option>
+                <option value="lily">Lily</option>
+                <option value="sue">Sue</option>
+                <option value="alicja">Alicja</option>
+                <option value="alisha">Alisha</option>
+              </select>
+              {bookedFor && (
+                <div style={{fontSize:12,color:'var(--indigo)',fontWeight:600,marginTop:4}}>
+                  Credited to {BOOK_FOR_LABELS[bookedFor]} — recorded as entered by you.
+                </div>
+              )}
+            </div>
             {/* Row 1: name + postcode side by side */}
             <div style={{display:'flex',gap:10}}>
               <div className="booking-field" style={{flex:2}}>
@@ -870,6 +890,9 @@ function SlotDrawer({ rep, dayIso, slots, onClose, onBooked, dayIsPast }) {
               {ccEmails.some(e => e.trim()) && <><br/>CC: {ccEmails.filter(e => e.trim()).join(', ')}</>}
               {custEmail && <><br/>Customer: {custEmail}</>}
               {teamsEnabled && <><br/>📹 Teams link will be added</>}
+              {bookedFor && <><br/><span style={{color:'var(--indigo)',fontWeight:600}}>
+                Booked by: {BOOK_FOR_LABELS[bookedFor]} (entered by you)
+              </span></>}
               <br/>
               {leadId && !skipCrm
                 ? <span style={{color:'#1a7a5a',fontWeight:600}}>

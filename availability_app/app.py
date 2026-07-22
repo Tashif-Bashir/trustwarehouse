@@ -823,6 +823,7 @@ def index():
     return render_template(
         "availability.html",
         username=session.get("name"),
+        login_username=session.get("username", ""),
         role=session.get("role"),
         user_email=session.get("email", ""),
         photo_url=session.get("photo_url", ""),

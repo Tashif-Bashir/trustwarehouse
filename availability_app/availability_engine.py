@@ -730,7 +730,8 @@ def build_rep_diary(events: list[dict]) -> dict:
     the /reps diary page.
     """
     today = date.today()
-    all_reps = list(REP_REGION.keys()) + FALLBACK_REPS
+    # Diary lists reps alphabetically (regional + fallback together)
+    all_reps = sorted(list(REP_REGION.keys()) + FALLBACK_REPS, key=str.lower)
 
     rep_appts: dict[str, list[dict]] = {r: [] for r in all_reps}
 

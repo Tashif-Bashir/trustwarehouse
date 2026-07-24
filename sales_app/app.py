@@ -63,7 +63,7 @@ def _bq() -> bigquery.Client:
         if raw:
             from google.oauth2 import service_account
             creds = service_account.Credentials.from_service_account_info(
-                json.loads(raw),
+                json.loads(raw.lstrip("\ufeff")),
                 scopes=["https://www.googleapis.com/auth/cloud-platform"],
             )
         _bq_client = bigquery.Client(project=BQ_PROJECT, credentials=creds)

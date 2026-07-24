@@ -161,8 +161,9 @@ _SS_BASE_URL = "https://api.sharpspring.com/pubapi/v1.2/"
 F_SOLD_HEAT = "sold_amount_heating______6a60e957e3fe7"
 F_SOLD_WATER = "sold_amount_water______6a60e96c2f317"
 F_SOLD_CHC = "sold_amount_chc______6a6207ad9f645"
-F_APPT_STATUS = "appointment_status_637f8d6fa1096"   # Appointment Status Heating
-F_SOLD_BY = "product_bought__1__6969069edaaef"        # "Sold by" picklist (Dec/Josh)
+F_APPT_STATUS = "appointment_status_637f8d6fa1096"        # Appointment Status Heating
+F_APPT_STATUS_WATER = "appointment_status__1__6a0f083987d2c"  # Appointment Status WATER
+F_SOLD_BY = "product_bought__1__6969069edaaef"            # "Sold by" picklist (Dec/Josh)
 
 OFFICE_SELLERS = ("Dec", "Josh")   # matches the CRM "Sold by" picklist values
 
@@ -261,7 +262,13 @@ def _crm_writeback(lead_id: str, sale_type: str, sold_by: str | None,
     if c:
         obj[F_SOLD_CHC] = _fmt_amount(c)
     if sale_type in ("on_site", "office"):
-        obj[F_APPT_STATUS] = _status_picklist_value(sale_type)
+        status_val = _status_picklist_value(sale_type)
+        # statuses follow the sale's components: heating amount → heating status,
+        # water amount → WATER status
+        if add_h:
+            obj[F_APPT_STATUS] = status_val
+        if add_w:
+            obj[F_APPT_STATUS_WATER] = status_val
     if sale_type == "office" and sold_by in OFFICE_SELLERS:
         obj[F_SOLD_BY] = sold_by
     _ss_call("updateLeads", {"objects": [obj]})
@@ -548,8 +555,14 @@ def _get_sale(sale_id: str) -> dict | None:
     return {k: rows[0][k] for k in rows[0].keys()} if rows else None
 
 
-def _refresh_crm_totals(lead_id: str) -> None:
-    """Recompute lifetime totals from active rows and push to the lead (owner echoed)."""
+def _refresh_crm_totals(lead_id: str, sale_type: str | None = None,
+                        heating: float | None = None, water: float | None = None,
+                        sold_by: str | None = None) -> None:
+    """Recompute lifetime totals from active rows and push to the lead (owner echoed).
+
+    When sale_type is given (edits), also (re)set the sold statuses for the
+    components present in the edited sale — never clears a status.
+    """
     lead = _ss_call("getLeads", {"where": {"id": lead_id}})["lead"][0]
     owner = lead.get("ownerID")
     h, w, c = _lifetime_totals(lead_id)
@@ -557,6 +570,14 @@ def _refresh_crm_totals(lead_id: str) -> None:
            F_SOLD_WATER: _fmt_amount(w), F_SOLD_CHC: _fmt_amount(c)}
     if owner:
         obj["ownerID"] = owner
+    if sale_type in ("on_site", "office"):
+        status_val = _status_picklist_value(sale_type)
+        if heating:
+            obj[F_APPT_STATUS] = status_val
+        if water:
+            obj[F_APPT_STATUS_WATER] = status_val
+        if sale_type == "office" and sold_by in OFFICE_SELLERS:
+            obj[F_SOLD_BY] = sold_by
     _ss_call("updateLeads", {"objects": [obj]})
 
 
@@ -692,7 +713,8 @@ def api_edit_sale(sale_id: str):
         old_amt = (sale["heating_amount"] or 0) + (sale["water_amount"] or 0) + (sale["chc_amount"] or 0)
         new_amt = (heating or 0) + (water or 0) + (chc or 0)
         try:
-            _refresh_crm_totals(sale["lead_id"])
+            _refresh_crm_totals(sale["lead_id"], sale_type=sale_type,
+                                heating=heating, water=water, sold_by=sold_by)
             changes = []
             if abs(old_amt - new_amt) > 0.004:
                 changes.append(f"£{old_amt:,.2f} → £{new_amt:,.2f}")

@@ -32,7 +32,7 @@ app.permanent_session_lifetime = timedelta(hours=10)
 # Config / BigQuery
 # ---------------------------------------------------------------------------
 
-BQ_PROJECT = os.environ.get("BIGQUERY_PROJECT", "trustwarehouse")
+BQ_PROJECT = (os.environ.get("BIGQUERY_PROJECT") or "trustwarehouse").strip().lstrip("\ufeff")
 BQ_USERS = f"`{BQ_PROJECT}.app.sales_users`"   # the sales app's OWN logins
 BQ_REPS = f"`{BQ_PROJECT}.app.reps`"
 BQ_SALES = f"`{BQ_PROJECT}.app.sales`"
@@ -52,7 +52,8 @@ if _dotenv_path.exists():
 
 
 def _cfg(key: str) -> str:
-    return os.environ.get(key) or _DOTENV.get(key, "")
+    # strip whitespace and any BOM — env values set via shell pipes can carry both
+    return (os.environ.get(key) or _DOTENV.get(key, "")).strip().lstrip("\ufeff")
 
 
 def _bq() -> bigquery.Client:

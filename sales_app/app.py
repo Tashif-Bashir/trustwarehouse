@@ -243,18 +243,23 @@ def _fmt_amount(x: float) -> str:
 
 
 def _crm_writeback(lead_id: str, sale_type: str, sold_by: str | None,
-                   add_h: float = 0, add_w: float = 0, add_c: float = 0) -> None:
-    """Update the lead: lifetime sold amounts + status + Sold by. ownerID always echoed.
+                   add_h: float = 0, add_w: float = 0, add_c: float = 0,
+                   rep_owner: str = "") -> None:
+    """Update the lead: lifetime sold amounts + statuses + attribution.
 
-    add_* are amounts of a sale not yet inserted (CRM is written before the row).
+    On-site sales REASSIGN the lead to the selling rep (SOS ⇒ sale goes in the
+    owner's name) and clear the Dec/Josh 'Sold by' field; office sales keep the
+    owner and set 'Sold by'. add_* are amounts of a sale not yet inserted.
     """
     lead = _ss_call("getLeads", {"where": {"id": lead_id}})["lead"][0]
     owner = lead.get("ownerID")
     h, w, c = _lifetime_totals(lead_id)
     h, w, c = round(h + add_h, 2), round(w + add_w, 2), round(c + add_c, 2)
     obj: dict = {"id": lead_id}
-    if owner:
-        obj["ownerID"] = owner
+    if sale_type == "on_site" and rep_owner:
+        obj["ownerID"] = rep_owner            # reassign to the selling rep
+    elif owner:
+        obj["ownerID"] = owner                # echo (never omit — reassignment trap)
     if h:
         obj[F_SOLD_HEAT] = _fmt_amount(h)
     if w:
@@ -271,15 +276,33 @@ def _crm_writeback(lead_id: str, sale_type: str, sold_by: str | None,
             obj[F_APPT_STATUS_WATER] = status_val
     if sale_type == "office" and sold_by in OFFICE_SELLERS:
         obj[F_SOLD_BY] = sold_by
+    if sale_type == "on_site":
+        obj[F_SOLD_BY] = ""                   # Dec/Josh field doesn't apply on-site
     _ss_call("updateLeads", {"objects": [obj]})
 
 
+def _rep_owner_id(name: str | None) -> str:
+    """SharpSpring owner id for a rep name from app.reps ('' if unknown)."""
+    if not name:
+        return ""
+    rows = list(_bq().query(
+        f"SELECT sharpspring_owner_id FROM {BQ_REPS} WHERE name = @n LIMIT 1",
+        job_config=_bq_params(n=name)).result())
+    return (rows[0]["sharpspring_owner_id"] or "") if rows else ""
+
+
 def _crm_note(lead_id: str, text: str, author_owner_id: str | None = None) -> None:
-    """Drop a note in the lead's CRM activity feed (authorID sets the shown author)."""
-    obj: dict = {"whoID": str(lead_id), "whoType": "lead", "note": text}
-    if author_owner_id:
-        obj["authorID"] = str(author_owner_id)
-    _ss_call("createNotes", {"objects": [obj]})
+    """Drop a note in the lead's activity feed. SharpSpring REQUIRES authorID —
+    fall back to the lead's owner when no rep author is known."""
+    author = author_owner_id
+    if not author:
+        lead = _ss_call("getLeads", {"where": {"id": lead_id}})["lead"][0]
+        author = lead.get("ownerID")
+    if not author:
+        raise RuntimeError("no authorID available for CRM note")
+    _ss_call("createNotes", {"objects": [
+        {"whoID": str(lead_id), "whoType": "lead", "note": text,
+         "authorID": str(author)}]})
 
 
 def _sale_note_text(sale_type: str, heating, water, chc, sold_by,
@@ -456,12 +479,15 @@ def api_create_sale():
     # CRM first (with the new amounts as deltas), then a DML insert carrying the
     # final sync flag — DML rows are immediately updatable (voids work right away),
     # unlike streaming-buffer rows.
+    rep_owner = _rep_owner_id(sold_by) if sale_type == "on_site" else ""
+
     crm_ok = False
     crm_error = ""
     if lead_id:
         try:
             _crm_writeback(lead_id, sale_type, sold_by,
-                           add_h=heating or 0, add_w=water or 0, add_c=chc or 0)
+                           add_h=heating or 0, add_w=water or 0, add_c=chc or 0,
+                           rep_owner=rep_owner)
             crm_ok = True
         except Exception as exc:
             app.logger.exception("CRM writeback failed")
@@ -472,7 +498,7 @@ def api_create_sale():
                 _sale_note_text(sale_type, heating, water, chc, sold_by,
                                 sale_date.isoformat(), (d.get("note") or "").strip(),
                                 session.get("name") or session.get("username") or "?"),
-                author_owner_id=(d.get("sold_by_owner_id") or "").strip() or None,
+                author_owner_id=rep_owner or None,
             )
         except Exception:
             app.logger.exception("CRM note failed (non-fatal)")
@@ -502,7 +528,9 @@ def api_create_sale():
             bigquery.ScalarQueryParameter("chc", "FLOAT64", chc),
             bigquery.ScalarQueryParameter("sold_by", "STRING", sold_by),
             bigquery.ScalarQueryParameter("sb_oid", "STRING",
-                                          (d.get("sold_by_owner_id") or "").strip() or None),
+                                          rep_owner
+                                          or (d.get("sold_by_owner_id") or "").strip()
+                                          or None),
             bigquery.ScalarQueryParameter("product", "STRING",
                                           (d.get("product_bought") or "").strip() or None),
             bigquery.ScalarQueryParameter("note", "STRING",
@@ -557,18 +585,21 @@ def _get_sale(sale_id: str) -> dict | None:
 
 def _refresh_crm_totals(lead_id: str, sale_type: str | None = None,
                         heating: float | None = None, water: float | None = None,
-                        sold_by: str | None = None) -> None:
-    """Recompute lifetime totals from active rows and push to the lead (owner echoed).
+                        sold_by: str | None = None, rep_owner: str = "") -> None:
+    """Recompute lifetime totals from active rows and push to the lead.
 
-    When sale_type is given (edits), also (re)set the sold statuses for the
-    components present in the edited sale — never clears a status.
+    When sale_type is given (edits): statuses mirror the edited sale's
+    components, on-site reassigns the lead to the rep + clears 'Sold by',
+    office sets 'Sold by'.
     """
     lead = _ss_call("getLeads", {"where": {"id": lead_id}})["lead"][0]
     owner = lead.get("ownerID")
     h, w, c = _lifetime_totals(lead_id)
     obj = {"id": lead_id, F_SOLD_HEAT: _fmt_amount(h),
            F_SOLD_WATER: _fmt_amount(w), F_SOLD_CHC: _fmt_amount(c)}
-    if owner:
+    if sale_type == "on_site" and rep_owner:
+        obj["ownerID"] = rep_owner
+    elif owner:
         obj["ownerID"] = owner
 
     # Statuses mirror the amounts: a component whose active total is zero loses
@@ -588,6 +619,8 @@ def _refresh_crm_totals(lead_id: str, sale_type: str | None = None,
             obj[F_APPT_STATUS_WATER] = status_val
         if sale_type == "office" and sold_by in OFFICE_SELLERS:
             obj[F_SOLD_BY] = sold_by
+        if sale_type == "on_site":
+            obj[F_SOLD_BY] = ""
     _ss_call("updateLeads", {"objects": [obj]})
 
 
@@ -689,6 +722,8 @@ def api_edit_sale(sale_id: str):
     if sale_type == "chc":
         sold_by = None
 
+    rep_owner = _rep_owner_id(sold_by) if sale_type == "on_site" else ""
+
     before = {k: sale[k] for k in ("sale_date", "sale_type", "heating_amount",
                                    "water_amount", "chc_amount", "sold_by", "note")}
     after = {"sale_date": sale_date.isoformat(), "sale_type": sale_type,
@@ -712,7 +747,8 @@ def api_edit_sale(sale_id: str):
         bigquery.ScalarQueryParameter("chc", "FLOAT64", chc),
         bigquery.ScalarQueryParameter("sold_by", "STRING", sold_by),
         bigquery.ScalarQueryParameter("sb_oid", "STRING",
-                                      (d.get("sold_by_owner_id") or "").strip()
+                                      rep_owner
+                                      or (d.get("sold_by_owner_id") or "").strip()
                                       or sale.get("sold_by_owner_id")),
         bigquery.ScalarQueryParameter("note", "STRING", after["note"]),
         bigquery.ScalarQueryParameter("now_ts", "TIMESTAMP", now.isoformat()),
@@ -724,7 +760,8 @@ def api_edit_sale(sale_id: str):
         new_amt = (heating or 0) + (water or 0) + (chc or 0)
         try:
             _refresh_crm_totals(sale["lead_id"], sale_type=sale_type,
-                                heating=heating, water=water, sold_by=sold_by)
+                                heating=heating, water=water, sold_by=sold_by,
+                                rep_owner=rep_owner)
             changes = []
             if abs(old_amt - new_amt) > 0.004:
                 changes.append(f"£{old_amt:,.2f} → £{new_amt:,.2f}")
@@ -736,7 +773,7 @@ def api_edit_sale(sale_id: str):
                 _crm_note(sale["lead_id"],
                           "✏️ Sale corrected: " + ", ".join(changes)
                           + f"\n(by {session.get('name') or session.get('username')} via Trust Sales)",
-                          author_owner_id=sale.get("sold_by_owner_id"))
+                          author_owner_id=rep_owner or sale.get("sold_by_owner_id"))
         except Exception:
             app.logger.exception("CRM update after edit failed")
     return jsonify({"ok": True})

@@ -808,6 +808,17 @@ def api_void_sale(sale_id: str):
             _refresh_crm_totals(lead_id)
         except Exception:
             app.logger.exception("CRM total refresh after void failed")
+        try:
+            sale = _get_sale(sale_id) or {}
+            amt = ((sale.get("heating_amount") or 0) + (sale.get("water_amount") or 0)
+                   + (sale.get("chc_amount") or 0))
+            _crm_note(lead_id,
+                      f"🚫 Sale entry voided — £{amt:,.2f} removed from sold amounts"
+                      f'\n"{reason}"'
+                      f"\n(by {session.get('name') or session.get('username')} via Trust Sales)",
+                      author_owner_id=sale.get("sold_by_owner_id"))
+        except Exception:
+            app.logger.exception("CRM note after void failed (non-fatal)")
     return jsonify({"ok": True})
 
 

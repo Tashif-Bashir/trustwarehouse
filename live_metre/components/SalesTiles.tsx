@@ -108,9 +108,9 @@ function TodayCard({ sales }: { sales: SalesMetrics }) {
   )
 }
 
-// Field reps' month £, five bars per slide, rotating through the roster on
-// the same rhythm as the hero. Ranked £ desc so slide 1 is the top five.
-const REPS_PER_SLIDE = 5
+// Field reps' month £ on a full-width row — all reps fit at once at wallboard
+// widths; pagination only kicks in if the roster ever outgrows a row.
+const REPS_PER_SLIDE = 14
 
 function RepsSlideshow({ sales }: { sales: SalesMetrics }) {
   const pages = Math.max(1, Math.ceil(sales.reps.length / REPS_PER_SLIDE))
@@ -170,7 +170,7 @@ export default function SalesTiles({ sales }: { sales: SalesMetrics }) {
         </div>
       )}
 
-      <section className="grid grid-cols-1 gap-10 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-1 gap-10 md:grid-cols-3">
         <RevenueSlideshow sales={sales} />
         <TodayCard sales={sales} />
         <ColumnChart
@@ -184,8 +184,9 @@ export default function SalesTiles({ sales }: { sales: SalesMetrics }) {
             label: gbp(s.total),
           }))}
         />
-        <RepsSlideshow sales={sales} />
       </section>
+
+      {sales.reps.length > 0 && <RepsSlideshow sales={sales} />}
     </>
   )
 }

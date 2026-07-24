@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Trust Sales</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
+<style>
+  :root{
+    --bg:#F6F7FB; --panel:#FFFFFF; --ink:#1A1D2B; --ink2:#3D415A; --muted:#8A8FA8;
+    --line:#ECEEF6; --line2:#DDE1EF;
+    --indigo:#5B6CFF; --violet:#8B5CF6; --indigo-soft:#EEF0FF; --violet-soft:#F3EEFF;
+    --mint-soft:#E4F7EF; --mint-ink:#1a7a5a; --rose:#E5484D; --rose-soft:#FDEBEC;
+    --amber-soft:#FFF4E0; --amber-ink:#9a6b15;
+    --shadow-sm:0 1px 3px rgba(26,29,43,.06),0 4px 14px rgba(26,29,43,.05);
+    --shadow-md:0 6px 24px rgba(26,29,43,.12);
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;
+       -webkit-font-smoothing:antialiased;min-height:100vh}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  input,select,textarea{font-family:inherit;font-size:15px;color:var(--ink)}
+  a{text-decoration:none;color:inherit}
+
+  .topbar{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.92);
+          backdrop-filter:blur(8px);border-bottom:1px solid var(--line);
+          display:flex;align-items:center;gap:12px;padding:10px 16px}
+  .logo-mark{width:32px;height:32px;border-radius:9px;flex-shrink:0;
+             background:linear-gradient(135deg,#5B6CFF,#8B5CF6);display:flex;
+             align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:14px;
+             box-shadow:0 5px 12px rgba(91,108,255,.3)}
+  .logo-text{font-weight:700;font-size:15px}
+  .tabs{display:flex;gap:4px;margin-left:10px;background:var(--bg);border:1px solid var(--line);
+        border-radius:11px;padding:3px}
+  .tab{padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;color:var(--muted)}
+  .tab.on{background:var(--panel);color:var(--indigo);box-shadow:var(--shadow-sm)}
+  .top-right{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--muted)}
+  .logout{font-weight:600;padding:6px 10px;border-radius:8px}
+  .logout:hover{background:var(--rose-soft);color:var(--rose)}
+
+  .wrap{max-width:680px;margin:0 auto;padding:18px 14px 60px}
+  .wrap.wide{max-width:860px}
+  .card{background:var(--panel);border-radius:14px;box-shadow:var(--shadow-sm);padding:18px}
+  .h1{font-size:19px;font-weight:800;margin-bottom:2px}
+  .sub{font-size:13px;color:var(--muted);margin-bottom:14px}
+
+  .search-input{width:100%;padding:13px 16px;border:1.5px solid var(--line2);border-radius:12px;
+                outline:none;background:var(--panel);font-size:16px}
+  .search-input:focus{border-color:var(--indigo);box-shadow:0 0 0 3px rgba(91,108,255,.13)}
+  .result{display:block;width:100%;text-align:left;padding:12px 14px;border-radius:11px;
+          border:1.5px solid var(--line);background:var(--panel);margin-top:8px;transition:all .12s}
+  .result:hover{border-color:var(--indigo);background:var(--indigo-soft)}
+  .r-name{font-weight:700;font-size:14.5px}
+  .r-meta{font-size:12px;color:var(--muted);margin-top:3px;display:flex;gap:10px;flex-wrap:wrap}
+  .chip{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px}
+  .chip.sold{background:var(--mint-soft);color:var(--mint-ink)}
+  .chip.other{background:var(--bg);color:var(--muted)}
+  .chip.type-on_site{background:var(--mint-soft);color:var(--mint-ink)}
+  .chip.type-office{background:var(--indigo-soft);color:var(--indigo)}
+  .chip.type-chc{background:var(--violet-soft);color:var(--violet)}
+  .chip.void{background:var(--rose-soft);color:var(--rose)}
+  .chip.unsynced{background:var(--amber-soft);color:var(--amber-ink)}
+
+  .sel-card{border:1.5px solid var(--indigo);background:var(--indigo-soft);border-radius:12px;
+            padding:12px 14px;display:flex;align-items:flex-start;gap:10px;margin-bottom:14px}
+  .sel-body{flex:1;min-width:0}
+  .sel-x{color:var(--muted);font-weight:700;font-size:16px;padding:2px 8px;border-radius:7px}
+  .sel-x:hover{background:#fff;color:var(--rose)}
+  .history{font-size:12px;color:var(--ink2);margin-top:6px;background:rgba(255,255,255,.7);
+           border-radius:8px;padding:7px 10px}
+
+  .field{margin-bottom:14px}
+  .label{display:block;font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:6px;
+         text-transform:uppercase;letter-spacing:.04em}
+  .type-pills{display:flex;gap:8px}
+  .tpill{flex:1;padding:12px 6px;border-radius:11px;border:1.5px solid var(--line2);
+         font-weight:700;font-size:13px;color:var(--ink2);text-align:center;transition:all .12s}
+  .tpill.on{border-color:var(--indigo);background:var(--indigo-soft);color:var(--indigo)}
+  .inp{width:100%;padding:11px 13px;border:1.5px solid var(--line2);border-radius:11px;
+       outline:none;background:var(--panel)}
+  .inp:focus{border-color:var(--indigo);box-shadow:0 0 0 3px rgba(91,108,255,.13)}
+  .amount-row{display:flex;gap:10px}
+  .amount-row .field{flex:1}
+  .pound{position:relative}
+  .pound span{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-weight:600}
+  .pound input{padding-left:26px}
+  textarea.inp{resize:vertical;min-height:60px}
+
+  .btn-primary{width:100%;padding:14px;border-radius:12px;color:#fff;font-weight:800;font-size:15px;
+               background:linear-gradient(135deg,#5B6CFF,#8B5CF6);
+               box-shadow:0 6px 18px rgba(91,108,255,.35);transition:all .15s}
+  .btn-primary:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+  .btn-ghost{padding:10px 16px;border-radius:10px;font-weight:600;font-size:13px;
+             border:1.5px solid var(--line2);color:var(--ink2)}
+  .btn-ghost:hover{border-color:var(--indigo);color:var(--indigo)}
+  .link-muted{font-size:12.5px;color:var(--muted);font-weight:600;margin-top:10px;
+              display:inline-block;border-bottom:1px dashed var(--line2)}
+  .link-muted:hover{color:var(--indigo)}
+
+  .modal-bg{position:fixed;inset:0;background:rgba(26,29,43,.45);display:flex;
+            align-items:center;justify-content:center;z-index:200;padding:16px}
+  .modal{background:var(--panel);border-radius:18px;padding:24px;max-width:420px;width:100%;
+         box-shadow:var(--shadow-md)}
+  .recap{background:var(--bg);border-radius:12px;padding:14px;margin:14px 0;font-size:14px;line-height:1.7}
+  .recap b{font-weight:700}
+  .modal-actions{display:flex;gap:10px}
+  .modal-actions .btn-primary{flex:1;width:auto}
+
+  .success{text-align:center;padding:40px 20px}
+  .success .big{font-size:42px;margin-bottom:10px}
+  .success .msg{font-weight:700;font-size:17px;margin-bottom:4px}
+  .success .det{color:var(--muted);font-size:13px;margin-bottom:22px}
+  .warn-box{background:var(--amber-soft);color:var(--amber-ink);border-radius:10px;
+            padding:10px 12px;font-size:12.5px;margin-top:12px}
+
+  .ledger-head{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+  .hero-total{font-size:30px;font-weight:800;letter-spacing:-.02em}
+  .hero-sub{font-size:12.5px;color:var(--muted);font-weight:600}
+  .month-pick{padding:9px 12px;border:1.5px solid var(--line2);border-radius:10px;background:var(--panel);
+              font-weight:600;font-size:13.5px;outline:none}
+  .filters{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
+  .fpill{padding:6px 11px;border-radius:20px;font-size:12px;font-weight:700;color:var(--muted);
+         border:1.5px solid var(--line)}
+  .fpill.on{background:var(--indigo-soft);color:var(--indigo);border-color:var(--indigo-soft)}
+  .sale-row{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:11px;
+            background:var(--panel);box-shadow:var(--shadow-sm);margin-bottom:8px}
+  .sale-row.voided{opacity:.55}
+  .sale-row.voided .s-name,.sale-row.voided .s-amt{text-decoration:line-through}
+  .s-date{font-size:12px;color:var(--muted);font-weight:700;width:52px;flex-shrink:0}
+  .s-main{flex:1;min-width:0}
+  .s-name{font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .s-meta{font-size:11.5px;color:var(--muted);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .s-amt{font-weight:800;font-size:15px;text-align:right;flex-shrink:0}
+  .s-amt small{display:block;font-size:10.5px;color:var(--muted);font-weight:600}
+  .void-btn{font-size:11px;font-weight:700;color:var(--muted);padding:5px 9px;border-radius:8px;
+            border:1.5px solid var(--line);flex-shrink:0}
+  .void-btn:hover{background:var(--rose-soft);color:var(--rose);border-color:var(--rose-soft)}
+  .spinner{width:20px;height:20px;border:2.5px solid var(--line2);border-top-color:var(--indigo);
+           border-radius:50%;animation:spin .7s linear infinite;margin:30px auto}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .empty{color:var(--muted);font-size:13.5px;text-align:center;padding:30px}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);
+         color:#fff;font-size:13px;font-weight:500;padding:12px 18px;border-radius:10px;
+         box-shadow:var(--shadow-md);z-index:400;max-width:92%}
+  @media (max-width:560px){
+    .tabs{margin-left:0}
+    .top-right .uname{display:none}
+    .hero-total{font-size:24px}
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+  const USERNAME = {{ username | tojson }};
+  const LOGIN_USERNAME = {{ login_username | tojson }};
+  const ROLE = {{ role | tojson }};
+</script>
+{% raw %}
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useRef, useCallback } = React;
+
+const fmtGBP = (n) => "£" + (n || 0).toLocaleString("en-GB",
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const todayIso = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+const TYPE_LABEL = { on_site: "Sold on Site", office: "Sold in Office", chc: "CHC (online)" };
+
+function useToast() {
+  const [toast, setToast] = useState("");
+  const show = useCallback((msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 3500);
+  }, []);
+  return [toast, show];
+}
+
+// ---------------------------------------------------------------- Log a sale
+function LogSale({ onLogged, showToast }) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [customer, setCustomer] = useState(null);     // selected lead or {manual:true}
+  const [history, setHistory] = useState(null);
+  const [manualName, setManualName] = useState("");
+  const [manualPostcode, setManualPostcode] = useState("");
+  const [manualMode, setManualMode] = useState(false);
+
+  const [saleType, setSaleType] = useState("on_site");
+  const [saleDate, setSaleDate] = useState(todayIso());
+  const [heating, setHeating] = useState("");
+  const [water, setWater] = useState("");
+  const [chc, setChc] = useState("");
+  const [soldBy, setSoldBy] = useState("");
+  const [note, setNote] = useState("");
+  const [reps, setReps] = useState([]);
+  const [office, setOffice] = useState(["Dec", "Josh"]);
+  const [confirming, setConfirming] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(null);
+  const searchTimer = useRef(null);
+
+  useEffect(() => {
+    fetch("/api/reps").then(r => r.json()).then(d => {
+      setReps(d.reps || []);
+      setOffice(d.office || ["Dec", "Josh"]);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (customer || manualMode) return;
+    clearTimeout(searchTimer.current);
+    if (q.trim().length < 3) { setResults([]); return; }
+    searchTimer.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const r = await fetch("/api/leads/search?q=" + encodeURIComponent(q.trim()));
+        const d = await r.json();
+        setResults(d.results || []);
+      } finally { setSearching(false); }
+    }, 350);
+  }, [q, customer, manualMode]);
+
+  useEffect(() => {
+    if (!customer || !customer.lead_id) { setHistory(null); return; }
+    fetch(`/api/leads/${customer.lead_id}/history`).then(r => r.json()).then(setHistory);
+  }, [customer]);
+
+  const reset = () => {
+    setQ(""); setResults([]); setCustomer(null); setHistory(null);
+    setManualMode(false); setManualName(""); setManualPostcode("");
+    setSaleType("on_site"); setSaleDate(todayIso());
+    setHeating(""); setWater(""); setChc(""); setSoldBy(""); setNote("");
+    setConfirming(false); setDone(null);
+  };
+
+  const num = (s) => { const v = parseFloat(s); return isNaN(v) || v <= 0 ? null : v; };
+  const amountsOk = saleType === "chc" ? !!num(chc) : (!!num(heating) || !!num(water));
+  const sellerOk = saleType === "chc" ? true : !!soldBy;
+  const custOk = customer || (manualMode && manualName.trim());
+  const canConfirm = custOk && amountsOk && sellerOk && !!saleDate;
+
+  const submit = async () => {
+    setSubmitting(true);
+    try {
+      const body = {
+        lead_id: customer ? customer.lead_id : null,
+        customer_name: customer ? customer.name : manualName.trim(),
+        postcode: customer ? customer.postcode : manualPostcode.trim(),
+        sale_date: saleDate,
+        sale_type: saleType,
+        heating_amount: saleType === "chc" ? null : num(heating),
+        water_amount: saleType === "chc" ? null : num(water),
+        chc_amount: saleType === "chc" ? num(chc) : null,
+        sold_by: saleType === "chc" ? null : soldBy,
+        sold_by_owner_id: (reps.find(r => r.name === soldBy) || {}).owner_id || "",
+        note: note.trim(),
+      };
+      const r = await fetch("/api/sales", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      if (!r.ok) { showToast(d.error || "Could not save"); setConfirming(false); return; }
+      setDone(d);
+      setConfirming(false);
+      onLogged();
+    } finally { setSubmitting(false); }
+  };
+
+  if (done) {
+    const total = (num(heating) || 0) + (num(water) || 0) + (num(chc) || 0);
+    return (
+      <div className="card success">
+        <div className="big">🎉</div>
+        <div className="msg">Sale logged — {fmtGBP(total)}</div>
+        <div className="det">
+          {customer ? customer.name : manualName} · {TYPE_LABEL[saleType]}
+          {soldBy ? ` · ${soldBy}` : ""} · {saleDate}
+        </div>
+        {!done.crm_synced && customer && (
+          <div className="warn-box">
+            Saved here, but the CRM update didn't go through — the office can re-sync it.
+          </div>
+        )}
+        {!customer && (
+          <div className="warn-box">
+            No CRM customer attached — this sale is flagged for office review.
+          </div>
+        )}
+        <button className="btn-primary" style={{ maxWidth: 260, margin: "18px auto 0" }}
+                onClick={reset}>Log another sale</button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="card">
+        <div className="h1">Log a sale</div>
+        <div className="sub">Find the customer, enter what they paid — done in under a minute.</div>
+
+        {!customer && !manualMode && (
+          <div>
+            <input className="search-input" placeholder="Search name, postcode or phone…"
+                   value={q} onChange={e => setQ(e.target.value)} autoFocus />
+            {searching && <div className="spinner" />}
+            {!searching && results.map(r => (
+              <button key={r.lead_id} className="result" onClick={() => setCustomer(r)}>
+                <div className="r-name">{r.name || "(no name)"} </div>
+                <div className="r-meta">
+                  {r.postcode && <span>{r.postcode}</span>}
+                  {r.city && <span>{r.city}</span>}
+                  {r.appt_date && <span>appt {r.appt_date}</span>}
+                  {r.appt_status && (
+                    <span className={"chip " + (r.appt_status.toLowerCase().includes("sold") ? "sold" : "other")}>
+                      {r.appt_status}
+                    </span>
+                  )}
+                </div>
+              </button>
+            ))}
+            {!searching && q.trim().length >= 3 && (
+              <button className="link-muted" onClick={() => setManualMode(true)}>
+                Can't find them? Log without a CRM match →
+              </button>
+            )}
+          </div>
+        )}
+
+        {manualMode && !customer && (
+          <div>
+            <div className="field">
+              <label className="label">Customer name (as sold)</label>
+              <input className="inp" value={manualName} onChange={e => setManualName(e.target.value)}
+                     placeholder="e.g. Karen Kittleson" autoFocus />
+            </div>
+            <div className="field">
+              <label className="label">Postcode (optional)</label>
+              <input className="inp" value={manualPostcode}
+                     onChange={e => setManualPostcode(e.target.value)} placeholder="LS12 …" />
+            </div>
+            <div className="warn-box">
+              This sale won't be linked to a CRM record — it'll be flagged for office review.
+            </div>
+            <button className="link-muted" onClick={() => setManualMode(false)}>← back to search</button>
+          </div>
+        )}
+
+        {customer && (
+          <div className="sel-card">
+            <div className="sel-body">
+              <div className="r-name">{customer.name}</div>
+              <div className="r-meta">
+                {customer.postcode && <span>{customer.postcode}</span>}
+                {customer.city && <span>{customer.city}</span>}
+                {customer.appt_date && <span>appt {customer.appt_date}</span>}
+              </div>
+              {history && history.count > 0 && (
+                <div className="history">
+                  🔁 {history.count} previous sale{history.count > 1 ? "s" : ""} ·
+                  {" "}{fmtGBP(history.lifetime)} lifetime — this will be logged as a new, separate sale.
+                </div>
+              )}
+            </div>
+            <button className="sel-x" onClick={() => { setCustomer(null); setQ(""); }}>×</button>
+          </div>
+        )}
+
+        {(customer || (manualMode && manualName.trim())) && (
+          <div>
+            <div className="field">
+              <label className="label">Where did it sell?</label>
+              <div className="type-pills">
+                {["on_site", "office", "chc"].map(t => (
+                  <button key={t} className={"tpill" + (saleType === t ? " on" : "")}
+                          onClick={() => { setSaleType(t); setSoldBy(""); }}>
+                    {TYPE_LABEL[t]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="field">
+              <label className="label">Sale date</label>
+              <input type="date" className="inp" value={saleDate} max={todayIso()}
+                     onChange={e => setSaleDate(e.target.value)} />
+            </div>
+
+            {saleType !== "chc" ? (
+              <div className="amount-row">
+                <div className="field">
+                  <label className="label">Heating £</label>
+                  <div className="pound"><span>£</span>
+                    <input className="inp" inputMode="decimal" placeholder="0.00"
+                           value={heating} onChange={e => setHeating(e.target.value)} />
+                  </div>
+                </div>
+                <div className="field">
+                  <label className="label">Water £ (if any)</label>
+                  <div className="pound"><span>£</span>
+                    <input className="inp" inputMode="decimal" placeholder="0.00"
+                           value={water} onChange={e => setWater(e.target.value)} />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="field">
+                <label className="label">CHC amount £</label>
+                <div className="pound"><span>£</span>
+                  <input className="inp" inputMode="decimal" placeholder="0.00"
+                         value={chc} onChange={e => setChc(e.target.value)} />
+                </div>
+              </div>
+            )}
+
+            {saleType === "on_site" && (
+              <div className="field">
+                <label className="label">Sold by (the rep)</label>
+                <select className="inp" value={soldBy} onChange={e => setSoldBy(e.target.value)}>
+                  <option value="">— pick the rep —</option>
+                  {reps.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
+                </select>
+              </div>
+            )}
+            {saleType === "office" && (
+              <div className="field">
+                <label className="label">Sold by</label>
+                <div className="type-pills">
+                  {office.map(n => (
+                    <button key={n} className={"tpill" + (soldBy === n ? " on" : "")}
+                            onClick={() => setSoldBy(n)}>{n}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="field">
+              <label className="label">Note (optional)</label>
+              <textarea className="inp" value={note} onChange={e => setNote(e.target.value)}
+                        placeholder="Anything worth remembering about this sale" />
+            </div>
+
+            <button className="btn-primary" disabled={!canConfirm}
+                    onClick={() => setConfirming(true)}>
+              Review &amp; confirm
+            </button>
+          </div>
+        )}
+      </div>
+
+      {confirming && (
+        <div className="modal-bg" onClick={() => !submitting && setConfirming(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="h1">Confirm this sale</div>
+            <div className="recap">
+              <b>{customer ? customer.name : manualName}</b>
+              {(customer?.postcode || manualPostcode) ? ` · ${customer ? customer.postcode : manualPostcode}` : ""}<br />
+              {saleType !== "chc" ? (
+                <span>
+                  {num(heating) ? <span><b>{fmtGBP(num(heating))}</b> heating</span> : null}
+                  {num(heating) && num(water) ? " + " : ""}
+                  {num(water) ? <span><b>{fmtGBP(num(water))}</b> water</span> : null}
+                </span>
+              ) : <span><b>{fmtGBP(num(chc))}</b> CHC online</span>}
+              <br />
+              {TYPE_LABEL[saleType]}{soldBy ? <span> by <b>{soldBy}</b></span> : null} · {saleDate}
+            </div>
+            <div className="modal-actions">
+              <button className="btn-ghost" disabled={submitting}
+                      onClick={() => setConfirming(false)}>Back</button>
+              <button className="btn-primary" disabled={submitting} onClick={submit}>
+                {submitting ? "Saving…" : "Log the sale"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------- Ledger
+function Ledger({ refreshKey, showToast }) {
+  const [month, setMonth] = useState(todayIso().slice(0, 7));
+  const [data, setData] = useState(null);
+  const [typeFilter, setTypeFilter] = useState("");
+  const [voiding, setVoiding] = useState(null);
+  const [voidReason, setVoidReason] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setData(null);
+    const r = await fetch("/api/sales?month=" + month);
+    setData(await r.json());
+  }, [month]);
+  useEffect(() => { load(); }, [load, refreshKey]);
+
+  const doVoid = async () => {
+    if (!voidReason.trim()) { showToast("A reason is required"); return; }
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/sales/${voiding.sale_id}/void`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: voidReason.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) { showToast(d.error || "Void failed"); return; }
+      setVoiding(null); setVoidReason("");
+      load();
+    } finally { setBusy(false); }
+  };
+
+  const monthName = (m) => new Date(m + "-01T00:00:00").toLocaleDateString("en-GB",
+    { month: "long", year: "numeric" });
+  const sales = (data?.sales || []).filter(s => !typeFilter || s.sale_type === typeFilter);
+
+  return (
+    <div>
+      <div className="ledger-head">
+        <div>
+          <div className="hero-total">{data ? fmtGBP(data.total) : "—"}</div>
+          <div className="hero-sub">{monthName(month)} · {data ? data.count : "…"} sales</div>
+        </div>
+        <input type="month" className="month-pick" value={month}
+               onChange={e => setMonth(e.target.value)} />
+        <div className="filters">
+          {["", "on_site", "office", "chc"].map(t => (
+            <button key={t || "all"} className={"fpill" + (typeFilter === t ? " on" : "")}
+                    onClick={() => setTypeFilter(t)}>
+              {t ? TYPE_LABEL[t] : "All"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {!data && <div className="spinner" />}
+      {data && sales.length === 0 && <div className="empty">No sales in this view.</div>}
+      {sales.map(s => {
+        const amt = (s.heating_amount || 0) + (s.water_amount || 0) + (s.chc_amount || 0);
+        const parts = [];
+        if (s.heating_amount) parts.push(`H ${fmtGBP(s.heating_amount)}`);
+        if (s.water_amount) parts.push(`W ${fmtGBP(s.water_amount)}`);
+        return (
+          <div key={s.sale_id} className={"sale-row" + (s.status === "void" ? " voided" : "")}>
+            <div className="s-date">{s.sale_date.slice(8)}<br />
+              <span style={{ fontWeight: 500 }}>{s.sale_date.slice(5, 7)}</span></div>
+            <div className="s-main">
+              <div className="s-name">{s.customer_name}</div>
+              <div className="s-meta">
+                <span className={"chip type-" + s.sale_type}>{TYPE_LABEL[s.sale_type]}</span>
+                {s.sold_by && <span>{s.sold_by}</span>}
+                {s.entered_by && <span>entered by {s.entered_by}</span>}
+                {s.source === "backfill_sheet" && <span className="chip other">backfill</span>}
+                {!s.lead_id && <span className="chip unsynced">no CRM match</span>}
+                {s.lead_id && s.crm_synced === false && s.status === "active" &&
+                  <span className="chip unsynced">CRM not synced</span>}
+                {s.status === "void" && <span className="chip void">VOID</span>}
+              </div>
+            </div>
+            <div className="s-amt">{fmtGBP(amt)}
+              {parts.length > 1 && <small>{parts.join(" · ")}</small>}
+            </div>
+            {ROLE === "admin" && s.status === "active" && (
+              <button className="void-btn" onClick={() => setVoiding(s)}>Void</button>
+            )}
+          </div>
+        );
+      })}
+
+      {voiding && (
+        <div className="modal-bg" onClick={() => !busy && setVoiding(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="h1">Void this sale?</div>
+            <div className="recap">
+              <b>{voiding.customer_name}</b> · {voiding.sale_date} ·
+              {" "}{fmtGBP((voiding.heating_amount || 0) + (voiding.water_amount || 0) + (voiding.chc_amount || 0))}
+            </div>
+            <div className="field">
+              <label className="label">Reason</label>
+              <input className="inp" value={voidReason} autoFocus
+                     onChange={e => setVoidReason(e.target.value)}
+                     placeholder="e.g. duplicate entry / order cancelled" />
+            </div>
+            <div className="modal-actions">
+              <button className="btn-ghost" disabled={busy}
+                      onClick={() => setVoiding(null)}>Cancel</button>
+              <button className="btn-primary" disabled={busy}
+                      style={{ background: "linear-gradient(135deg,#E5484D,#C33)" }}
+                      onClick={doVoid}>{busy ? "Voiding…" : "Void sale"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --------------------------------------------------------------------- App
+function App() {
+  const [tab, setTab] = useState("log");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [toast, showToast] = useToast();
+  return (
+    <div>
+      <div className="topbar">
+        <div className="logo-mark">£</div>
+        <div className="logo-text">Trust Sales</div>
+        <div className="tabs">
+          <button className={"tab" + (tab === "log" ? " on" : "")}
+                  onClick={() => setTab("log")}>Log a sale</button>
+          <button className={"tab" + (tab === "ledger" ? " on" : "")}
+                  onClick={() => setTab("ledger")}>Ledger</button>
+        </div>
+        <div className="top-right">
+          <span className="uname">{USERNAME}</span>
+          <a className="logout" href="/logout">Log out</a>
+        </div>
+      </div>
+      <div className={"wrap" + (tab === "ledger" ? " wide" : "")}>
+        {tab === "log"
+          ? <LogSale onLogged={() => setRefreshKey(k => k + 1)} showToast={showToast} />
+          : <Ledger refreshKey={refreshKey} showToast={showToast} />}
+      </div>
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+{% endraw %}
+</body>
+</html>

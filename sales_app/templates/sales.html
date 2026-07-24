@@ -602,6 +602,128 @@ function Ledger({ refreshKey, showToast }) {
   );
 }
 
+// -------------------------------------------------------------------- Users
+function Users({ showToast }) {
+  const [users, setUsers] = useState(null);
+  const [uName, setUName] = useState("");
+  const [uFull, setUFull] = useState("");
+  const [uRole, setURole] = useState("user");
+  const [uPass, setUPass] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [resetting, setResetting] = useState(null);
+  const [newPass, setNewPass] = useState("");
+
+  const load = useCallback(async () => {
+    const r = await fetch("/api/users");
+    const d = await r.json();
+    setUsers(d.users || []);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const create = async () => {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/users", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: uName, name: uFull, role: uRole, password: uPass }),
+      });
+      const d = await r.json();
+      if (!r.ok) { showToast(d.error || "Could not create"); return; }
+      showToast(`User ${uName} created`);
+      setUName(""); setUFull(""); setURole("user"); setUPass("");
+      load();
+    } finally { setBusy(false); }
+  };
+
+  const doReset = async () => {
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/users/${resetting.username}/password`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPass }),
+      });
+      const d = await r.json();
+      if (!r.ok) { showToast(d.error || "Reset failed"); return; }
+      showToast(`Password updated for ${resetting.username}`);
+      setResetting(null); setNewPass("");
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div>
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="h1">Add a user</div>
+        <div className="sub">Sales-app logins only — separate from the booking app.</div>
+        <div className="amount-row">
+          <div className="field">
+            <label className="label">Username</label>
+            <input className="inp" value={uName} onChange={e => setUName(e.target.value)}
+                   placeholder="dec" autoCapitalize="none" />
+          </div>
+          <div className="field">
+            <label className="label">Full name</label>
+            <input className="inp" value={uFull} onChange={e => setUFull(e.target.value)}
+                   placeholder="Declan Franks" />
+          </div>
+        </div>
+        <div className="amount-row">
+          <div className="field">
+            <label className="label">Role</label>
+            <select className="inp" value={uRole} onChange={e => setURole(e.target.value)}>
+              <option value="user">user</option>
+              <option value="admin">admin</option>
+            </select>
+          </div>
+          <div className="field">
+            <label className="label">Password (min 8)</label>
+            <input className="inp" value={uPass} onChange={e => setUPass(e.target.value)}
+                   placeholder="they can't change it later — pick well" />
+          </div>
+        </div>
+        <button className="btn-primary" disabled={busy || !uName || uPass.length < 8}
+                onClick={create}>Create user</button>
+      </div>
+
+      <div className="card">
+        <div className="h1">Users</div>
+        {!users && <div className="spinner" />}
+        {users && users.map(u => (
+          <div key={u.username} className="sale-row" style={{ boxShadow: "none",
+               border: "1.5px solid var(--line)" }}>
+            <div className="s-main">
+              <div className="s-name">{u.name} <span style={{ color: "var(--muted)",
+                   fontWeight: 500 }}>({u.username})</span></div>
+              <div className="s-meta">
+                <span className={"chip " + (u.role === "admin" ? "type-office" : "other")}>{u.role}</span>
+              </div>
+            </div>
+            <button className="void-btn" onClick={() => setResetting(u)}>Reset password</button>
+          </div>
+        ))}
+      </div>
+
+      {resetting && (
+        <div className="modal-bg" onClick={() => !busy && setResetting(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="h1">New password for {resetting.username}</div>
+            <div className="field" style={{ marginTop: 12 }}>
+              <label className="label">Password (min 8)</label>
+              <input className="inp" value={newPass} autoFocus
+                     onChange={e => setNewPass(e.target.value)} />
+            </div>
+            <div className="modal-actions">
+              <button className="btn-ghost" disabled={busy}
+                      onClick={() => setResetting(null)}>Cancel</button>
+              <button className="btn-primary" disabled={busy || newPass.length < 8}
+                      onClick={doReset}>{busy ? "Saving…" : "Set password"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // --------------------------------------------------------------------- App
 function App() {
   const [tab, setTab] = useState("log");
@@ -617,6 +739,10 @@ function App() {
                   onClick={() => setTab("log")}>Log a sale</button>
           <button className={"tab" + (tab === "ledger" ? " on" : "")}
                   onClick={() => setTab("ledger")}>Ledger</button>
+          {ROLE === "admin" && (
+            <button className={"tab" + (tab === "users" ? " on" : "")}
+                    onClick={() => setTab("users")}>Users</button>
+          )}
         </div>
         <div className="top-right">
           <span className="uname">{USERNAME}</span>
@@ -624,9 +750,10 @@ function App() {
         </div>
       </div>
       <div className={"wrap" + (tab === "ledger" ? " wide" : "")}>
-        {tab === "log"
-          ? <LogSale onLogged={() => setRefreshKey(k => k + 1)} showToast={showToast} />
-          : <Ledger refreshKey={refreshKey} showToast={showToast} />}
+        {tab === "log" &&
+          <LogSale onLogged={() => setRefreshKey(k => k + 1)} showToast={showToast} />}
+        {tab === "ledger" && <Ledger refreshKey={refreshKey} showToast={showToast} />}
+        {tab === "users" && ROLE === "admin" && <Users showToast={showToast} />}
       </div>
       {toast && <div className="toast">{toast}</div>}
     </div>

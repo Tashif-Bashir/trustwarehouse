@@ -95,6 +95,12 @@ def _get_user(username: str) -> dict | None:
     return {k: rows[0][k] for k in rows[0].keys()} if rows else None
 
 
+def _hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    h = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 260000)
+    return f"pbkdf2:sha256:{salt}:{h.hex()}"
+
+
 def _check_password(stored_hash: str, provided: str) -> bool:
     parts = stored_hash.split(":", 3)
     if len(parts) != 4 or parts[0] != "pbkdf2":
@@ -235,11 +241,16 @@ def _fmt_amount(x: float) -> str:
     return "" if not x else (str(int(x)) if x == int(x) else f"{x:.2f}")
 
 
-def _crm_writeback(lead_id: str, sale_type: str, sold_by: str | None) -> None:
-    """Update the lead: lifetime sold amounts + status + Sold by. ownerID always echoed."""
+def _crm_writeback(lead_id: str, sale_type: str, sold_by: str | None,
+                   add_h: float = 0, add_w: float = 0, add_c: float = 0) -> None:
+    """Update the lead: lifetime sold amounts + status + Sold by. ownerID always echoed.
+
+    add_* are amounts of a sale not yet inserted (CRM is written before the row).
+    """
     lead = _ss_call("getLeads", {"where": {"id": lead_id}})["lead"][0]
     owner = lead.get("ownerID")
     h, w, c = _lifetime_totals(lead_id)
+    h, w, c = round(h + add_h, 2), round(w + add_w, 2), round(c + add_c, 2)
     obj: dict = {"id": lead_id}
     if owner:
         obj["ownerID"] = owner
@@ -401,53 +412,60 @@ def api_create_sale():
     if not customer_name:
         return jsonify({"error": "customer name required"}), 400
 
-    now = datetime.now(timezone.utc)
-    row = {
-        "sale_id": str(uuid.uuid4()),
-        "lead_id": lead_id,
-        "customer_name": customer_name,
-        "postcode": (d.get("postcode") or "").strip() or None,
-        "sale_date": sale_date.isoformat(),
-        "sale_type": sale_type,
-        "heating_amount": heating,
-        "water_amount": water,
-        "chc_amount": chc,
-        "sold_by": sold_by,
-        "sold_by_owner_id": (d.get("sold_by_owner_id") or "").strip() or None,
-        "product_bought": (d.get("product_bought") or "").strip() or None,
-        "note": (d.get("note") or "").strip() or (None if lead_id else
-                                                  "review: no CRM lead matched"),
-        "source": "app",
-        "dept_raw": None,
-        "sat_on_sale_raw": None,
-        "status": "active",
-        "void_reason": None,
-        "crm_synced": False,
-        "entered_by": session.get("username"),
-        "created_at": now.isoformat(),
-        "updated_at": None,
-    }
-    errors = _bq().insert_rows_json(f"{BQ_PROJECT}.app.sales", [row])
-    if errors:
-        app.logger.error("sales insert failed: %s", errors)
-        return jsonify({"error": "could not save the sale"}), 500
-
+    # CRM first (with the new amounts as deltas), then a DML insert carrying the
+    # final sync flag — DML rows are immediately updatable (voids work right away),
+    # unlike streaming-buffer rows.
     crm_ok = False
     crm_error = ""
     if lead_id:
         try:
-            _crm_writeback(lead_id, sale_type, sold_by)
+            _crm_writeback(lead_id, sale_type, sold_by,
+                           add_h=heating or 0, add_w=water or 0, add_c=chc or 0)
             crm_ok = True
-            _bq().query(f"""
-                UPDATE {BQ_SALES}
-                SET crm_synced = TRUE, updated_at = @now_ts
-                WHERE sale_id = @sid
-            """, job_config=_bq_params(sid=row["sale_id"], now_ts=now.isoformat())).result()
         except Exception as exc:
             app.logger.exception("CRM writeback failed")
             crm_error = str(exc)[:200]
 
-    return jsonify({"ok": True, "sale_id": row["sale_id"],
+    now = datetime.now(timezone.utc)
+    sale_id = str(uuid.uuid4())
+    try:
+        _bq().query(f"""
+            INSERT INTO {BQ_SALES}
+            (sale_id, lead_id, customer_name, postcode, sale_date, sale_type,
+             heating_amount, water_amount, chc_amount, sold_by, sold_by_owner_id,
+             product_bought, note, source, status, crm_synced, entered_by, created_at)
+            VALUES
+            (@sid, @lid, @cname, @pcode, @s_date, @stype,
+             @heat, @wat, @chc, @sold_by, @sb_oid,
+             @product, @note, 'app', 'active', @synced, @entered, @now_ts)
+        """, job_config=bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ScalarQueryParameter("sid", "STRING", sale_id),
+            bigquery.ScalarQueryParameter("lid", "STRING", lead_id),
+            bigquery.ScalarQueryParameter("cname", "STRING", customer_name),
+            bigquery.ScalarQueryParameter("pcode", "STRING",
+                                          (d.get("postcode") or "").strip() or None),
+            bigquery.ScalarQueryParameter("s_date", "DATE", sale_date.isoformat()),
+            bigquery.ScalarQueryParameter("stype", "STRING", sale_type),
+            bigquery.ScalarQueryParameter("heat", "FLOAT64", heating),
+            bigquery.ScalarQueryParameter("wat", "FLOAT64", water),
+            bigquery.ScalarQueryParameter("chc", "FLOAT64", chc),
+            bigquery.ScalarQueryParameter("sold_by", "STRING", sold_by),
+            bigquery.ScalarQueryParameter("sb_oid", "STRING",
+                                          (d.get("sold_by_owner_id") or "").strip() or None),
+            bigquery.ScalarQueryParameter("product", "STRING",
+                                          (d.get("product_bought") or "").strip() or None),
+            bigquery.ScalarQueryParameter("note", "STRING",
+                                          (d.get("note") or "").strip()
+                                          or (None if lead_id else "review: no CRM lead matched")),
+            bigquery.ScalarQueryParameter("synced", "BOOL", crm_ok),
+            bigquery.ScalarQueryParameter("entered", "STRING", session.get("username")),
+            bigquery.ScalarQueryParameter("now_ts", "TIMESTAMP", now.isoformat()),
+        ])).result()
+    except Exception:
+        app.logger.exception("sales insert failed")
+        return jsonify({"error": "could not save the sale"}), 500
+
+    return jsonify({"ok": True, "sale_id": sale_id,
                     "crm_synced": crm_ok, "crm_error": crm_error})
 
 
@@ -515,6 +533,70 @@ def api_void_sale(sale_id: str):
             _ss_call("updateLeads", {"objects": [obj]})
         except Exception:
             app.logger.exception("CRM total refresh after void failed")
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Routes — user management (admin only)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/users")
+@login_required
+@admin_required
+def api_list_users():
+    rows = list(_bq().query(
+        f"SELECT username, name, role, created_at FROM {BQ_USERS} ORDER BY username"
+    ).result())
+    return jsonify({"users": [{
+        "username": r["username"], "name": r["name"] or "", "role": r["role"] or "user",
+    } for r in rows]})
+
+
+@app.route("/api/users", methods=["POST"])
+@login_required
+@admin_required
+def api_create_user():
+    d = request.get_json(force=True, silent=True) or {}
+    username = (d.get("username") or "").strip().lower()
+    name = (d.get("name") or "").strip()
+    role = d.get("role") if d.get("role") in ("admin", "user") else "user"
+    password = d.get("password") or ""
+    if not username.isalnum() or len(username) < 2:
+        return jsonify({"error": "username must be letters/numbers only"}), 400
+    if len(password) < 8:
+        return jsonify({"error": "password must be at least 8 characters"}), 400
+    if _get_user(username):
+        return jsonify({"error": "username already exists"}), 400
+    try:
+        _bq().query(f"""
+            INSERT INTO {BQ_USERS} (username, name, role, password_hash, created_at)
+            VALUES (@u, @n, @r, @h, @now_ts)
+        """, job_config=_bq_params(u=username, n=name or username, r=role,
+                                   h=_hash_password(password),
+                                   now_ts=datetime.now(timezone.utc).isoformat())).result()
+    except Exception:
+        app.logger.exception("user insert failed")
+        return jsonify({"error": "could not create the user"}), 500
+    return jsonify({"ok": True})
+
+
+@app.route("/api/users/<username>/password", methods=["POST"])
+@login_required
+@admin_required
+def api_reset_password(username: str):
+    d = request.get_json(force=True, silent=True) or {}
+    password = d.get("password") or ""
+    if len(password) < 8:
+        return jsonify({"error": "password must be at least 8 characters"}), 400
+    if not _get_user(username.lower()):
+        return jsonify({"error": "no such user"}), 404
+    job = _bq().query(f"""
+        UPDATE {BQ_USERS}
+        SET password_hash = @h, updated_at = @now_ts
+        WHERE username = @u
+    """, job_config=_bq_params(h=_hash_password(password), u=username.lower(),
+                               now_ts=datetime.now(timezone.utc).isoformat()))
+    job.result()
     return jsonify({"ok": True})
 
 

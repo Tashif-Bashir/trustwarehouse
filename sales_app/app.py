@@ -570,6 +570,16 @@ def _refresh_crm_totals(lead_id: str, sale_type: str | None = None,
            F_SOLD_WATER: _fmt_amount(w), F_SOLD_CHC: _fmt_amount(c)}
     if owner:
         obj["ownerID"] = owner
+
+    # Statuses mirror the amounts: a component whose active total is zero loses
+    # its sold status (only sold-ish values are cleared — a manually set
+    # 'follow up' etc. is left alone).
+    sold_vals = {"sold", "sold on site", "sold in office", "chc sold"}
+    if h <= 0 and str(lead.get(F_APPT_STATUS) or "").strip().lower() in sold_vals:
+        obj[F_APPT_STATUS] = ""
+    if w <= 0 and str(lead.get(F_APPT_STATUS_WATER) or "").strip().lower() in sold_vals:
+        obj[F_APPT_STATUS_WATER] = ""
+
     if sale_type in ("on_site", "office"):
         status_val = _status_picklist_value(sale_type)
         if heating:

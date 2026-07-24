@@ -64,6 +64,10 @@ export const BOARDS: Record<string, BoardSpec> = {
 // Hero sales tile slideshow: month revenue ⇄ week revenue, rotating.
 export const SALES_SLIDE_MS = 9_000
 
+// Sales & ops board: the whole lower section rotates between views
+// (sales tiles → reps chart → calls) so nothing needs scrolling.
+export const SALES_VIEW_MS = 15_000
+
 // Exact names each data source uses for an agent (confirmed against real
 // rows, 18 Jul 2026). The bronze provider attributes by these; if an agent
 // is renamed in Ascend/the CRM, update here.

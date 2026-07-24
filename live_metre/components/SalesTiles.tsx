@@ -151,42 +151,46 @@ function RepsSlideshow({ sales }: { sales: SalesMetrics }) {
   )
 }
 
-export default function SalesTiles({ sales }: { sales: SalesMetrics }) {
+export function LastSaleBanner({ sales }: { sales: SalesMetrics }) {
+  if (!sales.lastSale) return null
   return (
-    <>
-      {sales.lastSale && (
-        <div className="fade-up flex items-center gap-4 rounded-xl border-[0.5px] border-hairline bg-surface px-7 py-4">
-          <span className="text-2xl">⚡</span>
-          <p className="text-2xl font-medium tabular-nums">
-            Last sale&ensp;
-            <span className="font-display font-semibold">{gbp(sales.lastSale.amount)}</span>
-            <span className="text-neutral-500">
-              &ensp;·&ensp;{sales.lastSale.typeLabel}
-              {sales.lastSale.soldBy ? ` · ${sales.lastSale.soldBy}` : ''}
-              &ensp;·&ensp;{sales.lastSale.customer}
-              &ensp;·&ensp;{sales.lastSale.atUk}
-            </span>
-          </p>
-        </div>
-      )}
-
-      <section className="grid grid-cols-1 gap-10 md:grid-cols-3">
-        <RevenueSlideshow sales={sales} />
-        <TodayCard sales={sales} />
-        <ColumnChart
-          title="Dec & Josh — sold this month"
-          delayMs={160}
-          columns={sales.sellers.map((s) => ({
-            id: s.name.toLowerCase(),
-            name: `${s.name} (${s.count})`,
-            color: s.color,
-            value: Math.round(s.total),
-            label: gbp(s.total),
-          }))}
-        />
-      </section>
-
-      {sales.reps.length > 0 && <RepsSlideshow sales={sales} />}
-    </>
+    <div className="fade-up flex items-center gap-4 rounded-xl border-[0.5px] border-hairline bg-surface px-7 py-4">
+      <span className="text-2xl">⚡</span>
+      <p className="text-2xl font-medium tabular-nums">
+        Last sale&ensp;
+        <span className="font-display font-semibold">{gbp(sales.lastSale.amount)}</span>
+        <span className="text-neutral-500">
+          &ensp;&middot;&ensp;{sales.lastSale.typeLabel}
+          {sales.lastSale.soldBy ? ` · ${sales.lastSale.soldBy}` : ''}
+          &ensp;&middot;&ensp;{sales.lastSale.customer}
+          &ensp;&middot;&ensp;{sales.lastSale.atUk}
+        </span>
+      </p>
+    </div>
   )
+}
+
+export function SalesRow({ sales }: { sales: SalesMetrics }) {
+  return (
+    <section className="grid grid-cols-1 gap-10 md:grid-cols-3">
+      <RevenueSlideshow sales={sales} />
+      <TodayCard sales={sales} />
+      <ColumnChart
+        title="Dec & Josh — sold this month"
+        delayMs={160}
+        columns={sales.sellers.map((s) => ({
+          id: s.name.toLowerCase(),
+          name: `${s.name} (${s.count})`,
+          color: s.color,
+          value: Math.round(s.total),
+          label: gbp(s.total),
+        }))}
+      />
+    </section>
+  )
+}
+
+export function RepsBoard({ sales }: { sales: SalesMetrics }) {
+  if (sales.reps.length === 0) return null
+  return <RepsSlideshow sales={sales} />
 }

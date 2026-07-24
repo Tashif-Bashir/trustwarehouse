@@ -5,9 +5,11 @@ import Celebration from '@/components/Celebration'
 import ColumnChart from '@/components/ColumnChart'
 import Header from '@/components/Header'
 import Leaderboard from '@/components/Leaderboard'
-import SalesTiles from '@/components/SalesTiles'
+import { LastSaleBanner, RepsBoard, SalesRow } from '@/components/SalesTiles'
 import SummaryCards from '@/components/SummaryCards'
-import { BOARDS, CELEBRATION, POLL_INTERVAL_MS, STALE_AFTER_MS } from '@/lib/config'
+import {
+  BOARDS, CELEBRATION, POLL_INTERVAL_MS, SALES_VIEW_MS, STALE_AFTER_MS,
+} from '@/lib/config'
 import type { AgentMetrics, Metrics } from '@/lib/types'
 
 export default function Wallboard({ boardId }: { boardId: string }) {
@@ -115,6 +117,15 @@ export default function Wallboard({ boardId }: { boardId: string }) {
     []
   )
 
+  // ── Sales & ops board: rotate the lower section between views so a wall
+  //    screen never needs scrolling (sales tiles → reps → calls). ──
+  const [view, setView] = useState(0)
+  useEffect(() => {
+    if (!board.features.sales) return
+    const t = setInterval(() => setView((v) => (v + 1) % 3), SALES_VIEW_MS)
+    return () => clearInterval(t)
+  }, [board.features.sales])
+
   const secondsAgo =
     lastFetchedAt === null ? null : Math.max(0, Math.floor((nowMs - lastFetchedAt) / 1000))
   const stale = lastFetchedAt === null || nowMs - lastFetchedAt > STALE_AFTER_MS
@@ -124,20 +135,8 @@ export default function Wallboard({ boardId }: { boardId: string }) {
     .map((a) => `${a.name} — ${a.role}`)
     .join(' · ')
 
-  return (
-    <main className="mx-auto flex max-w-[1500px] flex-col gap-10 p-6 lg:p-10">
-      <div className="fade-up">
-        <Header
-          title={board.title}
-          source={metrics?.source ?? '—'}
-          secondsAgo={secondsAgo}
-          stale={stale}
-        />
-        {rolesLegend && <p className="mt-2 text-base text-neutral-500">{rolesLegend}</p>}
-      </div>
-
-      {board.features.sales && metrics?.sales && <SalesTiles sales={metrics.sales} />}
-
+  const callsSection = (
+    <>
       <SummaryCards agents={agents} showAppointments={board.features.appointments} />
 
       {board.features.leaderboard && agents.length > 0 && (
@@ -182,6 +181,51 @@ export default function Wallboard({ boardId }: { boardId: string }) {
           }))}
         />
       </section>
+    </>
+  )
+
+  const rotating = board.features.sales && metrics?.sales
+
+  return (
+    <main className="mx-auto flex max-w-[1500px] flex-col gap-10 p-6 lg:p-10">
+      <div className="fade-up">
+        <Header
+          title={board.title}
+          source={metrics?.source ?? '—'}
+          secondsAgo={secondsAgo}
+          stale={stale}
+        />
+        {rolesLegend && <p className="mt-2 text-base text-neutral-500">{rolesLegend}</p>}
+      </div>
+
+      {rotating ? (
+        <>
+          <div className="flex items-center justify-between gap-6">
+            <div className="min-w-0 flex-1">
+              <LastSaleBanner sales={metrics!.sales!} />
+            </div>
+            <span className="flex shrink-0 gap-2">
+              {['Sales', 'Reps', 'Calls'].map((label, i) => (
+                <span
+                  key={label}
+                  className={`text-sm font-medium uppercase tracking-[0.14em] ${
+                    i === view ? 'text-neutral-200' : 'text-neutral-600'
+                  }`}
+                >
+                  {label}
+                </span>
+              ))}
+            </span>
+          </div>
+          <div key={view} className="fade-up flex flex-col gap-10">
+            {view === 0 && <SalesRow sales={metrics!.sales!} />}
+            {view === 1 && <RepsBoard sales={metrics!.sales!} />}
+            {view === 2 && callsSection}
+          </div>
+        </>
+      ) : (
+        callsSection
+      )}
 
       {celebrating && <Celebration winners={celebrating} />}
     </main>

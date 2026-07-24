@@ -267,6 +267,40 @@ def _crm_writeback(lead_id: str, sale_type: str, sold_by: str | None,
     _ss_call("updateLeads", {"objects": [obj]})
 
 
+def _crm_note(lead_id: str, text: str, author_owner_id: str | None = None) -> None:
+    """Drop a note in the lead's CRM activity feed (authorID sets the shown author)."""
+    obj: dict = {"whoID": str(lead_id), "whoType": "lead", "note": text}
+    if author_owner_id:
+        obj["authorID"] = str(author_owner_id)
+    _ss_call("createNotes", {"objects": [obj]})
+
+
+def _sale_note_text(sale_type: str, heating, water, chc, sold_by,
+                    sale_date: str, user_note: str, entered_by: str) -> str:
+    def gbp(x):
+        return "£" + (f"{x:,.2f}".rstrip("0").rstrip(".") if x != int(x) else f"{int(x):,}")
+
+    if sale_type == "chc":
+        amounts = f"{gbp(chc)} CHC (online)"
+    else:
+        parts = []
+        if heating:
+            parts.append(f"{gbp(heating)} heating")
+        if water:
+            parts.append(f"{gbp(water)} water")
+        amounts = " + ".join(parts)
+    where = {"on_site": "Sold on Site", "office": "Sold in Office",
+             "chc": "CHC online purchase"}[sale_type]
+    line = f"💰 Sale logged: {amounts} — {where}"
+    if sold_by:
+        line += f" by {sold_by}"
+    line += f" — {sale_date}"
+    if user_note:
+        line += f'\n"{user_note}"'
+    line += f"\n(entered by {entered_by} via Trust Sales)"
+    return line
+
+
 # ---------------------------------------------------------------------------
 # Routes — pages
 # ---------------------------------------------------------------------------
@@ -425,6 +459,16 @@ def api_create_sale():
         except Exception as exc:
             app.logger.exception("CRM writeback failed")
             crm_error = str(exc)[:200]
+        try:
+            _crm_note(
+                lead_id,
+                _sale_note_text(sale_type, heating, water, chc, sold_by,
+                                sale_date.isoformat(), (d.get("note") or "").strip(),
+                                session.get("name") or session.get("username") or "?"),
+                author_owner_id=(d.get("sold_by_owner_id") or "").strip() or None,
+            )
+        except Exception:
+            app.logger.exception("CRM note failed (non-fatal)")
 
     now = datetime.now(timezone.utc)
     sale_id = str(uuid.uuid4())

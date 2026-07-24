@@ -38,7 +38,12 @@ export interface BoardSpec {
   id: 'telesales' | 'team'
   title: string
   agents: AgentConfig[]
-  features: { appointments: boolean; leaderboard: boolean; celebration: boolean }
+  features: {
+    appointments: boolean
+    leaderboard: boolean
+    celebration: boolean
+    sales: boolean
+  }
 }
 
 export const BOARDS: Record<string, BoardSpec> = {
@@ -46,15 +51,18 @@ export const BOARDS: Record<string, BoardSpec> = {
     id: 'telesales',
     title: 'Live telesales metre',
     agents: AGENTS,
-    features: { appointments: true, leaderboard: true, celebration: true },
+    features: { appointments: true, leaderboard: true, celebration: true, sales: false },
   },
   team: {
     id: 'team',
     title: 'Live sales & ops metre',
     agents: TEAM_AGENTS,
-    features: { appointments: false, leaderboard: false, celebration: false },
+    features: { appointments: false, leaderboard: false, celebration: false, sales: true },
   },
 }
+
+// Hero sales tile slideshow: month revenue ⇄ week revenue, rotating.
+export const SALES_SLIDE_MS = 9_000
 
 // Exact names each data source uses for an agent (confirmed against real
 // rows, 18 Jul 2026). The bronze provider attributes by these; if an agent

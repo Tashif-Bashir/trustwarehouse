@@ -1,6 +1,6 @@
 import { BigQuery } from '@google-cloud/bigquery'
-import { BOARDS, SOURCE_NAMES, TEAM_ASCEND_NAMES } from '../config'
-import type { Metrics } from '../types'
+import { BOARDS, SOURCE_NAMES, TEAM_AGENTS, TEAM_ASCEND_NAMES } from '../config'
+import type { Metrics, SalesMetrics } from '../types'
 
 // Real data provider.
 //
@@ -171,6 +171,170 @@ async function queryAppointments(): Promise<Map<string, number>> {
   return counts
 }
 
+// Sales tiles (team board) — live from app.sales (US region), the Trust Sales
+// app's event ledger: one row per sale, voids/cancels excluded via status.
+// Domestic revenue = heating + water + CHC (the manager's definition).
+async function querySales(): Promise<SalesMetrics | null> {
+  const amt =
+    "COALESCE(heating_amount, 0) + COALESCE(water_amount, 0) + COALESCE(chc_amount, 0)"
+  const base = `
+    FROM \`${PROJECT}.app.sales\`
+    WHERE status = 'active' AND customer_name NOT LIKE 'Zzz Testlead%'
+  `
+  try {
+    const [aggPromise, sellersPromise, lastPromise] = [
+      // daily grain — month/week/today/yesterday and the 7-day strip are all
+      // derived from this one result
+      client().query({
+        query: `
+          SELECT CAST(sale_date AS STRING) AS day,
+                 COUNT(*) AS n, SUM(${amt}) AS total, MAX(${amt}) AS mx
+          ${base}
+            AND sale_date >= DATE_SUB(DATE_TRUNC(CURRENT_DATE('Europe/London'), MONTH), INTERVAL 7 DAY)
+          GROUP BY day
+        `,
+        location: 'US',
+      }),
+      client().query({
+        query: `
+          SELECT sold_by AS name, COUNT(*) AS count, SUM(${amt}) AS total
+          ${base}
+            AND sold_by IS NOT NULL
+            AND sale_date >= DATE_TRUNC(CURRENT_DATE('Europe/London'), MONTH)
+          GROUP BY sold_by
+          ORDER BY total DESC
+        `,
+        location: 'US',
+      }),
+      // the banner shows live app activity only (backfilled history has no
+      // meaningful logged-at moment)
+      client().query({
+        query: `
+          SELECT customer_name, sale_type, sold_by, ${amt} AS amount,
+                 FORMAT_TIMESTAMP('%H:%M', created_at, 'Europe/London') AS at_uk
+          ${base}
+            AND source = 'app'
+          ORDER BY created_at DESC
+          LIMIT 1
+        `,
+        location: 'US',
+      }),
+    ]
+    const [[dailyRows], [sellerRows], [lastRows]] = await Promise.all([
+      aggPromise,
+      sellersPromise,
+      lastPromise,
+    ])
+
+    // derive the windows from the daily grain (all dates are UK-local)
+    const today = ukToday()
+    const addDays = (s: string, n: number) => {
+      const d = new Date(s + 'T12:00:00Z')
+      return new Date(d.getTime() + n * 86_400_000).toISOString().slice(0, 10)
+    }
+    const monthStart = today.slice(0, 8) + '01'
+    const dow = new Date(today + 'T12:00:00Z').getUTCDay() // 0 = Sun
+    const weekStart = addDays(today, -((dow + 6) % 7))
+
+    const daily = new Map<string, { n: number; total: number; mx: number }>()
+    for (const r of dailyRows as { day: string; n: number; total: number; mx: number }[]) {
+      daily.set(r.day, { n: Number(r.n), total: Number(r.total), mx: Number(r.mx) })
+    }
+    const windowSum = (from: string) => {
+      let n = 0
+      let total = 0
+      let mx = 0
+      for (const [day, v] of daily) {
+        if (day >= from && day <= today) {
+          n += v.n
+          total += v.total
+          mx = Math.max(mx, v.mx)
+        }
+      }
+      return { n, total, mx }
+    }
+    const month = windowSum(monthStart)
+    const week = windowSum(weekStart)
+    const todayAgg = daily.get(today) ?? { n: 0, total: 0, mx: 0 }
+    const yesterdayAgg = daily.get(addDays(today, -1)) ?? { n: 0, total: 0, mx: 0 }
+    const last7 = Array.from({ length: 7 }, (_, i) => {
+      const date = addDays(today, i - 6)
+      return { date, total: daily.get(date)?.total ?? 0 }
+    })
+    const allSellers = sellerRows as { name: string; count: number; total: number }[]
+    const sellerColor = new Map(TEAM_AGENTS.map((a) => [a.name, a.color]))
+    const sellers = ['Dec', 'Josh'].map((name) => {
+      const row = allSellers.find((r) => r.name === name)
+      return {
+        name,
+        color: sellerColor.get(name) ?? '#888',
+        count: Number(row?.count ?? 0),
+        total: Number(row?.total ?? 0),
+      }
+    })
+    // Field reps (everyone who isn't Dec/Josh), £ desc — the slideshow tile
+    // pages through these. Colours are assigned by rank from a fixed palette.
+    const REP_PALETTE = [
+      '#2a78d6', '#1baf7a', '#e87ba4', '#eb6834', '#8b5cf6',
+      '#0ea5b7', '#d6a52a', '#d64545', '#5b8a2a', '#7a6ff0',
+      '#c257c2', '#4f9d8f', '#b0713a', '#6787b8',
+    ]
+    const reps = allSellers
+      .filter((r) => r.name !== 'Dec' && r.name !== 'Josh')
+      .map((r, i) => ({
+        name: r.name,
+        color: REP_PALETTE[i % REP_PALETTE.length],
+        count: Number(r.count),
+        total: Number(r.total),
+      }))
+
+    const typeLabels: Record<string, string> = {
+      on_site: 'Sold on Site',
+      office: 'Sold in Office',
+      chc: 'CHC online',
+    }
+    const last = (lastRows as {
+      customer_name: string
+      sale_type: string
+      sold_by: string | null
+      amount: number
+      at_uk: string
+    }[])[0]
+
+    const monthLabel = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London',
+      month: 'long',
+    }).format(new Date())
+
+    return {
+      monthRevenue: month.total,
+      monthCount: month.n,
+      monthMax: month.mx,
+      weekRevenue: week.total,
+      weekCount: week.n,
+      weekMax: week.mx,
+      todayRevenue: todayAgg.total,
+      todayCount: todayAgg.n,
+      yesterdayRevenue: yesterdayAgg.total,
+      last7,
+      monthLabel,
+      sellers,
+      reps,
+      lastSale: last
+        ? {
+            amount: Number(last.amount),
+            typeLabel: typeLabels[last.sale_type] ?? last.sale_type,
+            soldBy: last.sold_by,
+            customer: last.customer_name,
+            atUk: last.at_uk,
+          }
+        : null,
+    }
+  } catch {
+    return null // sales tiles degrade to hidden; call bars stay up
+  }
+}
+
 const caches: Record<string, { data: Metrics; at: number; ukDate: string }> = {}
 
 function ukToday(): string {
@@ -190,9 +354,10 @@ export async function getBronzeMetrics(boardId: string = 'telesales'): Promise<M
   }
 
   try {
-    const [calls, appointments] = await Promise.all([
+    const [calls, appointments, sales] = await Promise.all([
       queryCalls(ASCEND_MAP[board.id]),
       board.features.appointments ? queryAppointments() : Promise.resolve(new Map<string, number>()),
+      board.features.sales ? querySales() : Promise.resolve(null),
     ])
     const today = ukToday()
     const prevByAgent = new Map(
@@ -214,7 +379,12 @@ export async function getBronzeMetrics(boardId: string = 'telesales'): Promise<M
         appointmentsBooked: appointments.get(agent.id) ?? 0,
       }
     })
-    const data: Metrics = { asOf: new Date().toISOString(), source: 'Ascend', agents }
+    const data: Metrics = {
+      asOf: new Date().toISOString(),
+      source: board.features.sales ? 'Ascend + Trust Sales' : 'Ascend',
+      agents,
+      ...(sales ? { sales } : {}),
+    }
     caches[board.id] = { data, at: Date.now(), ukDate: today }
     return data
   } catch (err) {

@@ -5,6 +5,7 @@ import Celebration from '@/components/Celebration'
 import ColumnChart from '@/components/ColumnChart'
 import Header from '@/components/Header'
 import Leaderboard from '@/components/Leaderboard'
+import SalesTiles from '@/components/SalesTiles'
 import SummaryCards from '@/components/SummaryCards'
 import { BOARDS, CELEBRATION, POLL_INTERVAL_MS, STALE_AFTER_MS } from '@/lib/config'
 import type { AgentMetrics, Metrics } from '@/lib/types'
@@ -132,6 +133,8 @@ export default function Wallboard({ boardId }: { boardId: string }) {
         />
         {rolesLegend && <p className="mt-2 text-base text-neutral-500">{rolesLegend}</p>}
       </div>
+
+      {board.features.sales && metrics?.sales && <SalesTiles sales={metrics.sales} />}
 
       <SummaryCards agents={agents} showAppointments={board.features.appointments} />
 

@@ -101,9 +101,11 @@ export const TROPHY_MIN_APPTS = 5
 // showing the board celebrates the day's top performer(s) full-screen for
 // durationMs, then returns to the live board. Fires once per day per
 // browser; graceMinutes lets a screen that wakes late still celebrate.
+// Friday finishes at 16:00, so its celebration runs at 15:59.
 export const CELEBRATION = {
   hour: 16,
   minute: 59,
+  friday: { hour: 15, minute: 59 },
   graceMinutes: 5,
   durationMs: 30_000,
   weekdaysOnly: true,

@@ -96,7 +96,9 @@ export default function Wallboard({ boardId }: { boardId: string }) {
       const get = (t: string) => parts.find((p) => p.type === t)?.value ?? ''
       if (CELEBRATION.weekdaysOnly && ['Sat', 'Sun'].includes(get('weekday'))) return
       const mins = Number(get('hour')) * 60 + Number(get('minute'))
-      const start = CELEBRATION.hour * 60 + CELEBRATION.minute
+      // Friday finishes at 16:00 — its celebration runs at 15:59
+      const t = get('weekday') === 'Fri' ? CELEBRATION.friday : CELEBRATION
+      const start = t.hour * 60 + t.minute
       if (mins < start || mins >= start + CELEBRATION.graceMinutes) return
       if (localStorage.getItem('metre:celebrated') === today) return
       localStorage.setItem('metre:celebrated', today)

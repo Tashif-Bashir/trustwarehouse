@@ -525,8 +525,8 @@ def api_list_sales():
 
     rows = list(_bq().query(f"""
         SELECT sale_id, lead_id, customer_name, postcode, sale_date, sale_type,
-               heating_amount, water_amount, chc_amount, sold_by, entered_by,
-               status, void_reason, crm_synced, source, note
+               heating_amount, water_amount, chc_amount, sold_by, sold_by_owner_id,
+               entered_by, status, void_reason, cancel_reason, crm_synced, source, note
         FROM {BQ_SALES}
         WHERE sale_date >= @s_date AND sale_date < @e_date
         ORDER BY sale_date DESC, created_at DESC
@@ -539,6 +539,175 @@ def api_list_sales():
                       + (s["chc_amount"] or 0) for s in active), 2)
     return jsonify({"month": start.strftime("%Y-%m"), "sales": sales,
                     "total": total, "count": len(active)})
+
+
+def _get_sale(sale_id: str) -> dict | None:
+    rows = list(_bq().query(
+        f"SELECT * FROM {BQ_SALES} WHERE sale_id = @sid",
+        job_config=_bq_params(sid=sale_id)).result())
+    return {k: rows[0][k] for k in rows[0].keys()} if rows else None
+
+
+def _refresh_crm_totals(lead_id: str) -> None:
+    """Recompute lifetime totals from active rows and push to the lead (owner echoed)."""
+    lead = _ss_call("getLeads", {"where": {"id": lead_id}})["lead"][0]
+    owner = lead.get("ownerID")
+    h, w, c = _lifetime_totals(lead_id)
+    obj = {"id": lead_id, F_SOLD_HEAT: _fmt_amount(h),
+           F_SOLD_WATER: _fmt_amount(w), F_SOLD_CHC: _fmt_amount(c)}
+    if owner:
+        obj["ownerID"] = owner
+    _ss_call("updateLeads", {"objects": [obj]})
+
+
+def _audit(sale_id: str, action: str, before: dict, after: dict) -> None:
+    def scrub(d):
+        return {k: (v.isoformat() if isinstance(v, (date, datetime)) else v)
+                for k, v in d.items()}
+    _bq().query(f"""
+        INSERT INTO `{BQ_PROJECT}.app.sales_audit`
+        (audit_id, sale_id, action, changed_by, changed_at, before_json, after_json)
+        VALUES (@aid, @sid, @action, @by, @now_ts, @before, @after)
+    """, job_config=_bq_params(aid=str(uuid.uuid4()), sid=sale_id, action=action,
+                               by=session.get("username") or "?",
+                               now_ts=datetime.now(timezone.utc).isoformat(),
+                               before=json.dumps(scrub(before)),
+                               after=json.dumps(scrub(after)))).result()
+
+
+@app.route("/api/sales/<sale_id>/cancel", methods=["POST"])
+@login_required
+def api_cancel_sale(sale_id: str):
+    d = request.get_json(force=True, silent=True) or {}
+    reason = (d.get("reason") or "").strip()
+    if not reason:
+        return jsonify({"error": "a reason is required"}), 400
+    sale = _get_sale(sale_id)
+    if not sale:
+        return jsonify({"error": "not found"}), 404
+    if sale["status"] != "active":
+        return jsonify({"error": f"sale is already {sale['status']}"}), 400
+
+    now = datetime.now(timezone.utc)
+    _bq().query(f"""
+        UPDATE {BQ_SALES}
+        SET status = 'cancelled', cancel_reason = @reason, updated_at = @now_ts
+        WHERE sale_id = @sid
+    """, job_config=_bq_params(sid=sale_id,
+                               reason=f"{reason} (by {session.get('username')})",
+                               now_ts=now.isoformat())).result()
+    _audit(sale_id, "cancel", {"status": "active"},
+           {"status": "cancelled", "reason": reason})
+
+    if sale["lead_id"]:
+        amt = (sale["heating_amount"] or 0) + (sale["water_amount"] or 0) + (sale["chc_amount"] or 0)
+        try:
+            _refresh_crm_totals(sale["lead_id"])
+            _crm_note(sale["lead_id"],
+                      f"❌ Order cancelled — £{amt:,.2f} removed from sold amounts"
+                      f'\n"{reason}"'
+                      f"\n(by {session.get('name') or session.get('username')} via Trust Sales)",
+                      author_owner_id=sale.get("sold_by_owner_id"))
+        except Exception:
+            app.logger.exception("CRM update after cancel failed")
+    return jsonify({"ok": True})
+
+
+@app.route("/api/sales/<sale_id>/edit", methods=["POST"])
+@login_required
+def api_edit_sale(sale_id: str):
+    d = request.get_json(force=True, silent=True) or {}
+    sale = _get_sale(sale_id)
+    if not sale:
+        return jsonify({"error": "not found"}), 404
+    if sale["status"] != "active":
+        return jsonify({"error": f"can't edit a {sale['status']} sale"}), 400
+
+    sale_type = d.get("sale_type") or sale["sale_type"]
+    if sale_type not in ("on_site", "office", "chc"):
+        return jsonify({"error": "bad sale_type"}), 400
+    try:
+        sale_date = date.fromisoformat(str(d.get("sale_date") or ""))
+    except ValueError:
+        return jsonify({"error": "bad sale_date"}), 400
+
+    def _num(x):
+        try:
+            v = round(float(x), 2)
+            return v if v > 0 else None
+        except (TypeError, ValueError):
+            return None
+
+    heating = _num(d.get("heating_amount"))
+    water = _num(d.get("water_amount"))
+    chc = _num(d.get("chc_amount"))
+    if sale_type == "chc":
+        heating = water = None
+        if not chc:
+            return jsonify({"error": "CHC sale needs an amount"}), 400
+    else:
+        chc = None
+        if not heating and not water:
+            return jsonify({"error": "enter a heating and/or water amount"}), 400
+
+    sold_by = (d.get("sold_by") or "").strip() or None
+    if sale_type == "office" and sold_by not in OFFICE_SELLERS:
+        return jsonify({"error": "office sales must be sold by Dec or Josh"}), 400
+    if sale_type == "on_site" and not sold_by:
+        return jsonify({"error": "pick the rep who sold it"}), 400
+    if sale_type == "chc":
+        sold_by = None
+
+    before = {k: sale[k] for k in ("sale_date", "sale_type", "heating_amount",
+                                   "water_amount", "chc_amount", "sold_by", "note")}
+    after = {"sale_date": sale_date.isoformat(), "sale_type": sale_type,
+             "heating_amount": heating, "water_amount": water, "chc_amount": chc,
+             "sold_by": sold_by, "note": (d.get("note") or "").strip() or None}
+
+    now = datetime.now(timezone.utc)
+    _bq().query(f"""
+        UPDATE {BQ_SALES}
+        SET sale_date = @s_date, sale_type = @stype,
+            heating_amount = @heat, water_amount = @wat, chc_amount = @chc,
+            sold_by = @sold_by, sold_by_owner_id = @sb_oid, note = @note,
+            updated_at = @now_ts
+        WHERE sale_id = @sid
+    """, job_config=bigquery.QueryJobConfig(query_parameters=[
+        bigquery.ScalarQueryParameter("sid", "STRING", sale_id),
+        bigquery.ScalarQueryParameter("s_date", "DATE", sale_date.isoformat()),
+        bigquery.ScalarQueryParameter("stype", "STRING", sale_type),
+        bigquery.ScalarQueryParameter("heat", "FLOAT64", heating),
+        bigquery.ScalarQueryParameter("wat", "FLOAT64", water),
+        bigquery.ScalarQueryParameter("chc", "FLOAT64", chc),
+        bigquery.ScalarQueryParameter("sold_by", "STRING", sold_by),
+        bigquery.ScalarQueryParameter("sb_oid", "STRING",
+                                      (d.get("sold_by_owner_id") or "").strip()
+                                      or sale.get("sold_by_owner_id")),
+        bigquery.ScalarQueryParameter("note", "STRING", after["note"]),
+        bigquery.ScalarQueryParameter("now_ts", "TIMESTAMP", now.isoformat()),
+    ])).result()
+    _audit(sale_id, "edit", before, after)
+
+    if sale["lead_id"]:
+        old_amt = (sale["heating_amount"] or 0) + (sale["water_amount"] or 0) + (sale["chc_amount"] or 0)
+        new_amt = (heating or 0) + (water or 0) + (chc or 0)
+        try:
+            _refresh_crm_totals(sale["lead_id"])
+            changes = []
+            if abs(old_amt - new_amt) > 0.004:
+                changes.append(f"£{old_amt:,.2f} → £{new_amt:,.2f}")
+            if before["sold_by"] != sold_by:
+                changes.append(f"seller {before['sold_by'] or '—'} → {sold_by or '—'}")
+            if str(before["sale_date"]) != sale_date.isoformat():
+                changes.append(f"date {before['sale_date']} → {sale_date.isoformat()}")
+            if changes:
+                _crm_note(sale["lead_id"],
+                          "✏️ Sale corrected: " + ", ".join(changes)
+                          + f"\n(by {session.get('name') or session.get('username')} via Trust Sales)",
+                          author_owner_id=sale.get("sold_by_owner_id"))
+        except Exception:
+            app.logger.exception("CRM update after edit failed")
+    return jsonify({"ok": True})
 
 
 @app.route("/api/sales/<sale_id>/void", methods=["POST"])

@@ -63,6 +63,7 @@
   .chip.type-office{background:var(--indigo-soft);color:var(--indigo)}
   .chip.type-chc{background:var(--violet-soft);color:var(--violet)}
   .chip.void{background:var(--rose-soft);color:var(--rose)}
+  .chip.cancel{background:var(--amber-soft);color:var(--amber-ink)}
   .chip.unsynced{background:var(--amber-soft);color:var(--amber-ink)}
 
   .sel-card{border:1.5px solid var(--indigo);background:var(--indigo-soft);border-radius:12px;
@@ -493,7 +494,19 @@ function Ledger({ refreshKey, showToast }) {
   const [typeFilter, setTypeFilter] = useState("");
   const [voiding, setVoiding] = useState(null);
   const [voidReason, setVoidReason] = useState("");
+  const [cancelling, setCancelling] = useState(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [editing, setEditing] = useState(null);   // {sale, fields...}
   const [busy, setBusy] = useState(false);
+  const [reps, setReps] = useState([]);
+  const [office, setOffice] = useState(["Dec", "Josh"]);
+
+  useEffect(() => {
+    fetch("/api/reps").then(r => r.json()).then(d => {
+      setReps(d.reps || []);
+      setOffice(d.office || ["Dec", "Josh"]);
+    });
+  }, []);
 
   const load = useCallback(async () => {
     setData(null);
@@ -513,6 +526,55 @@ function Ledger({ refreshKey, showToast }) {
       const d = await r.json();
       if (!r.ok) { showToast(d.error || "Void failed"); return; }
       setVoiding(null); setVoidReason("");
+      load();
+    } finally { setBusy(false); }
+  };
+
+  const doCancel = async () => {
+    if (!cancelReason.trim()) { showToast("A reason is required"); return; }
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/sales/${cancelling.sale_id}/cancel`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: cancelReason.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) { showToast(d.error || "Cancel failed"); return; }
+      showToast("Order cancelled — removed from revenue");
+      setCancelling(null); setCancelReason("");
+      load();
+    } finally { setBusy(false); }
+  };
+
+  const startEdit = (s) => setEditing({
+    sale: s,
+    sale_date: s.sale_date,
+    sale_type: s.sale_type,
+    heating: s.heating_amount ? String(s.heating_amount) : "",
+    water: s.water_amount ? String(s.water_amount) : "",
+    chc: s.chc_amount ? String(s.chc_amount) : "",
+    sold_by: s.sold_by || "",
+    note: s.note || "",
+  });
+
+  const doEdit = async () => {
+    setBusy(true);
+    try {
+      const e = editing;
+      const r = await fetch(`/api/sales/${e.sale.sale_id}/edit`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sale_date: e.sale_date, sale_type: e.sale_type,
+          heating_amount: e.heating || null, water_amount: e.water || null,
+          chc_amount: e.chc || null, sold_by: e.sold_by || null,
+          sold_by_owner_id: (reps.find(x => x.name === e.sold_by) || {}).owner_id || "",
+          note: e.note,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) { showToast(d.error || "Edit failed"); return; }
+      showToast("Sale updated");
+      setEditing(null);
       load();
     } finally { setBusy(false); }
   };
@@ -548,7 +610,8 @@ function Ledger({ refreshKey, showToast }) {
         if (s.heating_amount) parts.push(`H ${fmtGBP(s.heating_amount)}`);
         if (s.water_amount) parts.push(`W ${fmtGBP(s.water_amount)}`);
         return (
-          <div key={s.sale_id} className={"sale-row" + (s.status === "void" ? " voided" : "")}>
+          <div key={s.sale_id}
+               className={"sale-row" + (s.status !== "active" ? " voided" : "")}>
             <div className="s-date">{s.sale_date.slice(8)}<br />
               <span style={{ fontWeight: 500 }}>{s.sale_date.slice(5, 7)}</span></div>
             <div className="s-main">
@@ -562,17 +625,130 @@ function Ledger({ refreshKey, showToast }) {
                 {s.lead_id && s.crm_synced === false && s.status === "active" &&
                   <span className="chip unsynced">CRM not synced</span>}
                 {s.status === "void" && <span className="chip void">VOID</span>}
+                {s.status === "cancelled" && <span className="chip cancel">CANCELLED</span>}
               </div>
             </div>
             <div className="s-amt">{fmtGBP(amt)}
               {parts.length > 1 && <small>{parts.join(" · ")}</small>}
             </div>
-            {ROLE === "admin" && s.status === "active" && (
-              <button className="void-btn" onClick={() => setVoiding(s)}>Void</button>
+            {s.status === "active" && (
+              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                <button className="void-btn" onClick={() => startEdit(s)}>Edit</button>
+                <button className="void-btn" onClick={() => setCancelling(s)}>Cancel</button>
+                {ROLE === "admin" && (
+                  <button className="void-btn" onClick={() => setVoiding(s)}>Void</button>
+                )}
+              </div>
             )}
           </div>
         );
       })}
+
+      {cancelling && (
+        <div className="modal-bg" onClick={() => !busy && setCancelling(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="h1">Cancel this order?</div>
+            <div className="sub" style={{ marginTop: 4 }}>
+              For real cancellations (e.g. 14-day cooling off) — the sale stays in
+              history but comes out of revenue and the CRM totals.
+            </div>
+            <div className="recap">
+              <b>{cancelling.customer_name}</b> · {cancelling.sale_date} ·
+              {" "}{fmtGBP((cancelling.heating_amount || 0) + (cancelling.water_amount || 0) + (cancelling.chc_amount || 0))}
+            </div>
+            <div className="field">
+              <label className="label">Reason</label>
+              <input className="inp" value={cancelReason} autoFocus
+                     onChange={e => setCancelReason(e.target.value)}
+                     placeholder="e.g. cooling-off cancellation, refund issued" />
+            </div>
+            <div className="modal-actions">
+              <button className="btn-ghost" disabled={busy}
+                      onClick={() => setCancelling(null)}>Back</button>
+              <button className="btn-primary" disabled={busy || !cancelReason.trim()}
+                      style={{ background: "linear-gradient(135deg,#E8A33D,#D97706)" }}
+                      onClick={doCancel}>{busy ? "Cancelling…" : "Cancel order"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editing && (
+        <div className="modal-bg" onClick={() => !busy && setEditing(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="h1">Edit sale — {editing.sale.customer_name}</div>
+            <div className="field" style={{ marginTop: 12 }}>
+              <label className="label">Where did it sell?</label>
+              <div className="type-pills">
+                {["on_site", "office", "chc"].map(t => (
+                  <button key={t} className={"tpill" + (editing.sale_type === t ? " on" : "")}
+                          onClick={() => setEditing({ ...editing, sale_type: t, sold_by: "" })}>
+                    {TYPE_LABEL[t]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="field">
+              <label className="label">Sale date</label>
+              <input type="date" className="inp" value={editing.sale_date}
+                     max={todayIso()}
+                     onChange={e => setEditing({ ...editing, sale_date: e.target.value })} />
+            </div>
+            {editing.sale_type !== "chc" ? (
+              <div className="amount-row">
+                <div className="field">
+                  <label className="label">Heating £</label>
+                  <input className="inp" inputMode="decimal" value={editing.heating}
+                         onChange={e => setEditing({ ...editing, heating: e.target.value })} />
+                </div>
+                <div className="field">
+                  <label className="label">Water £</label>
+                  <input className="inp" inputMode="decimal" value={editing.water}
+                         onChange={e => setEditing({ ...editing, water: e.target.value })} />
+                </div>
+              </div>
+            ) : (
+              <div className="field">
+                <label className="label">CHC £</label>
+                <input className="inp" inputMode="decimal" value={editing.chc}
+                       onChange={e => setEditing({ ...editing, chc: e.target.value })} />
+              </div>
+            )}
+            {editing.sale_type === "on_site" && (
+              <div className="field">
+                <label className="label">Sold by</label>
+                <select className="inp" value={editing.sold_by}
+                        onChange={e => setEditing({ ...editing, sold_by: e.target.value })}>
+                  <option value="">— pick the rep —</option>
+                  {reps.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
+                </select>
+              </div>
+            )}
+            {editing.sale_type === "office" && (
+              <div className="field">
+                <label className="label">Sold by</label>
+                <div className="type-pills">
+                  {office.map(n => (
+                    <button key={n} className={"tpill" + (editing.sold_by === n ? " on" : "")}
+                            onClick={() => setEditing({ ...editing, sold_by: n })}>{n}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="field">
+              <label className="label">Note</label>
+              <input className="inp" value={editing.note}
+                     onChange={e => setEditing({ ...editing, note: e.target.value })} />
+            </div>
+            <div className="modal-actions">
+              <button className="btn-ghost" disabled={busy}
+                      onClick={() => setEditing(null)}>Cancel</button>
+              <button className="btn-primary" disabled={busy}
+                      onClick={doEdit}>{busy ? "Saving…" : "Save changes"}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {voiding && (
         <div className="modal-bg" onClick={() => !busy && setVoiding(null)}>

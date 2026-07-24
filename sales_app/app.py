@@ -804,15 +804,8 @@ def api_void_sale(sale_id: str):
     lead_id = rows[0]["lead_id"]
     if lead_id:
         try:
-            # refresh lifetime totals on the lead (status untouched on void)
-            lead = _ss_call("getLeads", {"where": {"id": lead_id}})["lead"][0]
-            owner = lead.get("ownerID")
-            h, w, c = _lifetime_totals(lead_id)
-            obj = {"id": lead_id, F_SOLD_HEAT: _fmt_amount(h),
-                   F_SOLD_WATER: _fmt_amount(w), F_SOLD_CHC: _fmt_amount(c)}
-            if owner:
-                obj["ownerID"] = owner
-            _ss_call("updateLeads", {"objects": [obj]})
+            # totals recompute; sold statuses clear when a component's total hits zero
+            _refresh_crm_totals(lead_id)
         except Exception:
             app.logger.exception("CRM total refresh after void failed")
     return jsonify({"ok": True})

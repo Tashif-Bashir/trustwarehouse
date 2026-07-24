@@ -33,7 +33,7 @@ app.permanent_session_lifetime = timedelta(hours=10)
 # ---------------------------------------------------------------------------
 
 BQ_PROJECT = os.environ.get("BIGQUERY_PROJECT", "trustwarehouse")
-BQ_USERS = f"`{BQ_PROJECT}.app.users`"
+BQ_USERS = f"`{BQ_PROJECT}.app.sales_users`"   # the sales app's OWN logins
 BQ_REPS = f"`{BQ_PROJECT}.app.reps`"
 BQ_SALES = f"`{BQ_PROJECT}.app.sales`"
 BQ_LEADS = f"`{BQ_PROJECT}.silver.silver_sharpspring_leads`"

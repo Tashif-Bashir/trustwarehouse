@@ -7,8 +7,8 @@ on:
         description: "Hours of CDR history to pull (raise for a backfill)"
         required: false
         default: "2"
-  schedule:
-    - cron: "*/5 * * * *"  # STOPGAP while the OCI VM is down (VM ran this every 60s) — remove when the VM is back
+  # no schedule — primary sync runs on the OCI VM every 60s; this workflow is the
+  # manual backup (workflow_dispatch) for VM outages
 
 concurrency:
   group: sync-ascend

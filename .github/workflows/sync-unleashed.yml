@@ -1,9 +1,7 @@
 name: Sync Unleashed
 
 on:
-  workflow_dispatch:  # primary sync runs on OCI VM daily at 07:00 London
-  schedule:
-    - cron: "0 6 * * *"  # STOPGAP while the OCI VM is down — 07:00 London (BST); remove when the VM is back
+  workflow_dispatch:  # manual backup — primary sync runs on OCI VM daily at 07:00 London
 
 jobs:
   sync:

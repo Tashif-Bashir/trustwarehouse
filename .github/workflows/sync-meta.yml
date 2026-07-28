@@ -2,8 +2,7 @@ name: Sync Meta
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 0,3,6,9,12,15,18,21 * * *"  # STOPGAP while the OCI VM is down — 01,04,…,22 London (BST); remove when the VM is back
+  # no schedule — primary sync runs on the OCI VM 8x/day; manual backup only
 
 concurrency:
   group: sync-meta

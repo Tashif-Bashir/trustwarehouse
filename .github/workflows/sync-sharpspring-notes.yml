@@ -2,8 +2,7 @@ name: Sync SharpSpring Notes
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "30 4 * * *"  # STOPGAP while the OCI VM is down — 05:30 London (BST); remove when the VM is back
+  # no schedule — primary sync runs on the OCI VM daily 05:30 London; manual backup only
 
 concurrency:
   group: sync-sharpspring-notes

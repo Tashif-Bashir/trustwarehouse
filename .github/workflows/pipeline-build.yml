@@ -2,7 +2,7 @@ name: Pipeline Build
 
 on:
   workflow_run:
-    workflows: ["Sync SharpSpring", "Sync Wildix", "Sync Unleashed"]
+    workflows: ["Sync SharpSpring", "Sync Wildix", "Sync Unleashed", "Sync Ascend", "Sync Google Ads", "Sync Meta"]
     types:
       - completed
   schedule:
@@ -48,6 +48,12 @@ jobs:
             echo "selector=silver_sharpspring_leads silver_sharpspring_campaigns silver_sharpspring_opportunities silver_sharpspring_deal_stages gold_lead_activity gold_campaign_attribution gold_agent_performance_daily gold_pipeline_opportunities" >> $GITHUB_OUTPUT
           elif [ "$TRIGGER" = "Sync Wildix" ]; then
             echo "selector=silver_wildix_calls silver_wildix_colleagues gold_lead_activity gold_agent_performance_daily" >> $GITHUB_OUTPUT
+          elif [ "$TRIGGER" = "Sync Ascend" ]; then
+            echo "selector=silver_ascend_calls silver_calls_unified gold_lead_activity gold_lead_calls gold_agent_performance_daily" >> $GITHUB_OUTPUT
+          elif [ "$TRIGGER" = "Sync Google Ads" ]; then
+            echo "selector=silver_google_ads_spend gold_google_ads_spend_by_region gold_campaign_attribution gold_leads_by_region" >> $GITHUB_OUTPUT
+          elif [ "$TRIGGER" = "Sync Meta" ]; then
+            echo "selector=silver_meta_spend silver_meta_geographic gold_campaign_attribution gold_leads_by_region" >> $GITHUB_OUTPUT
           else
             echo "selector=" >> $GITHUB_OUTPUT
           fi

@@ -1,16 +1,20 @@
-name: Sync SharpSpring
+name: Sync SharpSpring Notes
 
 on:
-  workflow_dispatch:  # primary sync runs on OCI VM every 90s
+  workflow_dispatch:
   schedule:
-    - cron: "*/15 * * * *"  # STOPGAP while the OCI VM is down — remove when the VM is back
+    - cron: "30 4 * * *"  # STOPGAP while the OCI VM is down — 05:30 London (BST); remove when the VM is back
+
+concurrency:
+  group: sync-sharpspring-notes
+  cancel-in-progress: false
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write   # required for Workload Identity Federation
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
@@ -31,9 +35,9 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Run SharpSpring pipeline
+      - name: Run SharpSpring notes pipeline
         env:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           SHARPSPRING_ACCOUNT_ID: ${{ secrets.SHARPSPRING_ACCOUNT_ID }}
           SHARPSPRING_SECRET_KEY: ${{ secrets.SHARPSPRING_SECRET_KEY }}
-        run: uv run python -m ingestion.sharpspring
+        run: uv run python -m ingestion.sharpspring_notes

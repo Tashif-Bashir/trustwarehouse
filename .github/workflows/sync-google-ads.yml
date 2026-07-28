@@ -1,9 +1,13 @@
-name: Sync Unleashed
+name: Sync Google Ads
 
 on:
-  workflow_dispatch:  # primary sync runs on OCI VM daily at 07:00 London
+  workflow_dispatch:
   schedule:
-    - cron: "0 6 * * *"  # STOPGAP while the OCI VM is down — 07:00 London (BST); remove when the VM is back
+    - cron: "0 0,3,6,9,12,15,18,21 * * *"  # STOPGAP while the OCI VM is down — 01,04,…,22 London (BST); remove when the VM is back
+
+concurrency:
+  group: sync-google-ads
+  cancel-in-progress: false
 
 jobs:
   sync:
@@ -31,9 +35,12 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Run Unleashed pipeline
+      - name: Run Google Ads pipeline
         env:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          UNLEASHED_API_ID: ${{ secrets.UNLEASHED_API_ID }}
-          UNLEASHED_API_KEY: ${{ secrets.UNLEASHED_API_KEY }}
-        run: uv run python -m ingestion.unleashed
+          GOOGLE_ADS_CLIENT_ID: ${{ secrets.GOOGLE_ADS_CLIENT_ID }}
+          GOOGLE_ADS_CLIENT_SECRET: ${{ secrets.GOOGLE_ADS_CLIENT_SECRET }}
+          GOOGLE_ADS_DEVELOPER_TOKEN: ${{ secrets.GOOGLE_ADS_DEVELOPER_TOKEN }}
+          GOOGLE_ADS_LOGIN_CUSTOMER_ID: ${{ secrets.GOOGLE_ADS_LOGIN_CUSTOMER_ID }}
+          GOOGLE_ADS_REFRESH_TOKEN: ${{ secrets.GOOGLE_ADS_REFRESH_TOKEN }}
+        run: uv run python -m ingestion.google_ads

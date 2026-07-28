@@ -1,16 +1,20 @@
-name: Sync SharpSpring
+name: Sync Meta
 
 on:
-  workflow_dispatch:  # primary sync runs on OCI VM every 90s
+  workflow_dispatch:
   schedule:
-    - cron: "*/15 * * * *"  # STOPGAP while the OCI VM is down — remove when the VM is back
+    - cron: "0 0,3,6,9,12,15,18,21 * * *"  # STOPGAP while the OCI VM is down — 01,04,…,22 London (BST); remove when the VM is back
+
+concurrency:
+  group: sync-meta
+  cancel-in-progress: false
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write   # required for Workload Identity Federation
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
@@ -31,9 +35,9 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Run SharpSpring pipeline
+      - name: Run Meta pipeline
         env:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          SHARPSPRING_ACCOUNT_ID: ${{ secrets.SHARPSPRING_ACCOUNT_ID }}
-          SHARPSPRING_SECRET_KEY: ${{ secrets.SHARPSPRING_SECRET_KEY }}
-        run: uv run python -m ingestion.sharpspring
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          META_AD_ACCOUNT_ID: ${{ secrets.META_AD_ACCOUNT_ID }}
+        run: uv run python -m ingestion.meta

@@ -1,0 +1,11 @@
+[Unit]
+Description=Rebuild dashboard call-chain models every 10 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=10min
+AccuracySec=30s
+Unit=gold-calls-build.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,10 @@
+[Unit]
+Description=Run call-chain dbt tests hourly
+
+[Timer]
+OnCalendar=*-*-* *:20:00 Europe/London
+AccuracySec=2min
+Unit=calls-tests.service
+
+[Install]
+WantedBy=timers.target

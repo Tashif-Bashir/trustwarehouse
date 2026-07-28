@@ -1,16 +1,25 @@
-name: Sync SharpSpring
+name: Sync Ascend
 
 on:
-  workflow_dispatch:  # primary sync runs on OCI VM every 90s
+  workflow_dispatch:
+    inputs:
+      lookback_hours:
+        description: "Hours of CDR history to pull (raise for a backfill)"
+        required: false
+        default: "2"
   schedule:
-    - cron: "*/30 * * * *"  # STOPGAP while the OCI VM is down — remove when the VM is back
+    - cron: "*/5 * * * *"  # STOPGAP while the OCI VM is down — remove this schedule when the VM is back
+
+concurrency:
+  group: sync-ascend
+  cancel-in-progress: false
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write   # required for Workload Identity Federation
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
@@ -31,9 +40,10 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Run SharpSpring pipeline
+      - name: Run Ascend pipeline
         env:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          SHARPSPRING_ACCOUNT_ID: ${{ secrets.SHARPSPRING_ACCOUNT_ID }}
-          SHARPSPRING_SECRET_KEY: ${{ secrets.SHARPSPRING_SECRET_KEY }}
-        run: uv run python -m ingestion.sharpspring
+          ASCEND_CLIENT_ID: ${{ secrets.ASCEND_CLIENT_ID }}
+          ASCEND_CLIENT_SECRET: ${{ secrets.ASCEND_CLIENT_SECRET }}
+          ASCEND_LOOKBACK_HOURS: ${{ github.event.inputs.lookback_hours || '2' }}
+        run: uv run python -m ingestion.ascend

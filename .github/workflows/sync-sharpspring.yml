@@ -1,9 +1,7 @@
 name: Sync SharpSpring
 
 on:
-  workflow_dispatch:  # primary sync runs on OCI VM every 90s
-  schedule:
-    - cron: "*/30 * * * *"  # STOPGAP while the OCI VM is down — remove when the VM is back
+  workflow_dispatch:  # manual trigger only — primary sync runs on OCI VM every 90s
 
 jobs:
   sync:

@@ -13,7 +13,9 @@ export const AGENTS: AgentConfig[] = [
   { id: 'lily', name: 'Lily', color: '#2a78d6' },
   { id: 'sue', name: 'Sue', color: '#1baf7a' },
   { id: 'alicja', name: 'Alicja', color: '#e87ba4' },
-  { id: 'alisha', name: 'Alisha', color: '#eb6834' },
+  // new starter 30 Jul 2026; Ascend ext 1116, caller name 'Peter'
+  { id: 'peter', name: 'Peter', color: '#8b5cf6' },
+  // Alisha left the business 4 Aug 2026 — removed from the roster.
 ]
 
 // Second wallboard: sales & ops (own screen). Calls only — no
@@ -90,10 +92,12 @@ export const SOURCE_NAMES: Record<
     appBookers: ['Alicja Aleksiuk'],
     crm: ['Alicja Aleksiuk', 'Alicja'],
   },
-  alisha: {
-    ascend: ['Alisha'],
-    appBookers: ['Alisha Moore'],
-    crm: ['Alisha Moore', 'Alisha'],
+  // Peter Heaton, started 30 Jul 2026. Ascend caller name is just 'Peter'
+  // (ext 1116); CRM user 377190400.
+  peter: {
+    ascend: ['Peter'],
+    appBookers: ['Peter Heaton', 'Peter'],
+    crm: ['Peter Heaton', 'Peter'],
   },
 }
 

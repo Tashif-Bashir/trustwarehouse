@@ -5,12 +5,48 @@ import Celebration from '@/components/Celebration'
 import ColumnChart from '@/components/ColumnChart'
 import Header from '@/components/Header'
 import Leaderboard from '@/components/Leaderboard'
-import { LastSaleBanner, RepsBoard, SalesRow } from '@/components/SalesTiles'
+import { BarRow, LastSaleBanner, StatBarList, StaticSalesKpis } from '@/components/SalesTiles'
 import SummaryCards from '@/components/SummaryCards'
 import {
-  BOARDS, CELEBRATION, POLL_INTERVAL_MS, SALES_VIEW_MS, STALE_AFTER_MS,
+  BOARDS, CELEBRATION, POLL_INTERVAL_MS, SALES_SOUND, STALE_AFTER_MS,
 } from '@/lib/config'
+import { isSoundReady, playSaleSound, primeSaleFile, unlockSound } from '@/lib/sound'
 import type { AgentMetrics, Metrics } from '@/lib/types'
+
+const gbp = (v: number) => `£${Math.round(v).toLocaleString('en-GB')}`
+const sellerRows = (list: { name: string; color: string; total: number; count: number }[]): BarRow[] =>
+  list.map((r) => ({
+    key: r.name.toLowerCase(),
+    name: r.name,
+    color: r.color,
+    value: r.total,
+    valueLabel: gbp(r.total),
+    subs: [String(r.count)],
+  }))
+
+// Calls: total drives the bar, with over-1min (and its %) and talktime as
+// trailing columns — the three charts the rotating board used a whole view for.
+const callRows = (agents: AgentMetrics[]): BarRow[] =>
+  agents.map((a) => ({
+    key: a.id,
+    name: a.name,
+    color: a.color,
+    value: a.totalCalls,
+    valueLabel: String(a.totalCalls),
+    subs: [
+      a.totalCalls > 0
+        ? `${a.callsOver1m} (${Math.round((a.callsOver1m / a.totalCalls) * 100)}%)`
+        : '0',
+      String(Math.round(a.talktimeSeconds / 60)),
+    ],
+  }))
+
+// Team totals, previously the SummaryCards strip on the calls view.
+const callTotals = (agents: AgentMetrics[]) => {
+  const sum = (f: (a: AgentMetrics) => number) => agents.reduce((n, a) => n + f(a), 0)
+  const mins = Math.round(sum((a) => a.talktimeSeconds) / 60)
+  return `${sum((a) => a.totalCalls)} calls · ${sum((a) => a.callsOver1m)} over 1m · ${mins} mins talk`
+}
 
 export default function Wallboard({ boardId }: { boardId: string }) {
   const board = BOARDS[boardId] ?? BOARDS.telesales
@@ -117,14 +153,45 @@ export default function Wallboard({ boardId }: { boardId: string }) {
     []
   )
 
-  // ── Sales & ops board: rotate the lower section between views so a wall
-  //    screen never needs scrolling (sales tiles → reps → calls). ──
-  const [view, setView] = useState(0)
+  // ── Coins when a new sale lands. Keyed on the month's SALE COUNT so it
+  //    fires once per sale, not once per revenue card, and never on the first
+  //    paint (or the board would ring every time a screen reloads). ──
+  const [soundLocked, setSoundLocked] = useState(false)
+  const prevSaleCount = useRef<number | null>(null)
+  const prevMonthRevenue = useRef(0)
+
   useEffect(() => {
-    if (!board.features.sales) return
-    const t = setInterval(() => setView((v) => (v + 1) % 3), SALES_VIEW_MS)
-    return () => clearInterval(t)
+    if (!board.features.sales || !SALES_SOUND.enabled) return
+    setSoundLocked(!isSoundReady())
+    if (new URLSearchParams(window.location.search).has('sound')) {
+      if (unlockSound()) {
+        primeSaleFile(SALES_SOUND.file)
+        playSaleSound({
+          volume: SALES_SOUND.volume, amount: 12_000, style: SALES_SOUND.style,
+          file: SALES_SOUND.file, repeat: SALES_SOUND.repeat,
+        })
+        setSoundLocked(false)
+      }
+    }
   }, [board.features.sales])
+
+  useEffect(() => {
+    const sales = metrics?.sales
+    if (!board.features.sales || !SALES_SOUND.enabled || !sales) return
+    const count = sales.monthCount
+    const prev = prevSaleCount.current
+    if (prev !== null && count > prev) {
+      playSaleSound({
+        volume: SALES_SOUND.volume,
+        style: SALES_SOUND.style,
+        file: SALES_SOUND.file,
+        repeat: SALES_SOUND.repeat,
+        amount: Math.max(0, sales.monthRevenue - prevMonthRevenue.current),
+      })
+    }
+    prevSaleCount.current = count
+    prevMonthRevenue.current = sales.monthRevenue
+  }, [metrics?.sales, board.features.sales])
 
   const secondsAgo =
     lastFetchedAt === null ? null : Math.max(0, Math.floor((nowMs - lastFetchedAt) / 1000))
@@ -184,10 +251,10 @@ export default function Wallboard({ boardId }: { boardId: string }) {
     </>
   )
 
-  const rotating = board.features.sales && metrics?.sales
+  const sales = board.features.sales ? metrics?.sales : undefined
 
   return (
-    <main className="mx-auto flex max-w-[1500px] flex-col gap-10 p-6 lg:p-10">
+    <main className="mx-auto flex max-w-[1760px] flex-col gap-8 p-6 lg:p-8">
       <div className="fade-up">
         <Header
           title={board.title}
@@ -198,31 +265,60 @@ export default function Wallboard({ boardId }: { boardId: string }) {
         {rolesLegend && <p className="mt-2 text-base text-neutral-500">{rolesLegend}</p>}
       </div>
 
-      {rotating ? (
-        <>
-          <div className="flex items-center justify-between gap-6">
-            <div className="min-w-0 flex-1">
-              <LastSaleBanner sales={metrics!.sales!} />
+      {sales && soundLocked && (
+        // Shown once per page load: browsers won't play the ka-ching until the
+        // page has had a real click. One tap on the wall screen and it's armed.
+        <button
+          type="button"
+          onClick={() => {
+            if (unlockSound()) {
+              primeSaleFile(SALES_SOUND.file)
+              playSaleSound({
+                volume: SALES_SOUND.volume, amount: 12_000, style: SALES_SOUND.style,
+                file: SALES_SOUND.file, repeat: SALES_SOUND.repeat,
+              })
+              setSoundLocked(false)
+            }
+          }}
+          className="fade-up self-start rounded-lg border-[0.5px] border-hairline bg-surface px-5 py-2.5 text-base font-medium text-neutral-300 transition-colors hover:text-white"
+        >
+          🔔 Tap once to enable the sale sound
+        </button>
+      )}
+
+      {sales ? (
+        // Everything on one screen, nothing rotates: reps ranked on the left;
+        // month/week/today + Dec&Josh + calls stacked on the right.
+        <div className="flex flex-col gap-7">
+          <LastSaleBanner sales={sales} />
+          <div className="grid grid-cols-1 gap-7 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+            <div className="rounded-xl border-[0.5px] border-hairline bg-surface px-7 py-6">
+              <StatBarList
+                title="Reps — sold this month"
+                rows={sellerRows(sales.reps)}
+                columns={['Sold', 'Sales']}
+              />
             </div>
-            <span className="flex shrink-0 gap-2">
-              {['Sales', 'Reps', 'Calls'].map((label, i) => (
-                <span
-                  key={label}
-                  className={`text-sm font-medium uppercase tracking-[0.14em] ${
-                    i === view ? 'text-neutral-200' : 'text-neutral-600'
-                  }`}
-                >
-                  {label}
-                </span>
-              ))}
-            </span>
+            <div className="flex flex-col gap-7">
+              <StaticSalesKpis sales={sales} />
+              <div className="rounded-xl border-[0.5px] border-hairline bg-surface px-7 py-6">
+                <StatBarList
+                  title="Dec & Josh — sold this month"
+                  rows={sellerRows(sales.sellers)}
+                  columns={['Sold', 'Sales']}
+                />
+              </div>
+              <div className="rounded-xl border-[0.5px] border-hairline bg-surface px-7 py-6">
+                <StatBarList
+                  title="Calls today"
+                  rows={callRows(agents)}
+                  columns={['Calls', '1 min+', 'Mins']}
+                  totals={callTotals(agents)}
+                />
+              </div>
+            </div>
           </div>
-          <div key={view} className="fade-up flex flex-col gap-10">
-            {view === 0 && <SalesRow sales={metrics!.sales!} />}
-            {view === 1 && <RepsBoard sales={metrics!.sales!} />}
-            {view === 2 && callsSection}
-          </div>
-        </>
+        </div>
       ) : (
         callsSection
       )}

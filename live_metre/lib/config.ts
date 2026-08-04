@@ -63,6 +63,23 @@ export const BOARDS: Record<string, BoardSpec> = {
   },
 }
 
+// Cash-register sound when a new sale lands (sales & ops board only). Browsers
+// block audio until the page gets a real click, so the board shows a one-time
+// "enable sound" badge; a kiosk can skip it by launching Chrome with
+// --autoplay-policy=no-user-gesture-required. Add ?sound=1 to test on demand.
+// `file` wins if present (drop a real recording at live_metre/public/sounds/ —
+// see the README there). Otherwise the sound is synthesised: 'register' = till
+// ka-ching, 'coins' = handful of coins landing.
+export const SALES_SOUND = {
+  enabled: true,
+  volume: 0.35,
+  style: 'register' as 'coins' | 'register',
+  file: '/sounds/sale.mp3' as string | null,
+  // The recording is ~3s; this chains it so a sale gets a longer run of the
+  // till. 3 ≈ 8.7s. Raise for longer, set to 1 for a single ka-ching.
+  repeat: 3,
+}
+
 // Hero sales tile slideshow: month revenue ⇄ week revenue, rotating.
 export const SALES_SLIDE_MS = 9_000
 

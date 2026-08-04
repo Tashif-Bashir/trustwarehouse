@@ -182,7 +182,7 @@ async function querySales(): Promise<SalesMetrics | null> {
     WHERE status = 'active' AND customer_name NOT LIKE 'Zzz Testlead%'
   `
   try {
-    const [aggPromise, sellersPromise, lastPromise] = [
+    const [aggPromise, sellersPromise, lastPromise, rosterPromise] = [
       // daily grain — month/week/today/yesterday and the 7-day strip are all
       // derived from this one result
       client().query({
@@ -207,11 +207,14 @@ async function querySales(): Promise<SalesMetrics | null> {
         location: 'US',
       }),
       // the banner shows live app activity only (backfilled history has no
-      // meaningful logged-at moment)
+      // meaningful logged-at moment). `day` lets the UI qualify a stale sale
+      // rather than implying it just happened.
       client().query({
         query: `
           SELECT customer_name, sale_type, sold_by, ${amt} AS amount,
-                 FORMAT_TIMESTAMP('%H:%M', created_at, 'Europe/London') AS at_uk
+                 FORMAT_TIMESTAMP('%H:%M', created_at, 'Europe/London') AS at_uk,
+                 FORMAT_TIMESTAMP('%Y-%m-%d', created_at, 'Europe/London') AS day,
+                 FORMAT_TIMESTAMP('%a %e %b', created_at, 'Europe/London') AS day_label
           ${base}
             AND source = 'app'
           ORDER BY created_at DESC
@@ -219,11 +222,23 @@ async function querySales(): Promise<SalesMetrics | null> {
         `,
         location: 'US',
       }),
+      // the booking-app roster: seeds the reps list so it is never empty (e.g.
+      // the 1st of a month, before anyone has sold) and new reps appear at £0
+      // from their first day. Josh is internal sales — he has his own tile.
+      client().query({
+        query: `
+          SELECT name
+          FROM \`${PROJECT}.app.reps\`
+          WHERE name != 'Josh Barron'
+        `,
+        location: 'US',
+      }),
     ]
-    const [[dailyRows], [sellerRows], [lastRows]] = await Promise.all([
+    const [[dailyRows], [sellerRows], [lastRows], [rosterRows]] = await Promise.all([
       aggPromise,
       sellersPromise,
       lastPromise,
+      rosterPromise,
     ])
 
     // derive the windows from the daily grain (all dates are UK-local)
@@ -279,14 +294,25 @@ async function querySales(): Promise<SalesMetrics | null> {
       '#0ea5b7', '#d6a52a', '#d64545', '#5b8a2a', '#7a6ff0',
       '#c257c2', '#4f9d8f', '#b0713a', '#6787b8',
     ]
-    const reps = allSellers
-      .filter((r) => r.name !== 'Dec' && r.name !== 'Josh')
-      .map((r, i) => ({
-        name: r.name,
-        color: REP_PALETTE[i % REP_PALETTE.length],
-        count: Number(r.count),
-        total: Number(r.total),
-      }))
+    // Union of the booking-app roster and whoever actually sold this month:
+    // the roster guarantees the panel is never empty and that a new rep appears
+    // at £0 from day one; the sellers side means historical/ex-rep names in the
+    // ledger still show their revenue instead of being silently dropped.
+    const soldThisMonth = allSellers.filter((r) => r.name !== 'Dec' && r.name !== 'Josh')
+    const roster = (rosterRows as { name: string }[]).map((r) => r.name)
+    const repNames = Array.from(new Set([...soldThisMonth.map((r) => r.name), ...roster]))
+    const reps = repNames
+      .map((name) => {
+        const row = soldThisMonth.find((r) => r.name === name)
+        return {
+          name,
+          count: Number(row?.count ?? 0),
+          total: Number(row?.total ?? 0),
+        }
+      })
+      // £ desc, then alphabetical so the not-yet-sold tail has a stable order
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
+      .map((r, i) => ({ ...r, color: REP_PALETTE[i % REP_PALETTE.length] }))
 
     const typeLabels: Record<string, string> = {
       on_site: 'Sold on Site',
@@ -299,7 +325,18 @@ async function querySales(): Promise<SalesMetrics | null> {
       sold_by: string | null
       amount: number
       at_uk: string
+      day: string
+      day_label: string
     }[])[0]
+    // Qualify anything not logged today, so a Monday morning (or the 1st of a
+    // month) can't show Friday's sale as if it had just landed.
+    const lastSaleWhen = last
+      ? last.day === today
+        ? last.at_uk
+        : last.day === addDays(today, -1)
+          ? `Yesterday ${last.at_uk}`
+          : `${last.day_label.replace(/\s+/g, ' ').trim()} ${last.at_uk}`
+      : ''
 
     const monthLabel = new Intl.DateTimeFormat('en-GB', {
       timeZone: 'Europe/London',
@@ -326,7 +363,7 @@ async function querySales(): Promise<SalesMetrics | null> {
             typeLabel: typeLabels[last.sale_type] ?? last.sale_type,
             soldBy: last.sold_by,
             customer: last.customer_name,
-            atUk: last.at_uk,
+            atUk: lastSaleWhen,
           }
         : null,
     }

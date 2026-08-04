@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Avatar from '@/components/Avatar'
 import ColumnChart from '@/components/ColumnChart'
+import RollingNumber from '@/components/RollingNumber'
 import { SALES_SLIDE_MS } from '@/lib/config'
 import type { SalesMetrics } from '@/lib/types'
 import { useCountUp } from '@/lib/useCountUp'
@@ -110,7 +112,7 @@ function TodayCard({ sales }: { sales: SalesMetrics }) {
 
 // Field reps' month £ on a full-width row — all reps fit at once at wallboard
 // widths; pagination only kicks in if the roster ever outgrows a row.
-const REPS_PER_SLIDE = 14
+const REPS_PER_SLIDE = 20
 
 function RepsSlideshow({ sales }: { sales: SalesMetrics }) {
   const pages = Math.max(1, Math.ceil(sales.reps.length / REPS_PER_SLIDE))
@@ -193,4 +195,213 @@ export function SalesRow({ sales }: { sales: SalesMetrics }) {
 export function RepsBoard({ sales }: { sales: SalesMetrics }) {
   if (sales.reps.length === 0) return null
   return <RepsSlideshow sales={sales} />
+}
+
+// ── Static (non-rotating) building blocks for the one-screen sales board ──
+
+export interface BarRow {
+  key: string
+  name: string
+  color: string
+  value: number // drives bar width
+  valueLabel: string // big right-aligned figure
+  subs?: string[] // trailing metric columns, aligned under `columns` headers
+}
+
+// A dense horizontal-bar ranking: one row per entity, all visible at once.
+// Fits ~15 rows legibly at wallboard distance — the research-backed replacement
+// for a paginated vertical column chart. `columns` labels the trailing metrics
+// so a second and third number per row stay readable from across the office.
+export function StatBarList({
+  title,
+  rows,
+  columns,
+  totals,
+}: {
+  title: string
+  rows: BarRow[]
+  columns?: string[]
+  totals?: string
+}) {
+  const max = Math.max(1, ...rows.map((r) => r.value))
+  return (
+    <div className="fade-up flex h-full flex-col">
+      <div className="flex items-baseline justify-between gap-4">
+        <h3 className="font-display text-3xl font-semibold uppercase tracking-wide">{title}</h3>
+        {totals && (
+          <span className="shrink-0 font-display text-lg tabular-nums text-neutral-400">
+            {totals}
+          </span>
+        )}
+      </div>
+      {columns && columns.length > 0 && (
+        <div className="mt-3 flex items-center gap-4 text-xs font-medium uppercase tracking-[0.16em] text-neutral-600">
+          <span className="w-7 shrink-0" />
+          <span className="w-44 shrink-0" />
+          <span className="flex-1" />
+          <span className="w-32 shrink-0 text-right">{columns[0]}</span>
+          {columns.slice(1).map((c) => (
+            <span key={c} className="w-16 shrink-0 text-right">
+              {c}
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="mt-3 flex flex-1 flex-col justify-between gap-2">
+        {rows.map((r, i) => (
+          <div key={r.key} className="flex items-center gap-4">
+            <span className="w-7 shrink-0 text-right font-display text-lg font-medium tabular-nums text-neutral-500">
+              {i + 1}
+            </span>
+            <span className="flex w-44 shrink-0 items-center gap-2.5">
+              <Avatar id={r.key} name={r.name} color={r.color} size={30} />
+              <span className="truncate font-display text-xl font-medium text-neutral-100">
+                {r.name}
+              </span>
+            </span>
+            <div className="relative h-7 flex-1 overflow-hidden rounded-md bg-white/[0.04]">
+              <div
+                className="h-full rounded-md transition-[width] duration-700 ease-out"
+                style={{
+                  width: `${(r.value / max) * 100}%`,
+                  backgroundColor: r.color,
+                  boxShadow: `0 0 12px color-mix(in srgb, ${r.color} 20%, transparent)`,
+                }}
+              />
+            </div>
+            <span className="w-32 shrink-0 text-right font-display text-2xl font-semibold tabular-nums">
+              {r.valueLabel}
+            </span>
+            {(r.subs ?? []).map((s, j) => (
+              <span
+                key={j}
+                className="w-16 shrink-0 text-right font-display text-base tabular-nums text-neutral-500"
+              >
+                {s}
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function KpiTile({
+  label,
+  value,
+  count,
+  sub,
+  stats,
+  children,
+}: {
+  label: string
+  value: number
+  count: number
+  sub: string
+  stats?: { label: string; value: string }[]
+  children?: React.ReactNode
+}) {
+  return (
+    <div className="flex flex-col rounded-xl border-[0.5px] border-hairline bg-surface px-6 py-5">
+      <p className="text-sm font-medium uppercase tracking-[0.18em] text-neutral-400">{label}</p>
+      <p className="mt-2 flex font-display text-6xl font-semibold tracking-tight tabular-nums">
+        {/* mechanical roll; onIncrease is where a money sound would hang */}
+        <RollingNumber value={value} prefix="£" />
+      </p>
+      <p className="mt-2 text-base text-neutral-400">
+        <span className="font-semibold text-neutral-200 tabular-nums">{count}</span> {sub}
+      </p>
+      {stats && stats.length > 0 && (
+        // avg / biggest / yesterday — the detail the rotating board buried in
+        // its slideshow, kept on screen permanently here.
+        <div className="mt-3 flex gap-5 border-t border-hairline pt-3">
+          {stats.map((s) => (
+            <span key={s.label} className="flex flex-col">
+              <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-neutral-500">
+                {s.label}
+              </span>
+              <span className="font-display text-xl font-semibold tabular-nums text-neutral-200">
+                {s.value}
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+      {children}
+    </div>
+  )
+}
+
+// The 7-day strip from the old Today card: today in emerald, the rest sky blue,
+// heights in pixels so a quiet day still shows a stub instead of vanishing.
+function Last7Strip({ sales }: { sales: SalesMetrics }) {
+  const maxDay = Math.max(1, ...sales.last7.map((d) => d.total))
+  const dayLetter = (iso: string) =>
+    ['S', 'M', 'T', 'W', 'T', 'F', 'S'][new Date(iso + 'T12:00:00Z').getUTCDay()]
+  return (
+    <div className="mt-3 border-t border-hairline pt-3">
+      <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-neutral-500">
+        Last 7 days
+      </p>
+      <div className="flex items-end gap-2">
+        {sales.last7.map((d, i) => {
+          const isToday = i === sales.last7.length - 1
+          const px = Math.max(3, Math.round((d.total / maxDay) * 44))
+          return (
+            <div key={d.date} className="flex flex-1 flex-col items-center gap-1">
+              <div
+                className={`w-full rounded-sm ${isToday ? 'bg-emerald-400' : 'bg-sky-500'}`}
+                style={{ height: `${px}px` }}
+                title={`${d.date}: ${gbp(d.total)}`}
+              />
+              <span className={`text-[10px] ${isToday ? 'text-emerald-400' : 'text-neutral-600'}`}>
+                {dayLetter(d.date)}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// Month / week / today shown side by side, all live — no slideshow. Every
+// figure the rotating board showed is here at once: avg and biggest per sale,
+// yesterday's total, and the 7-day trend.
+export function StaticSalesKpis({ sales }: { sales: SalesMetrics }) {
+  const avg = (total: number, n: number) => (n > 0 ? gbp(total / n) : '£0')
+  return (
+    <section className="grid grid-cols-3 gap-5">
+      <KpiTile
+        label={`${sales.monthLabel} revenue`}
+        value={sales.monthRevenue}
+        count={sales.monthCount}
+        sub="sales"
+        stats={[
+          { label: 'Avg', value: avg(sales.monthRevenue, sales.monthCount) },
+          { label: 'Biggest', value: gbp(sales.monthMax) },
+        ]}
+      />
+      <KpiTile
+        label="This week"
+        value={sales.weekRevenue}
+        count={sales.weekCount}
+        sub="sales"
+        stats={[
+          { label: 'Avg', value: avg(sales.weekRevenue, sales.weekCount) },
+          { label: 'Biggest', value: gbp(sales.weekMax) },
+        ]}
+      />
+      <KpiTile
+        label="Today domestic"
+        value={sales.todayRevenue}
+        count={sales.todayCount}
+        sub={sales.todayCount === 1 ? 'sale today' : 'sales today'}
+        stats={[{ label: 'Yesterday', value: gbp(sales.yesterdayRevenue) }]}
+      >
+        <Last7Strip sales={sales} />
+      </KpiTile>
+    </section>
+  )
 }

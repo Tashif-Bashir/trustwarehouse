@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Avatar from '@/components/Avatar'
 import ColumnChart from '@/components/ColumnChart'
 import RollingNumber from '@/components/RollingNumber'
@@ -294,6 +294,7 @@ function KpiTile({
   sub,
   stats,
   children,
+  cardRef,
 }: {
   label: string
   value: number
@@ -301,9 +302,13 @@ function KpiTile({
   sub: string
   stats?: { label: string; value: string }[]
   children?: React.ReactNode
+  cardRef?: (el: HTMLDivElement | null) => void
 }) {
   return (
-    <div className="flex flex-col rounded-xl border-[0.5px] border-hairline bg-surface px-6 py-5">
+    <div
+      ref={cardRef}
+      className="flex flex-col rounded-xl border-[0.5px] border-hairline bg-surface px-6 py-5"
+    >
       <p className="text-sm font-medium uppercase tracking-[0.18em] text-neutral-400">{label}</p>
       <p className="mt-2 flex font-display text-6xl font-semibold tracking-tight tabular-nums">
         {/* mechanical roll; onIncrease is where a money sound would hang */}
@@ -366,14 +371,64 @@ function Last7Strip({ sales }: { sales: SalesMetrics }) {
   )
 }
 
+// Money just landed: pop each card in turn. Driven with the Web Animations API
+// rather than a CSS class so it re-triggers cleanly on every sale without
+// remounting the tiles — a remount would reset the odometer mid-roll.
+const POP_MS = 1400
+const POP_STAGGER_MS = 460
+
+function pop(el: HTMLElement, delay: number) {
+  // Deliberately NOT gated on prefers-reduced-motion: this is a wall display,
+  // not someone's personal device, and honouring the OS setting made the whole
+  // celebration silently do nothing on a machine with Windows animations off.
+  //
+  // At this scale a card grows past its grid cell, so lift it above its
+  // neighbours for the duration or the edges clip against them.
+  el.style.position = 'relative'
+  el.style.zIndex = '20'
+  const anim = el.animate(
+    [
+      { transform: 'scale(1) translateX(0)', boxShadow: '0 0 0 rgba(52,211,153,0)' },
+      { transform: 'scale(1.13) translateX(-9px)', boxShadow: '0 0 52px rgba(52,211,153,0.55)' },
+      { transform: 'scale(1.14) translateX(9px)' },
+      { transform: 'scale(1.13) translateX(-7px)' },
+      { transform: 'scale(1.10) translateX(6px)', boxShadow: '0 0 40px rgba(52,211,153,0.4)' },
+      { transform: 'scale(1.06) translateX(-3px)' },
+      { transform: 'scale(1.02) translateX(0)', boxShadow: '0 0 16px rgba(52,211,153,0.15)' },
+      { transform: 'scale(1) translateX(0)', boxShadow: '0 0 0 rgba(52,211,153,0)' },
+    ],
+    { duration: POP_MS, delay, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'none' }
+  )
+  anim.finished.then(() => {
+    el.style.zIndex = ''
+  }).catch(() => {
+    el.style.zIndex = ''
+  })
+}
+
 // Month / week / today shown side by side, all live — no slideshow. Every
 // figure the rotating board showed is here at once: avg and biggest per sale,
-// yesterday's total, and the 7-day trend.
-export function StaticSalesKpis({ sales }: { sales: SalesMetrics }) {
+// yesterday's total, and the 7-day trend. `pulse` increments on each new sale
+// and runs the cards through a staggered celebration.
+export function StaticSalesKpis({ sales, pulse = 0 }: { sales: SalesMetrics; pulse?: number }) {
   const avg = (total: number, n: number) => (n > 0 ? gbp(total / n) : '£0')
+  const cards = useRef<(HTMLDivElement | null)[]>([])
+
+  useEffect(() => {
+    if (!pulse) return // don't fire on first paint
+    cards.current.forEach((el, i) => {
+      if (el) pop(el, i * POP_STAGGER_MS)
+    })
+  }, [pulse])
+
+  const ref = (i: number) => (el: HTMLDivElement | null) => {
+    cards.current[i] = el
+  }
+
   return (
     <section className="grid grid-cols-3 gap-5">
       <KpiTile
+        cardRef={ref(0)}
         label={`${sales.monthLabel} revenue`}
         value={sales.monthRevenue}
         count={sales.monthCount}
@@ -384,6 +439,7 @@ export function StaticSalesKpis({ sales }: { sales: SalesMetrics }) {
         ]}
       />
       <KpiTile
+        cardRef={ref(1)}
         label="This week"
         value={sales.weekRevenue}
         count={sales.weekCount}
@@ -394,6 +450,7 @@ export function StaticSalesKpis({ sales }: { sales: SalesMetrics }) {
         ]}
       />
       <KpiTile
+        cardRef={ref(2)}
         label="Today domestic"
         value={sales.todayRevenue}
         count={sales.todayCount}

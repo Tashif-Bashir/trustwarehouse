@@ -157,6 +157,9 @@ export default function Wallboard({ boardId }: { boardId: string }) {
   //    fires once per sale, not once per revenue card, and never on the first
   //    paint (or the board would ring every time a screen reloads). ──
   const [soundLocked, setSoundLocked] = useState(false)
+  // Bumped on each new sale; StaticSalesKpis watches it and runs the three
+  // cards through a staggered pop so the screen celebrates in time with the till.
+  const [salePulse, setSalePulse] = useState(0)
   const prevSaleCount = useRef<number | null>(null)
   const prevMonthRevenue = useRef(0)
 
@@ -171,11 +174,16 @@ export default function Wallboard({ boardId }: { boardId: string }) {
       if (cancelled) return
       setSoundLocked(!armed)
       if (armed) primeSaleFile(SALES_SOUND.file)
-      if (armed && new URLSearchParams(window.location.search).has('sound')) {
-        playSaleSound({
-          volume: SALES_SOUND.volume, amount: 12_000, style: SALES_SOUND.style,
-          file: SALES_SOUND.file, repeat: SALES_SOUND.repeat,
-        })
+      // ?sound=1 fires the whole celebration — sound and card pop — once, so it
+      // can be checked without waiting for a real sale.
+      if (new URLSearchParams(window.location.search).has('sound')) {
+        setSalePulse((p) => p + 1)
+        if (armed) {
+          playSaleSound({
+            volume: SALES_SOUND.volume, amount: 12_000, style: SALES_SOUND.style,
+            file: SALES_SOUND.file, repeat: SALES_SOUND.repeat,
+          })
+        }
       }
     })
     return () => {
@@ -183,11 +191,35 @@ export default function Wallboard({ boardId }: { boardId: string }) {
     }
   }, [board.features.sales])
 
+  // ?demo=1 replays the celebration every few seconds so it can be judged on
+  // the actual wall screen without waiting for real sales to land.
+  useEffect(() => {
+    if (!board.features.sales) return
+    if (!new URLSearchParams(window.location.search).has('demo')) return
+    const t = setInterval(() => {
+      setSalePulse((p) => p + 1)
+      playSaleSound({
+        volume: SALES_SOUND.volume, amount: 12_000, style: SALES_SOUND.style,
+        file: SALES_SOUND.file, repeat: SALES_SOUND.repeat,
+      })
+    }, 7500)
+    return () => clearInterval(t)
+  }, [board.features.sales])
+
   useEffect(() => {
     const sales = metrics?.sales
-    if (!board.features.sales || !SALES_SOUND.enabled || !sales) return
+    if (!board.features.sales || !sales) return
     const count = sales.monthCount
     const prev = prevSaleCount.current
+    if (prev !== null && count > prev) {
+      // the visual celebration runs whether or not audio was ever unlocked
+      setSalePulse((p) => p + 1)
+    }
+    if (!SALES_SOUND.enabled) {
+      prevSaleCount.current = count
+      prevMonthRevenue.current = sales.monthRevenue
+      return
+    }
     if (prev !== null && count > prev) {
       playSaleSound({
         volume: SALES_SOUND.volume,
@@ -308,7 +340,7 @@ export default function Wallboard({ boardId }: { boardId: string }) {
               />
             </div>
             <div className="flex flex-col gap-7">
-              <StaticSalesKpis sales={sales} />
+              <StaticSalesKpis sales={sales} pulse={salePulse} />
               <div className="rounded-xl border-[0.5px] border-hairline bg-surface px-7 py-6">
                 <StatBarList
                   title="Dec & Josh — sold this month"

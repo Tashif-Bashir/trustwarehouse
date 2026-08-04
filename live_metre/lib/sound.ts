@@ -16,6 +16,27 @@ let filePending: Promise<void> | null = null
 // Set only when the fetch/decode actually failed, so a sale that lands while
 // the file is still downloading waits for it instead of firing the synth.
 let fileFailed = false
+// Where the audible part of the recording ends, in seconds. Sound files are
+// usually padded with silence (the supplied ka-ching is 3.02s long but stops
+// making noise at 1.32s), and chaining on the full buffer length would leave
+// a dead gap between repeats.
+let fileEnd = 0
+
+/** Last sample above the noise floor, in seconds — i.e. the real end. */
+function audibleEnd(buf: AudioBuffer): number {
+  const FLOOR = 0.01
+  let last = 0
+  for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+    const d = buf.getChannelData(ch)
+    for (let i = d.length - 1; i >= 0; i--) {
+      if (Math.abs(d[i]) > FLOOR) {
+        if (i > last) last = i
+        break
+      }
+    }
+  }
+  return last > 0 ? last / buf.sampleRate : buf.duration
+}
 
 function audioCtx(): AudioContext | null {
   if (typeof window === 'undefined') return null
@@ -211,6 +232,7 @@ export function primeSaleFile(url?: string | null): void {
     .then((buf) => c.decodeAudioData(buf))
     .then((decoded) => {
       fileBuf = decoded
+      fileEnd = audibleEnd(decoded)
     })
     .catch(() => {
       /* no file, or undecodable — synthesised sound stays in charge */
@@ -239,17 +261,16 @@ export function playSaleSound(
 
   const playFile = (): boolean => {
     if (!fileBuf) return false
-    // The recording is only ~3s. Chain it a few times on the audio clock so a
-    // sale lands with a proper run of the till rather than a single blip. A
-    // small overlap stops each repeat sounding like a restart.
+    // Chain the recording so a sale lands with a proper run of the till. Space
+    // the repeats by where the audio ACTUALLY ends, not the buffer length, or
+    // the file's trailing silence shows up as a gap between them.
     const times = Math.max(1, Math.round(opts.repeat ?? 1))
-    const step = Math.max(0.05, fileBuf.duration - 0.12)
+    const step = Math.max(0.05, (fileEnd || fileBuf.duration) - 0.02)
     for (let i = 0; i < times; i++) {
       const src = c.createBufferSource()
       src.buffer = fileBuf
       const g = c.createGain()
-      // ease the tail off slightly so a long chain doesn't feel mechanical
-      g.gain.value = (opts.volume ?? 0.35) * (i === 0 ? 1 : 0.92 ** i)
+      g.gain.value = opts.volume ?? 0.35
       src.connect(g).connect(c.destination)
       src.start(c.currentTime + i * step)
     }

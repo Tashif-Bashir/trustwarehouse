@@ -75,9 +75,10 @@ export const SALES_SOUND = {
   volume: 0.35,
   style: 'register' as 'coins' | 'register',
   file: '/sounds/sale.mp3' as string | null,
-  // The recording is ~3s; this chains it so a sale gets a longer run of the
-  // till. 3 ≈ 8.7s. Raise for longer, set to 1 for a single ka-ching.
-  repeat: 3,
+  // Chains the recording back to back. The supplied clip is audible for ~1.3s
+  // (the rest of the file is silence, which sound.ts trims), so 2 ≈ 2.6s of
+  // continuous till. Raise for longer, set to 1 for a single ka-ching.
+  repeat: 2,
 }
 
 // Hero sales tile slideshow: month revenue ⇄ week revenue, rotating.

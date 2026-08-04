@@ -290,6 +290,70 @@ WHERE UPPER(direction) IN ('INBOUND', 'OUTBOUND')
 GROUP BY date, hour_of_day, day_of_week, direction, phone_system
 """
 
+# app.sales lives in the US multi-region while the mart is europe-west2, so this
+# one cannot be a CREATE TABLE AS SELECT - BigQuery will not query across
+# regions. It is pulled into memory and loaded back (750 rows, trivial).
+# Free-text fields (note, void_reason, cancel_reason) are left out: marketing
+# needs the revenue, not internal commentary on individual customers.
+SALES_US = """
+SELECT
+  sale_id,
+  lead_id,
+  customer_name,
+  postcode,
+  sale_date,
+  sale_type,
+  COALESCE(heating_amount, 0) AS heating_amount,
+  COALESCE(water_amount, 0)   AS water_amount,
+  COALESCE(chc_amount, 0)     AS chc_amount,
+  ROUND(COALESCE(heating_amount,0) + COALESCE(water_amount,0)
+        + COALESCE(chc_amount,0), 2) AS total_amount,
+  sold_by,
+  product_bought,
+  source,
+  status,
+  entered_by,
+  created_at
+FROM `trustwarehouse.app.sales`
+WHERE customer_name NOT LIKE 'Zzz Testlead%'
+"""
+
+SALES_RECONCILED = f"""
+SELECT
+  lead_id, customer_name, rep, team, sale_date, sale_month,
+  amount_ex_vat, is_water, amount_to_target, source,
+  is_provisional, is_unattributed
+FROM `{PROJECT}.gold.gold_sales_reconciled`
+"""
+
+# Revenue with the marketing attribution already joined on, so "what did this
+# campaign actually earn" is one query rather than a join people get wrong.
+# Sales whose lead is unknown still appear, with NULL platform/campaign, so the
+# revenue total always reconciles to sales_reconciled.
+SALES_ATTRIBUTED = f"""
+SELECT
+  s.lead_id,
+  s.customer_name,
+  s.sale_date,
+  s.sale_month,
+  s.amount_ex_vat,
+  s.is_water,
+  s.rep,
+  s.team,
+  a.platform,
+  a.utm_campaign,
+  a.utm_source,
+  a.utm_content,
+  a.click_id_type,
+  a.crm_channel,
+  a.marketing_region,
+  a.created_date AS lead_created_date,
+  DATE_DIFF(s.sale_date, a.created_date, DAY) AS days_lead_to_sale
+FROM `{PROJECT}.gold.gold_sales_reconciled` s
+LEFT JOIN `{PROJECT}.{DST}.lead_attribution` a
+  ON CAST(a.lead_id AS STRING) = CAST(s.lead_id AS STRING)
+"""
+
 LEAD_CALLS = f"""
 SELECT
   call_id,
@@ -338,7 +402,8 @@ SELECT
 FROM `{PROJECT}.gold.gold_lead_calls`
 """
 
-# order matters: leads_per_day reads the lead_attribution table built above
+# order matters: leads_per_day and sales_attributed read the lead_attribution
+# table built earlier in the same run
 DERIVED = [
     ("sharpspring_leads", SHARPSPRING_LEADS),
     ("lead_attribution", LEAD_ATTRIBUTION),
@@ -346,6 +411,8 @@ DERIVED = [
     ("spend_per_day", SPEND_PER_DAY),
     ("calls_per_day", CALLS_PER_DAY),
     ("lead_calls", LEAD_CALLS),
+    ("sales_reconciled", SALES_RECONCILED),
+    ("sales_attributed", SALES_ATTRIBUTED),
 ]
 
 
@@ -356,6 +423,23 @@ def build(name: str, sql: str) -> int:
     return list(client.query(
         f"SELECT COUNT(*) AS c FROM `{PROJECT}.{DST}.{name}`"
     ).result())[0].c
+
+
+def build_cross_region(name: str, sql: str, source_location: str) -> int:
+    """Copy a table from another BigQuery region via the client.
+
+    BigQuery cannot query across regions, so a US table cannot be written into
+    the EU mart with SQL. Small tables travel through a dataframe instead.
+    """
+    df = client.query(sql, location=source_location).result().to_dataframe()
+    job = client.load_table_from_dataframe(
+        df,
+        f"{PROJECT}.{DST}.{name}",
+        job_config=bigquery.LoadJobConfig(write_disposition="WRITE_TRUNCATE"),
+        location="europe-west2",
+    )
+    job.result()
+    return len(df)
 
 
 def main() -> None:
@@ -369,6 +453,16 @@ def main() -> None:
         except Exception as e:  # keep going; one bad table shouldn't stall the mart
             failed.append((t, str(e).splitlines()[0][:90]))
             print(f"  FAIL {t:<45} {str(e).splitlines()[0][:55]}")
+
+    # before the derived tables, because sales_attributed does not depend on it
+    # but a failure here shouldn't stop the rest of the mart rebuilding
+    try:
+        n = build_cross_region("sales", SALES_US, "US")
+        done.append(("sales", n))
+        print(f"  ok   {'sales (US -> EU)':<45} {n:>10,}")
+    except Exception as e:
+        failed.append(("sales", str(e).splitlines()[0][:90]))
+        print(f"  FAIL {'sales (US -> EU)':<45} {str(e).splitlines()[0][:55]}")
 
     for name, sql in DERIVED:
         try:
@@ -388,7 +482,7 @@ def main() -> None:
       FROM UNNEST([{rows}])
     """).result()
 
-    print(f"\n{len(done)}/{len(RAW_COPIES) + len(DERIVED)} tables, "
+    print(f"\n{len(done)}/{len(RAW_COPIES) + len(DERIVED) + 1} tables, "
           f"{sum(n for _, n in done):,} rows")
     if failed:
         print("FAILURES:")

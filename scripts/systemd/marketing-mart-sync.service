@@ -1,0 +1,19 @@
+[Unit]
+Description=Rebuild the marketing data mart (bronze/silver/gold -> marketing_workspace)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/trustwarehouse
+EnvironmentFile=/home/ubuntu/trustwarehouse/.env
+Environment=PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStartPre=-/usr/bin/git pull --ff-only origin main
+ExecStart=/home/ubuntu/.local/bin/uv run python scripts/sync_marketing_workspace.py
+TimeoutStartSec=900
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

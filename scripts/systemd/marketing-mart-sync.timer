@@ -1,0 +1,12 @@
+[Unit]
+Description=Rebuild the marketing data mart hourly
+
+[Timer]
+# :40 keeps it clear of the other timers (:00 ad syncs, :20 call tests) so the
+# hourly rebuild never lands on top of a dbt build.
+OnCalendar=*-*-* *:40:00 Europe/London
+Persistent=true
+Unit=marketing-mart-sync.service
+
+[Install]
+WantedBy=timers.target

@@ -54,6 +54,23 @@ export function isSoundReady(): boolean {
   return ctx?.state === 'running'
 }
 
+/**
+ * Try to start audio WITHOUT a user gesture. Succeeds on a kiosk launched with
+ * --autoplay-policy=no-user-gesture-required (or where the browser already
+ * trusts the site), in which case the board never shows the enable-sound badge
+ * and a wall screen nobody touches still rings. Resolves false on a normal
+ * browser, where a click is the only way in.
+ */
+export function tryAutoUnlock(): Promise<boolean> {
+  const c = audioCtx()
+  if (!c) return Promise.resolve(false)
+  if (c.state === 'running') return Promise.resolve(true)
+  return c
+    .resume()
+    .then(() => c.state === 'running')
+    .catch(() => false)
+}
+
 /** Call from a real user gesture (click/keypress). Returns true once running. */
 export function unlockSound(): boolean {
   const c = audioCtx()

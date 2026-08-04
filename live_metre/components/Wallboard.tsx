@@ -10,7 +10,7 @@ import SummaryCards from '@/components/SummaryCards'
 import {
   BOARDS, CELEBRATION, POLL_INTERVAL_MS, SALES_SOUND, STALE_AFTER_MS,
 } from '@/lib/config'
-import { isSoundReady, playSaleSound, primeSaleFile, unlockSound } from '@/lib/sound'
+import { playSaleSound, primeSaleFile, tryAutoUnlock, unlockSound } from '@/lib/sound'
 import type { AgentMetrics, Metrics } from '@/lib/types'
 
 const gbp = (v: number) => `£${Math.round(v).toLocaleString('en-GB')}`
@@ -162,16 +162,24 @@ export default function Wallboard({ boardId }: { boardId: string }) {
 
   useEffect(() => {
     if (!board.features.sales || !SALES_SOUND.enabled) return
-    setSoundLocked(!isSoundReady())
-    if (new URLSearchParams(window.location.search).has('sound')) {
-      if (unlockSound()) {
-        primeSaleFile(SALES_SOUND.file)
+    // A wall screen has nobody to click anything, so try to arm audio on our
+    // own first — that works when the kiosk is launched with
+    // --autoplay-policy=no-user-gesture-required. Only if the browser refuses
+    // do we fall back to showing the badge.
+    let cancelled = false
+    tryAutoUnlock().then((armed) => {
+      if (cancelled) return
+      setSoundLocked(!armed)
+      if (armed) primeSaleFile(SALES_SOUND.file)
+      if (armed && new URLSearchParams(window.location.search).has('sound')) {
         playSaleSound({
           volume: SALES_SOUND.volume, amount: 12_000, style: SALES_SOUND.style,
           file: SALES_SOUND.file, repeat: SALES_SOUND.repeat,
         })
-        setSoundLocked(false)
       }
+    })
+    return () => {
+      cancelled = true
     }
   }, [board.features.sales])
 

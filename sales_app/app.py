@@ -168,6 +168,20 @@ F_SOLD_BY = "product_bought__1__6969069edaaef"            # "Sold by" picklist (
 
 OFFICE_SELLERS = ("Dec", "Josh")   # matches the CRM "Sold by" picklist values
 
+# Sale types. 'on_site' and 'sold' are the SAME sale by the same field rep and
+# count toward the same target — the only difference is when it closed: on the
+# doorstep at the appointment, or on a callback afterwards. Both therefore
+# reassign the lead to the rep. 'office' is Dec/Josh, 'chc' is an online
+# purchase with no seller.
+SALE_TYPES = ("on_site", "sold", "office", "chc")
+REP_SALE_TYPES = ("on_site", "sold")          # closed by a field rep
+STATUS_SALE_TYPES = ("on_site", "sold", "office")  # write an appointment status
+CRM_STATUS_FOR_TYPE = {
+    "on_site": "sold on site",
+    "sold": "sold",
+    "office": "sold in office",
+}
+
 
 def _ss_call(method: str, params: dict, retries: int = 3):
     for attempt in range(retries):
@@ -193,8 +207,8 @@ _status_options_cache: dict = {"ts": 0.0, "options": []}
 
 
 def _status_picklist_value(sale_type: str) -> str:
-    """Return the EXACT picklist casing for sold on site / sold in office."""
-    want = "sold on site" if sale_type == "on_site" else "sold in office"
+    """Return the EXACT picklist casing the CRM uses for this sale type."""
+    want = CRM_STATUS_FOR_TYPE[sale_type]
     now = time.time()
     if not _status_options_cache["options"] or now - _status_options_cache["ts"] > 86400:
         try:
@@ -224,7 +238,8 @@ def _status_picklist_value(sale_type: str) -> str:
         if opt.strip().lower() == want:
             return opt
     # fall back to title-ish casing used in the CRM UI
-    return "Sold on Site" if sale_type == "on_site" else "Sold in Office"
+    return {"on_site": "Sold on Site", "sold": "Sold",
+            "office": "Sold in Office"}[sale_type]
 
 
 def _lifetime_totals(lead_id: str) -> tuple[float, float, float]:
@@ -257,7 +272,7 @@ def _crm_writeback(lead_id: str, sale_type: str, sold_by: str | None,
     h, w, c = _lifetime_totals(lead_id)
     h, w, c = round(h + add_h, 2), round(w + add_w, 2), round(c + add_c, 2)
     obj: dict = {"id": lead_id}
-    if sale_type == "on_site" and rep_owner:
+    if sale_type in REP_SALE_TYPES and rep_owner:
         obj["ownerID"] = rep_owner            # reassign to the selling rep
     elif owner:
         obj["ownerID"] = owner                # echo (never omit — reassignment trap)
@@ -267,7 +282,7 @@ def _crm_writeback(lead_id: str, sale_type: str, sold_by: str | None,
         obj[F_SOLD_WATER] = _fmt_amount(w)
     if c:
         obj[F_SOLD_CHC] = _fmt_amount(c)
-    if sale_type in ("on_site", "office"):
+    if sale_type in STATUS_SALE_TYPES:
         status_val = _status_picklist_value(sale_type)
         # statuses follow the sale's components: heating amount → heating status,
         # water amount → WATER status
@@ -277,8 +292,8 @@ def _crm_writeback(lead_id: str, sale_type: str, sold_by: str | None,
             obj[F_APPT_STATUS_WATER] = status_val
     if sale_type == "office" and sold_by in OFFICE_SELLERS:
         obj[F_SOLD_BY] = sold_by
-    if sale_type == "on_site":
-        obj[F_SOLD_BY] = ""                   # Dec/Josh field doesn't apply on-site
+    if sale_type in REP_SALE_TYPES:
+        obj[F_SOLD_BY] = ""                   # Dec/Josh field is office-only
     _ss_call("updateLeads", {"objects": [obj]})
 
 
@@ -320,8 +335,8 @@ def _sale_note_text(sale_type: str, heating, water, chc, sold_by,
         if water:
             parts.append(f"{gbp(water)} water")
         amounts = " + ".join(parts)
-    where = {"on_site": "Sold on Site", "office": "Sold in Office",
-             "chc": "CHC online purchase"}[sale_type]
+    where = {"on_site": "Sold on Site", "sold": "Sold (callback after appointment)",
+             "office": "Sold in Office", "chc": "CHC online purchase"}[sale_type]
     line = f"💰 Sale logged: {amounts} — {where}"
     if sold_by:
         line += f" by {sold_by}"
@@ -434,7 +449,7 @@ def api_lead_history(lead_id: str):
 def api_create_sale():
     d = request.get_json(force=True, silent=True) or {}
     sale_type = d.get("sale_type") or ""
-    if sale_type not in ("on_site", "office", "chc"):
+    if sale_type not in SALE_TYPES:
         return jsonify({"error": "bad sale_type"}), 400
 
     try:
@@ -467,7 +482,7 @@ def api_create_sale():
     sold_by = (d.get("sold_by") or "").strip() or None
     if sale_type == "office" and sold_by not in OFFICE_SELLERS:
         return jsonify({"error": "office sales must be sold by Dec or Josh"}), 400
-    if sale_type == "on_site" and not sold_by:
+    if sale_type in REP_SALE_TYPES and not sold_by:
         return jsonify({"error": "pick the rep who sold it"}), 400
     if sale_type == "chc":
         sold_by = None
@@ -480,7 +495,7 @@ def api_create_sale():
     # CRM first (with the new amounts as deltas), then a DML insert carrying the
     # final sync flag — DML rows are immediately updatable (voids work right away),
     # unlike streaming-buffer rows.
-    rep_owner = _rep_owner_id(sold_by) if sale_type == "on_site" else ""
+    rep_owner = _rep_owner_id(sold_by) if sale_type in REP_SALE_TYPES else ""
 
     crm_ok = False
     crm_error = ""
@@ -598,7 +613,7 @@ def _refresh_crm_totals(lead_id: str, sale_type: str | None = None,
     h, w, c = _lifetime_totals(lead_id)
     obj = {"id": lead_id, F_SOLD_HEAT: _fmt_amount(h),
            F_SOLD_WATER: _fmt_amount(w), F_SOLD_CHC: _fmt_amount(c)}
-    if sale_type == "on_site" and rep_owner:
+    if sale_type in REP_SALE_TYPES and rep_owner:
         obj["ownerID"] = rep_owner
     elif owner:
         obj["ownerID"] = owner
@@ -612,7 +627,7 @@ def _refresh_crm_totals(lead_id: str, sale_type: str | None = None,
     if w <= 0 and str(lead.get(F_APPT_STATUS_WATER) or "").strip().lower() in sold_vals:
         obj[F_APPT_STATUS_WATER] = ""
 
-    if sale_type in ("on_site", "office"):
+    if sale_type in STATUS_SALE_TYPES:
         status_val = _status_picklist_value(sale_type)
         if heating:
             obj[F_APPT_STATUS] = status_val
@@ -620,7 +635,7 @@ def _refresh_crm_totals(lead_id: str, sale_type: str | None = None,
             obj[F_APPT_STATUS_WATER] = status_val
         if sale_type == "office" and sold_by in OFFICE_SELLERS:
             obj[F_SOLD_BY] = sold_by
-        if sale_type == "on_site":
+        if sale_type in REP_SALE_TYPES:
             obj[F_SOLD_BY] = ""
     _ss_call("updateLeads", {"objects": [obj]})
 
@@ -689,7 +704,7 @@ def api_edit_sale(sale_id: str):
         return jsonify({"error": f"can't edit a {sale['status']} sale"}), 400
 
     sale_type = d.get("sale_type") or sale["sale_type"]
-    if sale_type not in ("on_site", "office", "chc"):
+    if sale_type not in SALE_TYPES:
         return jsonify({"error": "bad sale_type"}), 400
     try:
         sale_date = date.fromisoformat(str(d.get("sale_date") or ""))
@@ -718,12 +733,12 @@ def api_edit_sale(sale_id: str):
     sold_by = (d.get("sold_by") or "").strip() or None
     if sale_type == "office" and sold_by not in OFFICE_SELLERS:
         return jsonify({"error": "office sales must be sold by Dec or Josh"}), 400
-    if sale_type == "on_site" and not sold_by:
+    if sale_type in REP_SALE_TYPES and not sold_by:
         return jsonify({"error": "pick the rep who sold it"}), 400
     if sale_type == "chc":
         sold_by = None
 
-    rep_owner = _rep_owner_id(sold_by) if sale_type == "on_site" else ""
+    rep_owner = _rep_owner_id(sold_by) if sale_type in REP_SALE_TYPES else ""
 
     before = {k: sale[k] for k in ("sale_date", "sale_type", "heating_amount",
                                    "water_amount", "chc_amount", "sold_by", "note")}

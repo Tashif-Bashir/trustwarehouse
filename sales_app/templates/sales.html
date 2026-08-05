@@ -60,6 +60,7 @@
   .chip.sold{background:var(--mint-soft);color:var(--mint-ink)}
   .chip.other{background:var(--bg);color:var(--muted)}
   .chip.type-on_site{background:var(--mint-soft);color:var(--mint-ink)}
+  .chip.type-sold{background:var(--mint-soft);color:var(--mint-ink)}
   .chip.type-office{background:var(--indigo-soft);color:var(--indigo)}
   .chip.type-chc{background:var(--violet-soft);color:var(--violet)}
   .chip.void{background:var(--rose-soft);color:var(--rose)}
@@ -171,7 +172,8 @@ const todayIso = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
-const TYPE_LABEL = { on_site: "Sold on Site", office: "Sold in Office", chc: "CHC (online)" };
+const TYPE_LABEL = { on_site: "Sold on Site", sold: "Sold (callback)",
+                     office: "Sold in Office", chc: "CHC (online)" };
 
 function useToast() {
   const [toast, setToast] = useState("");
@@ -379,7 +381,7 @@ function LogSale({ onLogged, showToast }) {
             <div className="field">
               <label className="label">Where did it sell?</label>
               <div className="type-pills">
-                {["on_site", "office", "chc"].map(t => (
+                {["on_site", "sold", "office", "chc"].map(t => (
                   <button key={t} className={"tpill" + (saleType === t ? " on" : "")}
                           onClick={() => { setSaleType(t); setSoldBy(""); }}>
                     {TYPE_LABEL[t]}
@@ -421,7 +423,7 @@ function LogSale({ onLogged, showToast }) {
               </div>
             )}
 
-            {saleType === "on_site" && (
+            {(saleType === "on_site" || saleType === "sold") && (
               <div className="field">
                 <label className="label">Sold by (the rep)</label>
                 <select className="inp" value={soldBy} onChange={e => setSoldBy(e.target.value)}>
@@ -593,7 +595,7 @@ function Ledger({ refreshKey, showToast }) {
         <input type="month" className="month-pick" value={month}
                onChange={e => setMonth(e.target.value)} />
         <div className="filters">
-          {["", "on_site", "office", "chc"].map(t => (
+          {["", "on_site", "sold", "office", "chc"].map(t => (
             <button key={t || "all"} className={"fpill" + (typeFilter === t ? " on" : "")}
                     onClick={() => setTypeFilter(t)}>
               {t ? TYPE_LABEL[t] : "All"}
@@ -680,7 +682,7 @@ function Ledger({ refreshKey, showToast }) {
             <div className="field" style={{ marginTop: 12 }}>
               <label className="label">Where did it sell?</label>
               <div className="type-pills">
-                {["on_site", "office", "chc"].map(t => (
+                {["on_site", "sold", "office", "chc"].map(t => (
                   <button key={t} className={"tpill" + (editing.sale_type === t ? " on" : "")}
                           onClick={() => setEditing({ ...editing, sale_type: t, sold_by: "" })}>
                     {TYPE_LABEL[t]}
@@ -714,7 +716,7 @@ function Ledger({ refreshKey, showToast }) {
                        onChange={e => setEditing({ ...editing, chc: e.target.value })} />
               </div>
             )}
-            {editing.sale_type === "on_site" && (
+            {(editing.sale_type === "on_site" || editing.sale_type === "sold") && (
               <div className="field">
                 <label className="label">Sold by</label>
                 <select className="inp" value={editing.sold_by}

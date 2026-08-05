@@ -334,6 +334,8 @@ async function querySales(): Promise<SalesMetrics | null> {
 
     const typeLabels: Record<string, string> = {
       on_site: 'Sold on Site',
+      // same field-rep sale as on_site, closed on a callback after the appointment
+      sold: 'Sold (callback)',
       office: 'Sold in Office',
       chc: 'CHC online',
     }

@@ -324,10 +324,10 @@ function KpiTile({
         // CONTAINING each product and may add up to more than the sale count.
         // Inline SVG icons, not emoji: the wall Pi's Chromium has no colour
         // emoji font and drew hollow boxes. SVG renders identically anywhere.
-        <div className="mt-3 flex gap-2">
-          <span className="flex flex-1 items-center justify-between rounded-lg bg-white/[0.04] px-3 py-2">
-            <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.14em] text-neutral-400">
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" className="shrink-0">
+        <div className="mt-4 flex flex-col gap-2">
+          <span className="flex items-center justify-between rounded-lg bg-white/[0.04] px-4 py-2.5">
+            <span className="flex min-w-0 items-center gap-2 text-sm font-medium uppercase tracking-[0.12em] text-neutral-400">
+              <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" className="shrink-0">
                 <path
                   fill="#fb923c"
                   d="M12 2c1.1 3.2-.4 5-2 6.7C8.3 10.5 6.5 12.2 6.5 15a5.5 5.5 0 0 0 11 0c0-2-1-3.6-2.1-5-.4 1.1-1 2-2 2.6.6-2.9-.1-6.6-1.4-10.6z"
@@ -339,13 +339,13 @@ function KpiTile({
               </svg>
               Heating
             </span>
-            <span className="font-display text-2xl font-semibold tabular-nums text-neutral-100">
+            <span className="shrink-0 font-display text-4xl font-semibold tabular-nums text-neutral-100">
               {split.heating}
             </span>
           </span>
-          <span className="flex flex-1 items-center justify-between rounded-lg bg-white/[0.04] px-3 py-2">
-            <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.14em] text-sky-300/80">
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" className="shrink-0">
+          <span className="flex items-center justify-between rounded-lg bg-white/[0.04] px-4 py-2.5">
+            <span className="flex min-w-0 items-center gap-2 text-sm font-medium uppercase tracking-[0.12em] text-sky-300/80">
+              <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" className="shrink-0">
                 {/* breaking wave: a curl over a rolling sea line */}
                 <path
                   fill="#38bdf8"
@@ -358,7 +358,7 @@ function KpiTile({
               </svg>
               Water
             </span>
-            <span className="font-display text-2xl font-semibold tabular-nums text-sky-300">
+            <span className="shrink-0 font-display text-4xl font-semibold tabular-nums text-sky-300">
               {split.water}
             </span>
           </span>
@@ -367,13 +367,13 @@ function KpiTile({
       {stats && stats.length > 0 && (
         // avg / biggest / yesterday — the detail the rotating board buried in
         // its slideshow, kept on screen permanently here.
-        <div className="mt-3 flex gap-5 border-t border-hairline pt-3">
+        <div className="mt-4 flex gap-7 border-t border-hairline pt-4">
           {stats.map((s) => (
             <span key={s.label} className="flex flex-col">
-              <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-neutral-500">
+              <span className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-500">
                 {s.label}
               </span>
-              <span className="font-display text-xl font-semibold tabular-nums text-neutral-200">
+              <span className="font-display text-3xl font-semibold tabular-nums text-neutral-200">
                 {s.value}
               </span>
             </span>

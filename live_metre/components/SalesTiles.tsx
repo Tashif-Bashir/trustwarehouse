@@ -322,11 +322,21 @@ function KpiTile({
       {split && (
         // Heating / water counts. A sale can include both, so these are sales
         // CONTAINING each product and may add up to more than the sale count.
+        // Inline SVG icons, not emoji: the wall Pi's Chromium has no colour
+        // emoji font and drew hollow boxes. SVG renders identically anywhere.
         <div className="mt-3 flex gap-2">
           <span className="flex flex-1 items-center justify-between rounded-lg bg-white/[0.04] px-3 py-2">
             <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.14em] text-neutral-400">
-              {/* emoji sit above the label size so they read from across the room */}
-              <span className="text-lg leading-none">🔥</span>
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" className="shrink-0">
+                <path
+                  fill="#fb923c"
+                  d="M12 2c1.1 3.2-.4 5-2 6.7C8.3 10.5 6.5 12.2 6.5 15a5.5 5.5 0 0 0 11 0c0-2-1-3.6-2.1-5-.4 1.1-1 2-2 2.6.6-2.9-.1-6.6-1.4-10.6z"
+                />
+                <path
+                  fill="#fde68a"
+                  d="M12 21a3.2 3.2 0 0 1-3.2-3.2c0-1.5.9-2.5 1.8-3.5.4.7 1 1.2 1.7 1.5-.1-1 .1-2.1.6-3.1 1.3 1.2 2.3 2.9 2.3 5.1A3.2 3.2 0 0 1 12 21z"
+                />
+              </svg>
               Heating
             </span>
             <span className="font-display text-2xl font-semibold tabular-nums text-neutral-100">
@@ -335,7 +345,16 @@ function KpiTile({
           </span>
           <span className="flex flex-1 items-center justify-between rounded-lg bg-white/[0.04] px-3 py-2">
             <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.14em] text-sky-300/80">
-              <span className="text-lg leading-none">🌊</span>
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" className="shrink-0">
+                <path
+                  fill="#38bdf8"
+                  d="M12 2.5S5.5 9.6 5.5 14.4a6.5 6.5 0 0 0 13 0C18.5 9.6 12 2.5 12 2.5z"
+                />
+                <path
+                  fill="#bae6fd"
+                  d="M9.4 14.8a.9.9 0 0 1 .9.9 1.9 1.9 0 0 0 1.9 1.9.9.9 0 0 1 0 1.8 3.7 3.7 0 0 1-3.7-3.7.9.9 0 0 1 .9-.9z"
+                />
+              </svg>
               Water
             </span>
             <span className="font-display text-2xl font-semibold tabular-nums text-sky-300">

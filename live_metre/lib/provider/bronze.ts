@@ -188,7 +188,11 @@ async function querySales(): Promise<SalesMetrics | null> {
       client().query({
         query: `
           SELECT CAST(sale_date AS STRING) AS day,
-                 COUNT(*) AS n, SUM(${amt}) AS total, MAX(${amt}) AS mx
+                 COUNT(*) AS n, SUM(${amt}) AS total, MAX(${amt}) AS mx,
+                 -- a sale can carry heating AND water, so these are counts of
+                 -- sales CONTAINING each product and may sum to more than n
+                 COUNTIF(COALESCE(heating_amount, 0) > 0) AS heat_n,
+                 COUNTIF(COALESCE(water_amount, 0) > 0) AS water_n
           ${base}
             AND sale_date >= DATE_SUB(DATE_TRUNC(CURRENT_DATE('Europe/London'), MONTH), INTERVAL 7 DAY)
           GROUP BY day
@@ -251,27 +255,41 @@ async function querySales(): Promise<SalesMetrics | null> {
     const dow = new Date(today + 'T12:00:00Z').getUTCDay() // 0 = Sun
     const weekStart = addDays(today, -((dow + 6) % 7))
 
-    const daily = new Map<string, { n: number; total: number; mx: number }>()
-    for (const r of dailyRows as { day: string; n: number; total: number; mx: number }[]) {
-      daily.set(r.day, { n: Number(r.n), total: Number(r.total), mx: Number(r.mx) })
+    type DayAgg = { n: number; total: number; mx: number; heat: number; water: number }
+    const EMPTY: DayAgg = { n: 0, total: 0, mx: 0, heat: 0, water: 0 }
+    const daily = new Map<string, DayAgg>()
+    for (const r of dailyRows as {
+      day: string; n: number; total: number; mx: number; heat_n: number; water_n: number
+    }[]) {
+      daily.set(r.day, {
+        n: Number(r.n),
+        total: Number(r.total),
+        mx: Number(r.mx),
+        heat: Number(r.heat_n),
+        water: Number(r.water_n),
+      })
     }
-    const windowSum = (from: string) => {
+    const windowSum = (from: string): DayAgg => {
       let n = 0
       let total = 0
       let mx = 0
+      let heat = 0
+      let water = 0
       for (const [day, v] of daily) {
         if (day >= from && day <= today) {
           n += v.n
           total += v.total
+          heat += v.heat
+          water += v.water
           mx = Math.max(mx, v.mx)
         }
       }
-      return { n, total, mx }
+      return { n, total, mx, heat, water }
     }
     const month = windowSum(monthStart)
     const week = windowSum(weekStart)
-    const todayAgg = daily.get(today) ?? { n: 0, total: 0, mx: 0 }
-    const yesterdayAgg = daily.get(addDays(today, -1)) ?? { n: 0, total: 0, mx: 0 }
+    const todayAgg = daily.get(today) ?? EMPTY
+    const yesterdayAgg = daily.get(addDays(today, -1)) ?? EMPTY
     const last7 = Array.from({ length: 7 }, (_, i) => {
       const date = addDays(today, i - 6)
       return { date, total: daily.get(date)?.total ?? 0 }
@@ -346,12 +364,18 @@ async function querySales(): Promise<SalesMetrics | null> {
     return {
       monthRevenue: month.total,
       monthCount: month.n,
+      monthHeating: month.heat,
+      monthWater: month.water,
       monthMax: month.mx,
       weekRevenue: week.total,
       weekCount: week.n,
+      weekHeating: week.heat,
+      weekWater: week.water,
       weekMax: week.mx,
       todayRevenue: todayAgg.total,
       todayCount: todayAgg.n,
+      todayHeating: todayAgg.heat,
+      todayWater: todayAgg.water,
       yesterdayRevenue: yesterdayAgg.total,
       last7,
       monthLabel,

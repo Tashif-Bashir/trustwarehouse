@@ -293,6 +293,7 @@ function KpiTile({
   count,
   sub,
   stats,
+  split,
   children,
   cardRef,
 }: {
@@ -301,6 +302,7 @@ function KpiTile({
   count: number
   sub: string
   stats?: { label: string; value: string }[]
+  split?: { heating: number; water: number }
   children?: React.ReactNode
   cardRef?: (el: HTMLDivElement | null) => void
 }) {
@@ -317,6 +319,28 @@ function KpiTile({
       <p className="mt-2 text-base text-neutral-400">
         <span className="font-semibold text-neutral-200 tabular-nums">{count}</span> {sub}
       </p>
+      {split && (
+        // Heating / water counts. A sale can include both, so these are sales
+        // CONTAINING each product and may add up to more than the sale count.
+        <div className="mt-3 flex gap-2">
+          <span className="flex flex-1 items-baseline justify-between rounded-lg bg-white/[0.04] px-3 py-2">
+            <span className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-400">
+              Heating
+            </span>
+            <span className="font-display text-2xl font-semibold tabular-nums text-neutral-100">
+              {split.heating}
+            </span>
+          </span>
+          <span className="flex flex-1 items-baseline justify-between rounded-lg bg-white/[0.04] px-3 py-2">
+            <span className="text-xs font-medium uppercase tracking-[0.14em] text-sky-300/80">
+              Water
+            </span>
+            <span className="font-display text-2xl font-semibold tabular-nums text-sky-300">
+              {split.water}
+            </span>
+          </span>
+        </div>
+      )}
       {stats && stats.length > 0 && (
         // avg / biggest / yesterday — the detail the rotating board buried in
         // its slideshow, kept on screen permanently here.
@@ -433,6 +457,7 @@ export function StaticSalesKpis({ sales, pulse = 0 }: { sales: SalesMetrics; pul
         value={sales.monthRevenue}
         count={sales.monthCount}
         sub="sales"
+        split={{ heating: sales.monthHeating, water: sales.monthWater }}
         stats={[
           { label: 'Avg', value: avg(sales.monthRevenue, sales.monthCount) },
           { label: 'Biggest', value: gbp(sales.monthMax) },
@@ -444,6 +469,7 @@ export function StaticSalesKpis({ sales, pulse = 0 }: { sales: SalesMetrics; pul
         value={sales.weekRevenue}
         count={sales.weekCount}
         sub="sales"
+        split={{ heating: sales.weekHeating, water: sales.weekWater }}
         stats={[
           { label: 'Avg', value: avg(sales.weekRevenue, sales.weekCount) },
           { label: 'Biggest', value: gbp(sales.weekMax) },
@@ -455,6 +481,7 @@ export function StaticSalesKpis({ sales, pulse = 0 }: { sales: SalesMetrics; pul
         value={sales.todayRevenue}
         count={sales.todayCount}
         sub={sales.todayCount === 1 ? 'sale today' : 'sales today'}
+        split={{ heating: sales.todayHeating, water: sales.todayWater }}
         stats={[{ label: 'Yesterday', value: gbp(sales.yesterdayRevenue) }]}
       >
         <Last7Strip sales={sales} />

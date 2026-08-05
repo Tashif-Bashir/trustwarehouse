@@ -30,12 +30,20 @@ export interface LastSale {
 export interface SalesMetrics {
   monthRevenue: number
   monthCount: number
+  // sales CONTAINING each product; a sale can have both, so these can sum
+  // to more than the sale count
+  monthHeating: number
+  monthWater: number
   monthMax: number // biggest single sale this month
   weekRevenue: number
   weekCount: number
+  weekHeating: number
+  weekWater: number
   weekMax: number
   todayRevenue: number
   todayCount: number
+  todayHeating: number
+  todayWater: number
   yesterdayRevenue: number
   last7: { date: string; total: number }[] // 7 days ending today, chronological
   monthLabel: string // e.g. 'July'

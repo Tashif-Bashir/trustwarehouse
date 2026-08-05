@@ -154,20 +154,37 @@ function RepsSlideshow({ sales }: { sales: SalesMetrics }) {
 }
 
 export function LastSaleBanner({ sales }: { sales: SalesMetrics }) {
-  if (!sales.lastSale) return null
+  const last = sales.lastSale
+  const hasTarget = sales.monthTarget !== null && sales.monthTarget > 0
+  if (!last && !hasTarget) return null
   return (
-    <div className="fade-up flex items-center gap-4 rounded-xl border-[0.5px] border-hairline bg-surface px-7 py-4">
-      <span className="text-2xl">⚡</span>
-      <p className="text-2xl font-medium tabular-nums">
-        Last sale&ensp;
-        <span className="font-display font-semibold">{gbp(sales.lastSale.amount)}</span>
-        <span className="text-neutral-500">
-          &ensp;&middot;&ensp;{sales.lastSale.typeLabel}
-          {sales.lastSale.soldBy ? ` · ${sales.lastSale.soldBy}` : ''}
-          &ensp;&middot;&ensp;{sales.lastSale.customer}
-          &ensp;&middot;&ensp;{sales.lastSale.atUk}
-        </span>
-      </p>
+    <div className="fade-up flex items-center gap-10 rounded-xl border-[0.5px] border-hairline bg-surface px-7 py-4">
+      {last && (
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          <span className="text-2xl">⚡</span>
+          <p className="truncate text-2xl font-medium tabular-nums">
+            Last sale&ensp;
+            <span className="font-display font-semibold">{gbp(last.amount)}</span>
+            <span className="text-neutral-500">
+              &ensp;&middot;&ensp;{last.typeLabel}
+              {last.soldBy ? ` · ${last.soldBy}` : ''}
+              &ensp;&middot;&ensp;{last.customer}
+              &ensp;&middot;&ensp;{last.atUk}
+            </span>
+          </p>
+        </div>
+      )}
+      {hasTarget && (
+        // The month race lives HERE, full-banner scale, not squeezed into a
+        // card (owner: the card had too much going on).
+        <div className="w-[420px] shrink-0">
+          <TargetBar
+            revenue={sales.monthRevenue}
+            target={sales.monthTarget as number}
+            pace={sales.monthPace}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -447,16 +464,16 @@ function TargetBar({
   const colour =
     pace === null ? 'bg-sky-500' : pace >= target ? 'bg-emerald-400' : 'bg-amber-400'
   return (
-    <div className="mt-3 border-t border-hairline pt-3">
+    <div>
       <div className="flex items-baseline justify-between">
-        <span className="whitespace-nowrap text-xs font-medium uppercase tracking-[0.16em] text-neutral-500">
+        <span className="whitespace-nowrap text-sm font-medium uppercase tracking-[0.16em] text-neutral-400">
           Target {gbpK(target)}
         </span>
-        <span className="font-display text-xl font-semibold tabular-nums text-neutral-200">
+        <span className="font-display text-3xl font-semibold tabular-nums text-neutral-100">
           {Math.round((revenue / target) * 100)}%
         </span>
       </div>
-      <div className="mt-2 h-3 overflow-hidden rounded-full bg-white/[0.06]">
+      <div className="mt-1.5 h-4 overflow-hidden rounded-full bg-white/[0.06]">
         <div
           className={`h-full rounded-full ${colour} transition-[width] duration-700 ease-out`}
           style={{ width: `${pct}%` }}
@@ -537,13 +554,6 @@ export function StaticSalesKpis({ sales, pulse = 0 }: { sales: SalesMetrics; pul
             : []),
         ]}
       >
-        {sales.monthTarget !== null && sales.monthTarget > 0 && (
-          <TargetBar
-            revenue={sales.monthRevenue}
-            target={sales.monthTarget}
-            pace={sales.monthPace}
-          />
-        )}
         <TrendStrip heading="Last 6 months" points={sales.monthTrend} />
       </KpiTile>
       <KpiTile

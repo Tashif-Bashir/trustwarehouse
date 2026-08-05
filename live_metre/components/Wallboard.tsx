@@ -311,14 +311,15 @@ export default function Wallboard({ boardId }: { boardId: string }) {
         <button
           type="button"
           onClick={() => {
-            if (unlockSound()) {
+            void unlockSound().then((armed) => {
+              if (!armed) return
               primeSaleFile(SALES_SOUND.file)
               playSaleSound({
                 volume: SALES_SOUND.volume, amount: 12_000, style: SALES_SOUND.style,
                 file: SALES_SOUND.file, repeat: SALES_SOUND.repeat,
               })
               setSoundLocked(false)
-            }
+            })
           }}
           className="fade-up self-start rounded-lg border-[0.5px] border-hairline bg-surface px-5 py-2.5 text-base font-medium text-neutral-300 transition-colors hover:text-white"
         >

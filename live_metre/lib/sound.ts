@@ -65,18 +65,38 @@ export function tryAutoUnlock(): Promise<boolean> {
   const c = audioCtx()
   if (!c) return Promise.resolve(false)
   if (c.state === 'running') return Promise.resolve(true)
-  return c
-    .resume()
-    .then(() => c.state === 'running')
-    .catch(() => false)
+  // Chrome quirk: outside a user gesture, resume() neither resolves nor
+  // rejects — the promise stays PENDING until a gesture unblocks audio.
+  // Awaiting it unconditionally meant the answer never came back, so the
+  // enable-sound badge never appeared and the board sat silent with no way
+  // to arm it. Race a short timeout: kiosk (autoplay allowed) resolves fast
+  // and true, a normal browser times out to false and gets the badge. If the
+  // parked resume() is later unblocked by any interaction, audio simply
+  // starts working.
+  return Promise.race([
+    c.resume().then(() => c.state === 'running').catch(() => false),
+    new Promise<boolean>((resolve) =>
+      setTimeout(() => resolve(c.state === ('running' as AudioContextState)), 400)
+    ),
+  ])
 }
 
-/** Call from a real user gesture (click/keypress). Returns true once running. */
-export function unlockSound(): boolean {
+/**
+ * Call from a real user gesture (click/keypress). resume() is asynchronous —
+ * checking state on the very next line still reads 'suspended', which made the
+ * badge's FIRST click report failure and play nothing (it worked on a second
+ * click nobody knew to make). Await the resume instead, with a timeout guard.
+ */
+export function unlockSound(): Promise<boolean> {
   const c = audioCtx()
-  if (!c) return false
-  if (c.state === 'suspended') void c.resume()
-  return c.state === 'running'
+  if (!c) return Promise.resolve(false)
+  if (c.state === 'running') return Promise.resolve(true)
+  return Promise.race([
+    c.resume().then(() => true).catch(() => false),
+    new Promise<boolean>((resolve) =>
+      setTimeout(() => resolve(c.state === ('running' as AudioContextState)), 1000)
+    ),
+  ])
 }
 
 function noise(c: AudioContext): AudioBuffer {

@@ -323,16 +323,19 @@ function KpiTile({
         // Heating / water counts. A sale can include both, so these are sales
         // CONTAINING each product and may add up to more than the sale count.
         <div className="mt-3 flex gap-2">
-          <span className="flex flex-1 items-baseline justify-between rounded-lg bg-white/[0.04] px-3 py-2">
-            <span className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-400">
+          <span className="flex flex-1 items-center justify-between rounded-lg bg-white/[0.04] px-3 py-2">
+            <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.14em] text-neutral-400">
+              {/* emoji sit above the label size so they read from across the room */}
+              <span className="text-lg leading-none">🔥</span>
               Heating
             </span>
             <span className="font-display text-2xl font-semibold tabular-nums text-neutral-100">
               {split.heating}
             </span>
           </span>
-          <span className="flex flex-1 items-baseline justify-between rounded-lg bg-white/[0.04] px-3 py-2">
-            <span className="text-xs font-medium uppercase tracking-[0.14em] text-sky-300/80">
+          <span className="flex flex-1 items-center justify-between rounded-lg bg-white/[0.04] px-3 py-2">
+            <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.14em] text-sky-300/80">
+              <span className="text-lg leading-none">🌊</span>
               Water
             </span>
             <span className="font-display text-2xl font-semibold tabular-nums text-sky-300">

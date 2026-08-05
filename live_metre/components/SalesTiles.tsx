@@ -367,10 +367,10 @@ function KpiTile({
       {stats && stats.length > 0 && (
         // avg / biggest / yesterday — the detail the rotating board buried in
         // its slideshow, kept on screen permanently here.
-        <div className="mt-4 flex gap-7 border-t border-hairline pt-4">
+        <div className="mt-4 flex flex-wrap gap-x-7 gap-y-3 border-t border-hairline pt-4">
           {stats.map((s) => (
             <span key={s.label} className="flex flex-col">
-              <span className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-500">
+              <span className="whitespace-nowrap text-xs font-medium uppercase tracking-[0.14em] text-neutral-500">
                 {s.label}
               </span>
               <span className="font-display text-3xl font-semibold tabular-nums text-neutral-200">
@@ -385,34 +385,82 @@ function KpiTile({
   )
 }
 
-// The 7-day strip from the old Today card: today in emerald, the rest sky blue,
-// heights in pixels so a quiet day still shows a stub instead of vanishing.
-function Last7Strip({ sales }: { sales: SalesMetrics }) {
-  const maxDay = Math.max(1, ...sales.last7.map((d) => d.total))
-  const dayLetter = (iso: string) =>
-    ['S', 'M', 'T', 'W', 'T', 'F', 'S'][new Date(iso + 'T12:00:00Z').getUTCDay()]
+// Trend strip shared by all three cards — days on Today, weeks on This week,
+// months on the month card — so every card answers "up or down?" in the same
+// visual grammar. Current period in emerald, the rest sky blue; heights in
+// pixels so a quiet period still shows a stub instead of vanishing.
+function TrendStrip({
+  heading,
+  points,
+}: {
+  heading: string
+  points: { label: string; total: number }[]
+}) {
+  const max = Math.max(1, ...points.map((p) => p.total))
   return (
     <div className="mt-3 border-t border-hairline pt-3">
-      <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-neutral-500">
-        Last 7 days
+      <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-neutral-500">
+        {heading}
       </p>
       <div className="flex items-end gap-2">
-        {sales.last7.map((d, i) => {
-          const isToday = i === sales.last7.length - 1
-          const px = Math.max(3, Math.round((d.total / maxDay) * 44))
+        {points.map((p, i) => {
+          const isCurrent = i === points.length - 1
+          const px = Math.max(3, Math.round((p.total / max) * 44))
           return (
-            <div key={d.date} className="flex flex-1 flex-col items-center gap-1">
+            <div key={`${p.label}-${i}`} className="flex flex-1 flex-col items-center gap-1">
               <div
-                className={`w-full rounded-sm ${isToday ? 'bg-emerald-400' : 'bg-sky-500'}`}
+                className={`w-full rounded-sm ${isCurrent ? 'bg-emerald-400' : 'bg-sky-500'}`}
                 style={{ height: `${px}px` }}
-                title={`${d.date}: ${gbp(d.total)}`}
+                title={`${p.label}: ${gbp(p.total)}`}
               />
-              <span className={`text-[10px] ${isToday ? 'text-emerald-400' : 'text-neutral-600'}`}>
-                {dayLetter(d.date)}
+              <span
+                className={`text-[10px] ${isCurrent ? 'text-emerald-400' : 'text-neutral-600'}`}
+              >
+                {p.label}
               </span>
             </div>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+// Compact money for projections — "£378k" not "£378,467"; a straight-line
+// estimate doesn't deserve pound-level precision.
+const gbpK = (v: number) => (v >= 100_000 ? `£${Math.round(v / 1000)}k` : gbp(v))
+
+// Progress toward the month's revenue target (set by Dec/Josh/admin in the
+// sales app — app.targets; a change there reaches this bar within ~15s).
+// Bar colour carries the verdict: emerald when the straight-line pace clears
+// the target, amber when it doesn't, sky early in the month before pace exists.
+function TargetBar({
+  revenue,
+  target,
+  pace,
+}: {
+  revenue: number
+  target: number
+  pace: number | null
+}) {
+  const pct = Math.min(100, (revenue / target) * 100)
+  const colour =
+    pace === null ? 'bg-sky-500' : pace >= target ? 'bg-emerald-400' : 'bg-amber-400'
+  return (
+    <div className="mt-3 border-t border-hairline pt-3">
+      <div className="flex items-baseline justify-between">
+        <span className="whitespace-nowrap text-xs font-medium uppercase tracking-[0.16em] text-neutral-500">
+          Target {gbpK(target)}
+        </span>
+        <span className="font-display text-xl font-semibold tabular-nums text-neutral-200">
+          {Math.round((revenue / target) * 100)}%
+        </span>
+      </div>
+      <div className="mt-2 h-3 overflow-hidden rounded-full bg-white/[0.06]">
+        <div
+          className={`h-full rounded-full ${colour} transition-[width] duration-700 ease-out`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
     </div>
   )
@@ -484,8 +532,20 @@ export function StaticSalesKpis({ sales, pulse = 0 }: { sales: SalesMetrics; pul
         stats={[
           { label: 'Avg', value: avg(sales.monthRevenue, sales.monthCount) },
           { label: 'Biggest', value: gbp(sales.monthMax) },
+          ...(sales.monthPace !== null
+            ? [{ label: 'On pace for', value: gbpK(sales.monthPace) }]
+            : []),
         ]}
-      />
+      >
+        {sales.monthTarget !== null && sales.monthTarget > 0 && (
+          <TargetBar
+            revenue={sales.monthRevenue}
+            target={sales.monthTarget}
+            pace={sales.monthPace}
+          />
+        )}
+        <TrendStrip heading="Last 6 months" points={sales.monthTrend} />
+      </KpiTile>
       <KpiTile
         cardRef={ref(1)}
         label="This week"
@@ -496,8 +556,13 @@ export function StaticSalesKpis({ sales, pulse = 0 }: { sales: SalesMetrics; pul
         stats={[
           { label: 'Avg', value: avg(sales.weekRevenue, sales.weekCount) },
           { label: 'Biggest', value: gbp(sales.weekMax) },
+          ...(sales.weekTopRep
+            ? [{ label: 'Top rep', value: sales.weekTopRep.name.split(' ')[0] }]
+            : []),
         ]}
-      />
+      >
+        <TrendStrip heading="Last 6 weeks" points={sales.weekTrend} />
+      </KpiTile>
       <KpiTile
         cardRef={ref(2)}
         label="Today domestic"
@@ -507,7 +572,13 @@ export function StaticSalesKpis({ sales, pulse = 0 }: { sales: SalesMetrics; pul
         split={{ heating: sales.todayHeating, water: sales.todayWater }}
         stats={[{ label: 'Yesterday', value: gbp(sales.yesterdayRevenue) }]}
       >
-        <Last7Strip sales={sales} />
+        <TrendStrip
+          heading="Last 7 days"
+          points={sales.last7.map((d) => ({
+            label: ['S', 'M', 'T', 'W', 'T', 'F', 'S'][new Date(d.date + 'T12:00:00Z').getUTCDay()],
+            total: d.total,
+          }))}
+        />
       </KpiTile>
     </section>
   )

@@ -182,7 +182,7 @@ async function querySales(): Promise<SalesMetrics | null> {
     WHERE status = 'active' AND customer_name NOT LIKE 'Zzz Testlead%'
   `
   try {
-    const [aggPromise, sellersPromise, lastPromise, rosterPromise] = [
+    const [aggPromise, sellersPromise, lastPromise, rosterPromise, trendPromise] = [
       // daily grain — month/week/today/yesterday and the 7-day strip are all
       // derived from this one result
       client().query({
@@ -237,12 +237,44 @@ async function querySales(): Promise<SalesMetrics | null> {
         `,
         location: 'US',
       }),
+      // trends for the month/week cards + this week's top rep, in ONE query
+      // (BigQuery bills a 10MB floor per query, so three small reads are
+      // deliberately UNIONed rather than issued separately)
+      client().query({
+        query: `
+          SELECT 'month' AS grain,
+                 CAST(DATE_TRUNC(sale_date, MONTH) AS STRING) AS period,
+                 SUM(${amt}) AS total
+          ${base}
+            AND sale_date >= DATE_SUB(DATE_TRUNC(CURRENT_DATE('Europe/London'), MONTH), INTERVAL 5 MONTH)
+          GROUP BY period
+          UNION ALL
+          SELECT 'week',
+                 CAST(DATE_TRUNC(sale_date, WEEK(MONDAY)) AS STRING),
+                 SUM(${amt})
+          ${base}
+            AND sale_date >= DATE_SUB(DATE_TRUNC(CURRENT_DATE('Europe/London'), WEEK(MONDAY)), INTERVAL 5 WEEK)
+          GROUP BY 2
+          UNION ALL
+          SELECT 'rep', sold_by, SUM(${amt})
+          ${base}
+            AND sale_date >= DATE_TRUNC(CURRENT_DATE('Europe/London'), WEEK(MONDAY))
+            AND sold_by IS NOT NULL
+          GROUP BY 2
+          UNION ALL
+          SELECT 'target', CAST(month AS STRING), target_gbp
+          FROM \`${PROJECT}.app.targets\`
+          WHERE month = DATE_TRUNC(CURRENT_DATE('Europe/London'), MONTH)
+        `,
+        location: 'US',
+      }),
     ]
-    const [[dailyRows], [sellerRows], [lastRows], [rosterRows]] = await Promise.all([
+    const [[dailyRows], [sellerRows], [lastRows], [rosterRows], [trendRows]] = await Promise.all([
       aggPromise,
       sellersPromise,
       lastPromise,
       rosterPromise,
+      trendPromise,
     ])
 
     // derive the windows from the daily grain (all dates are UK-local)
@@ -294,6 +326,52 @@ async function querySales(): Promise<SalesMetrics | null> {
       const date = addDays(today, i - 6)
       return { date, total: daily.get(date)?.total ?? 0 }
     })
+
+    // ── trend strips + top rep, from the UNIONed trend query ──
+    // The query only returns periods that HAD sales; build the six expected
+    // periods here and default the gaps to zero, or a quiet week would shift
+    // every bar left and mislabel the strip.
+    const trendBy = new Map<string, number>()
+    let weekTopRep: { name: string; total: number } | null = null
+    let monthTarget: number | null = null
+    for (const r of trendRows as { grain: string; period: string; total: number }[]) {
+      if (r.grain === 'rep') {
+        if (!weekTopRep || Number(r.total) > weekTopRep.total) {
+          weekTopRep = { name: r.period, total: Number(r.total) }
+        }
+      } else if (r.grain === 'target') {
+        monthTarget = Number(r.total) || null
+      } else {
+        trendBy.set(`${r.grain}:${r.period}`, Number(r.total))
+      }
+    }
+    const monthShort = new Intl.DateTimeFormat('en-GB', { month: 'short', timeZone: 'UTC' })
+    const monthTrend = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(monthStart + 'T12:00:00Z')
+      d.setUTCDate(1)
+      d.setUTCMonth(d.getUTCMonth() - (5 - i))
+      const key = d.toISOString().slice(0, 10)
+      return { label: monthShort.format(d), total: trendBy.get(`month:${key}`) ?? 0 }
+    })
+    const weekTrend = Array.from({ length: 6 }, (_, i) => {
+      const start = addDays(weekStart, -7 * (5 - i))
+      return {
+        label: `${Number(start.slice(8, 10))}/${Number(start.slice(5, 7))}`,
+        total: trendBy.get(`week:${start}`) ?? 0,
+      }
+    })
+
+    // Straight-line month projection. Meaningless in the first few days (one
+    // big sale on the 1st projects to £600k), so null until the 5th and the
+    // card simply doesn't show it.
+    const dayOfMonth = Number(today.slice(8, 10))
+    const daysInMonth = new Date(
+      Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0)
+    ).getUTCDate()
+    const monthPace =
+      dayOfMonth >= 5 && month.total > 0
+        ? Math.round((month.total / dayOfMonth) * daysInMonth)
+        : null
     const allSellers = sellerRows as { name: string; count: number; total: number }[]
     const sellerColor = new Map(TEAM_AGENTS.map((a) => [a.name, a.color]))
     const sellers = ['Dec', 'Josh'].map((name) => {
@@ -380,6 +458,11 @@ async function querySales(): Promise<SalesMetrics | null> {
       todayWater: todayAgg.water,
       yesterdayRevenue: yesterdayAgg.total,
       last7,
+      monthTrend,
+      weekTrend,
+      monthPace,
+      monthTarget,
+      weekTopRep,
       monthLabel,
       sellers,
       reps,

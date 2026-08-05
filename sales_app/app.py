@@ -37,6 +37,11 @@ BQ_USERS = f"`{BQ_PROJECT}.app.sales_users`"   # the sales app's OWN logins
 BQ_REPS = f"`{BQ_PROJECT}.app.reps`"
 BQ_SALES = f"`{BQ_PROJECT}.app.sales`"
 BQ_LEADS = f"`{BQ_PROJECT}.silver.silver_sharpspring_leads`"
+BQ_TARGETS = f"`{BQ_PROJECT}.app.targets`"
+
+# Who may set the monthly revenue target (owner decision 5 Aug 2026): the two
+# internal sellers plus admins. Everyone else sees it read-only.
+TARGET_EDITORS = ("dec", "josh")
 
 _bq_client: bigquery.Client | None = None
 
@@ -359,12 +364,78 @@ def index():
         username=session.get("name", ""),
         login_username=session.get("username", ""),
         role=session.get("role", "user"),
+        can_edit_target=_can_edit_target(),
     )
 
 
 @app.route("/health")
 def health():
     return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Monthly revenue target (whole domestic: heating + water + CHC, all types).
+# The wallboard reads app.targets directly; changing it here is live on the
+# wall within its 15s cache.
+# ---------------------------------------------------------------------------
+
+def _can_edit_target() -> bool:
+    return (session.get("role") == "admin"
+            or session.get("username") in TARGET_EDITORS)
+
+
+@app.route("/api/target", methods=["GET"])
+@login_required
+def api_target_get():
+    """Current month's target plus recent months, newest first."""
+    rows = list(_bq().query(f"""
+        SELECT CAST(month AS STRING) AS month, target_gbp, set_by,
+               CAST(updated_at AS STRING) AS updated_at
+        FROM {BQ_TARGETS}
+        ORDER BY month DESC
+        LIMIT 12
+    """).result())
+    months = [{k: r[k] for k in r.keys()} for r in rows]
+    this_month = date.today().replace(day=1).isoformat()
+    current = next((m for m in months if m["month"] == this_month), None)
+    return jsonify({
+        "current": current,
+        "months": months,
+        "can_edit": _can_edit_target(),
+    })
+
+
+@app.route("/api/target", methods=["POST"])
+@login_required
+def api_target_set():
+    """Set (or replace) one month's target. Editors only."""
+    if not _can_edit_target():
+        return jsonify({"error": "only Dec, Josh or an admin can set the target"}), 403
+    d = request.get_json(silent=True) or {}
+    month_raw = str(d.get("month") or "").strip()
+    try:
+        month = date.fromisoformat(month_raw).replace(day=1)
+    except ValueError:
+        return jsonify({"error": "month must be YYYY-MM-DD"}), 400
+    try:
+        target = float(d.get("target_gbp"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "target_gbp must be a number"}), 400
+    if not 0 < target < 10_000_000:
+        return jsonify({"error": "target looks wrong — expected between £0 and £10m"}), 400
+
+    # one row per month, latest write wins, with who/when kept for traceability
+    _bq().query(f"""
+        MERGE {BQ_TARGETS} t
+        USING (SELECT @m_date AS month) s ON t.month = s.month
+        WHEN MATCHED THEN UPDATE SET
+          target_gbp = @amount, set_by = @who, updated_at = CURRENT_TIMESTAMP()
+        WHEN NOT MATCHED THEN INSERT (month, target_gbp, set_by, updated_at)
+          VALUES (@m_date, @amount, @who, CURRENT_TIMESTAMP())
+    """, job_config=_bq_params(
+        m_date=month, amount=target, who=session.get("username", ""),
+    )).result()
+    return jsonify({"ok": True, "month": month.isoformat(), "target_gbp": target})
 
 
 # ---------------------------------------------------------------------------

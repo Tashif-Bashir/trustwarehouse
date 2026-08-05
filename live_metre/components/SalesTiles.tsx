@@ -346,13 +346,14 @@ function KpiTile({
           <span className="flex flex-1 items-center justify-between rounded-lg bg-white/[0.04] px-3 py-2">
             <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.14em] text-sky-300/80">
               <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" className="shrink-0">
+                {/* breaking wave: a curl over a rolling sea line */}
                 <path
                   fill="#38bdf8"
-                  d="M12 2.5S5.5 9.6 5.5 14.4a6.5 6.5 0 0 0 13 0C18.5 9.6 12 2.5 12 2.5z"
+                  d="M20.2 13.9c-.5-4.5-3.9-7.9-8.2-7.9C7.4 6 3.8 9.3 3.8 13.6c0 .5 0 1 .1 1.5.9-.3 1.7-.9 2.2-1.8.5-1.7 2.1-3 4-3 1.7 0 3.2.9 3.9 2.3-.6-.3-1.4-.2-2 .3-.9.8-1 2.1-.2 3 .8.9 2.2 1 3.1.2.6-.5.9-1.2.9-1.9 1 .1 1.9.6 2.6 1.3.1-.5.1-1 0-1.6z"
                 />
                 <path
                   fill="#bae6fd"
-                  d="M9.4 14.8a.9.9 0 0 1 .9.9 1.9 1.9 0 0 0 1.9 1.9.9.9 0 0 1 0 1.8 3.7 3.7 0 0 1-3.7-3.7.9.9 0 0 1 .9-.9z"
+                  d="M2 17.3c1.5 0 2.3-1 3.8-1s2.3 1 3.8 1 2.3-1 3.8-1 2.3 1 3.8 1 2.3-1 3.8-1v2.1c-1.5 0-2.3 1-3.8 1s-2.3-1-3.8-1-2.3 1-3.8 1-2.3-1-3.8-1-2.3 1-3.8 1z"
                 />
               </svg>
               Water

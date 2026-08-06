@@ -20,6 +20,10 @@ const barlowCondensed = Barlow_Condensed({
 export const metadata: Metadata = {
   title: 'Live telesales metre',
   description: 'Trust Electric Heating — live telesales wallboard',
+  // Search Console ownership, so the Removals tool can clear this domain.
+  // The board is also noindexed (next.config.mjs + robots.ts) — verification
+  // is what lets us force removal rather than wait for the next crawl.
+  verification: { google: '7PeCuC5LSW6NNok4mmSGDYVnGKlYtLlcFVjUtfQT5Rw' },
 }
 
 // The team stripe: one hard colour stop per agent, roster order. The page's

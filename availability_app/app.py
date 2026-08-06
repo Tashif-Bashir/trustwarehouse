@@ -36,6 +36,19 @@ except ImportError:
     )
 
 app = Flask(__name__)
+
+# Internal tool: keep it out of search engines. noindex stops Google listing
+# it; it does NOT make the app private - that is what the login is for.
+@app.after_request
+def _noindex(resp):
+    resp.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+    return resp
+
+
+@app.route("/robots.txt")
+def _robots():
+    return "User-agent: *\nDisallow: /\n", 200, {"Content-Type": "text/plain"}
+
 app.secret_key = os.environ.get("AVAILABILITY_SECRET_KEY") or secrets.token_hex(32)
 app.permanent_session_lifetime = timedelta(hours=8)
 
@@ -189,7 +202,7 @@ MADE_BY_OPTIONS = [
     "Gemma Taylor", "Susan England", "Alicja Aleksiuk", "Lily Harpham",
     "Reilly Andrew", "Josh Baron", "Kim Ellis", "Victoria Ramsden",
     "Alice Hardegon", "Declan Franks", "Other", "Amelia Konczewska",
-    "Alisha Moore", "Ashleigh Nankervis",
+    "Alisha Moore", "Ashleigh Nankervis", "Peter Heaton",
 ]
 
 
@@ -504,7 +517,7 @@ APPT_TYPES     = ("heating", "water", "both")
 OTHER_OUTCOMES = ("", "Follow Up", "Not Interested")
 # Agents you can book on behalf of (the telesales team) — must have
 # sharpspring_name + owner id set in app.users.
-BOOK_FOR_USERNAMES = ("lily", "sue", "alicja", "alisha")
+BOOK_FOR_USERNAMES = ("lily", "sue", "alicja", "alisha", "peter")
 ENQUIRY_TYPES  = ("", "Heating", "Water", "Heating and Water")  # '' = don't write
 
 

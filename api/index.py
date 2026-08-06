@@ -925,6 +925,19 @@ def _load_all(d0s, d1s):
 
 app = Flask(__name__)
 
+# Internal tool: keep it out of search engines. noindex stops Google listing
+# it; it does NOT make the app private - that is what the login is for.
+@app.after_request
+def _noindex(resp):
+    resp.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+    return resp
+
+
+@app.route("/robots.txt")
+def _robots():
+    return "User-agent: *\nDisallow: /\n", 200, {"Content-Type": "text/plain"}
+
+
 _html_cache = None
 _html_lock  = threading.Lock()
 

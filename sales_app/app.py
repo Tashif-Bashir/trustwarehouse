@@ -28,6 +28,19 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SALES_SECRET_KEY") or secrets.token_hex(32)
 app.permanent_session_lifetime = timedelta(hours=10)
 
+# Internal tool: keep it out of search engines. noindex stops Google listing
+# it; it does NOT make the app private - that is what the login is for.
+@app.after_request
+def _noindex(resp):
+    resp.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+    return resp
+
+
+@app.route("/robots.txt")
+def _robots():
+    return "User-agent: *\nDisallow: /\n", 200, {"Content-Type": "text/plain"}
+
+
 # ---------------------------------------------------------------------------
 # Config / BigQuery
 # ---------------------------------------------------------------------------

@@ -201,11 +201,23 @@ async function querySales(): Promise<SalesMetrics | null> {
       }),
       client().query({
         query: `
-          SELECT sold_by AS name, COUNT(*) AS count, SUM(${amt}) AS total
-          ${base}
-            AND sold_by IS NOT NULL
-            AND sale_date >= DATE_TRUNC(CURRENT_DATE('Europe/London'), MONTH)
-          GROUP BY sold_by
+          SELECT name, SUM(n) AS count, SUM(t) AS total FROM (
+            SELECT sold_by AS name, COUNT(*) AS n, SUM(${amt}) AS t
+            ${base}
+              AND sold_by IS NOT NULL
+              AND sale_date >= DATE_TRUNC(CURRENT_DATE('Europe/London'), MONTH)
+            GROUP BY sold_by
+            UNION ALL
+            -- An office sale credits TWO people: Dec/Josh (sold_by) above, and
+            -- the field rep (rep) here, both at full value. Company revenue on
+            -- the cards counts the sale once; only per-person credit doubles.
+            SELECT rep, COUNT(*), SUM(${amt})
+            ${base}
+              AND sale_type = 'office' AND rep IS NOT NULL
+              AND sale_date >= DATE_TRUNC(CURRENT_DATE('Europe/London'), MONTH)
+            GROUP BY rep
+          )
+          GROUP BY name
           ORDER BY total DESC
         `,
         location: 'US',
@@ -215,7 +227,7 @@ async function querySales(): Promise<SalesMetrics | null> {
       // rather than implying it just happened.
       client().query({
         query: `
-          SELECT customer_name, sale_type, sold_by, ${amt} AS amount,
+          SELECT customer_name, sale_type, sold_by, rep, ${amt} AS amount,
                  FORMAT_TIMESTAMP('%H:%M', created_at, 'Europe/London') AS at_uk,
                  FORMAT_TIMESTAMP('%Y-%m-%d', created_at, 'Europe/London') AS day,
                  FORMAT_TIMESTAMP('%a %e %b', created_at, 'Europe/London') AS day_label
@@ -421,6 +433,7 @@ async function querySales(): Promise<SalesMetrics | null> {
       customer_name: string
       sale_type: string
       sold_by: string | null
+      rep: string | null
       amount: number
       at_uk: string
       day: string
@@ -470,7 +483,7 @@ async function querySales(): Promise<SalesMetrics | null> {
         ? {
             amount: Number(last.amount),
             typeLabel: typeLabels[last.sale_type] ?? last.sale_type,
-            soldBy: last.sold_by,
+            soldBy: last.rep ? `${last.sold_by} + ${last.rep}` : last.sold_by,
             customer: last.customer_name,
             atUk: lastSaleWhen,
           }

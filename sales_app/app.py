@@ -340,7 +340,8 @@ def _crm_note(lead_id: str, text: str, author_owner_id: str | None = None) -> No
 
 
 def _sale_note_text(sale_type: str, heating, water, chc, sold_by,
-                    sale_date: str, user_note: str, entered_by: str) -> str:
+                    sale_date: str, user_note: str, entered_by: str,
+                    rep: str | None = None) -> str:
     def gbp(x):
         return "£" + (f"{x:,.2f}".rstrip("0").rstrip(".") if x != int(x) else f"{int(x):,}")
 
@@ -358,6 +359,10 @@ def _sale_note_text(sale_type: str, heating, water, chc, sold_by,
     line = f"💰 Sale logged: {amounts} — {where}"
     if sold_by:
         line += f" by {sold_by}"
+    # An office sale is closed by Dec/Josh on a field rep's lead — both people
+    # are credited, so both names go in the note.
+    if rep:
+        line += f" (rep: {rep})"
     line += f" — {sale_date}"
     if user_note:
         line += f'\n"{user_note}"'
@@ -571,6 +576,14 @@ def api_create_sale():
     if sale_type == "chc":
         sold_by = None
 
+    # An office sale is closed by Dec/Josh but it is a FIELD REP's sale — both
+    # are credited, so both names are recorded. Only office sales carry `rep`.
+    rep = (d.get("rep") or "").strip() or None
+    if sale_type == "office" and not rep:
+        return jsonify({"error": "pick the field rep whose sale this is"}), 400
+    if sale_type != "office":
+        rep = None
+
     lead_id = (str(d.get("lead_id") or "").strip()) or None
     customer_name = (d.get("customer_name") or "").strip()
     if not customer_name:
@@ -597,7 +610,8 @@ def api_create_sale():
                 lead_id,
                 _sale_note_text(sale_type, heating, water, chc, sold_by,
                                 sale_date.isoformat(), (d.get("note") or "").strip(),
-                                session.get("name") or session.get("username") or "?"),
+                                session.get("name") or session.get("username") or "?",
+                                rep=rep),
                 author_owner_id=rep_owner or None,
             )
         except Exception:
@@ -610,13 +624,15 @@ def api_create_sale():
             INSERT INTO {BQ_SALES}
             (sale_id, lead_id, customer_name, postcode, sale_date, sale_type,
              heating_amount, water_amount, chc_amount, sold_by, sold_by_owner_id,
-             product_bought, note, source, status, crm_synced, entered_by, created_at)
+             rep, product_bought, note, source, status, crm_synced, entered_by,
+             created_at)
             VALUES
             (@sid, @lid, @cname, @pcode, @s_date, @stype,
              @heat, @wat, @chc, @sold_by, @sb_oid,
-             @product, @note, 'app', 'active', @synced, @entered, @now_ts)
+             @rep, @product, @note, 'app', 'active', @synced, @entered, @now_ts)
         """, job_config=bigquery.QueryJobConfig(query_parameters=[
             bigquery.ScalarQueryParameter("sid", "STRING", sale_id),
+            bigquery.ScalarQueryParameter("rep", "STRING", rep),
             bigquery.ScalarQueryParameter("lid", "STRING", lead_id),
             bigquery.ScalarQueryParameter("cname", "STRING", customer_name),
             bigquery.ScalarQueryParameter("pcode", "STRING",
@@ -661,7 +677,8 @@ def api_list_sales():
     rows = list(_bq().query(f"""
         SELECT sale_id, lead_id, customer_name, postcode, sale_date, sale_type,
                heating_amount, water_amount, chc_amount, sold_by, sold_by_owner_id,
-               entered_by, status, void_reason, cancel_reason, crm_synced, source, note
+               rep, entered_by, status, void_reason, cancel_reason, crm_synced,
+               source, note
         FROM {BQ_SALES}
         WHERE sale_date >= @s_date AND sale_date < @e_date
         ORDER BY sale_date DESC, created_at DESC
@@ -822,21 +839,29 @@ def api_edit_sale(sale_id: str):
     if sale_type == "chc":
         sold_by = None
 
+    rep = (d.get("rep") or "").strip() or None
+    if sale_type == "office" and not rep:
+        return jsonify({"error": "pick the field rep whose sale this is"}), 400
+    if sale_type != "office":
+        rep = None
+
     rep_owner = _rep_owner_id(sold_by) if sale_type in REP_SALE_TYPES else ""
 
     before = {k: sale[k] for k in ("sale_date", "sale_type", "heating_amount",
-                                   "water_amount", "chc_amount", "sold_by", "note")}
+                                   "water_amount", "chc_amount", "sold_by",
+                                   "rep", "note")}
     after = {"sale_date": sale_date.isoformat(), "sale_type": sale_type,
              "heating_amount": heating, "water_amount": water, "chc_amount": chc,
-             "sold_by": sold_by, "note": (d.get("note") or "").strip() or None}
+             "sold_by": sold_by, "rep": rep,
+             "note": (d.get("note") or "").strip() or None}
 
     now = datetime.now(timezone.utc)
     _bq().query(f"""
         UPDATE {BQ_SALES}
         SET sale_date = @s_date, sale_type = @stype,
             heating_amount = @heat, water_amount = @wat, chc_amount = @chc,
-            sold_by = @sold_by, sold_by_owner_id = @sb_oid, note = @note,
-            updated_at = @now_ts
+            sold_by = @sold_by, sold_by_owner_id = @sb_oid, rep = @rep,
+            note = @note, updated_at = @now_ts
         WHERE sale_id = @sid
     """, job_config=bigquery.QueryJobConfig(query_parameters=[
         bigquery.ScalarQueryParameter("sid", "STRING", sale_id),
@@ -846,6 +871,7 @@ def api_edit_sale(sale_id: str):
         bigquery.ScalarQueryParameter("wat", "FLOAT64", water),
         bigquery.ScalarQueryParameter("chc", "FLOAT64", chc),
         bigquery.ScalarQueryParameter("sold_by", "STRING", sold_by),
+        bigquery.ScalarQueryParameter("rep", "STRING", rep),
         bigquery.ScalarQueryParameter("sb_oid", "STRING",
                                       rep_owner
                                       or (d.get("sold_by_owner_id") or "").strip()

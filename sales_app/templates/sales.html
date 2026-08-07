@@ -203,6 +203,7 @@ function LogSale({ onLogged, showToast }) {
   const [water, setWater] = useState("");
   const [chc, setChc] = useState("");
   const [soldBy, setSoldBy] = useState("");
+  const [rep, setRep] = useState("");   // office sales: the field rep credited alongside Dec/Josh
   const [note, setNote] = useState("");
   const [reps, setReps] = useState([]);
   const [office, setOffice] = useState(["Dec", "Josh"]);
@@ -240,7 +241,7 @@ function LogSale({ onLogged, showToast }) {
   const reset = () => {
     setQ(""); setResults([]); setCustomer(null); setHistory(null);
     setManualMode(false); setManualName(""); setManualPostcode("");
-    setSaleType("on_site"); setSaleDate(todayIso());
+    setSaleType("on_site"); setSaleDate(todayIso()); setRep("");
     setHeating(""); setWater(""); setChc(""); setSoldBy(""); setNote("");
     setConfirming(false); setDone(null);
   };
@@ -264,6 +265,7 @@ function LogSale({ onLogged, showToast }) {
         water_amount: saleType === "chc" ? null : num(water),
         chc_amount: saleType === "chc" ? num(chc) : null,
         sold_by: saleType === "chc" ? null : soldBy,
+        rep: saleType === "office" ? (rep || null) : null,
         sold_by_owner_id: (reps.find(r => r.name === soldBy) || {}).owner_id || "",
         note: note.trim(),
       };
@@ -436,13 +438,22 @@ function LogSale({ onLogged, showToast }) {
             )}
             {saleType === "office" && (
               <div className="field">
-                <label className="label">Sold by</label>
+                <label className="label">Closed by (office)</label>
                 <div className="type-pills">
                   {office.map(n => (
                     <button key={n} className={"tpill" + (soldBy === n ? " on" : "")}
                             onClick={() => setSoldBy(n)}>{n}</button>
                   ))}
                 </div>
+              </div>
+            )}
+            {saleType === "office" && (
+              <div className="field">
+                <label className="label">Field rep (whose sale it is)</label>
+                <select className="inp" value={rep} onChange={e => setRep(e.target.value)}>
+                  <option value="">— pick the rep —</option>
+                  {reps.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
+                </select>
               </div>
             )}
 
@@ -558,6 +569,7 @@ function Ledger({ refreshKey, showToast }) {
     water: s.water_amount ? String(s.water_amount) : "",
     chc: s.chc_amount ? String(s.chc_amount) : "",
     sold_by: s.sold_by || "",
+    rep: s.rep || "",
     note: s.note || "",
   });
 
@@ -571,6 +583,7 @@ function Ledger({ refreshKey, showToast }) {
           sale_date: e.sale_date, sale_type: e.sale_type,
           heating_amount: e.heating || null, water_amount: e.water || null,
           chc_amount: e.chc || null, sold_by: e.sold_by || null,
+          rep: e.sale_type === "office" ? (e.rep || null) : null,
           sold_by_owner_id: (reps.find(x => x.name === e.sold_by) || {}).owner_id || "",
           note: e.note,
         }),
@@ -622,7 +635,7 @@ function Ledger({ refreshKey, showToast }) {
               <div className="s-name">{s.customer_name}</div>
               <div className="s-meta">
                 <span className={"chip type-" + s.sale_type}>{TYPE_LABEL[s.sale_type]}</span>
-                {s.sold_by && <span>{s.sold_by}</span>}
+                {s.sold_by && <span>{s.sold_by}{s.rep ? " + " + s.rep : ""}</span>}
                 {s.entered_by && <span>entered by {s.entered_by}</span>}
                 {s.source === "backfill_sheet" && <span className="chip other">backfill</span>}
                 {!s.lead_id && <span className="chip unsynced">no CRM match</span>}
@@ -730,13 +743,23 @@ function Ledger({ refreshKey, showToast }) {
             )}
             {editing.sale_type === "office" && (
               <div className="field">
-                <label className="label">Sold by</label>
+                <label className="label">Closed by (office)</label>
                 <div className="type-pills">
                   {office.map(n => (
                     <button key={n} className={"tpill" + (editing.sold_by === n ? " on" : "")}
                             onClick={() => setEditing({ ...editing, sold_by: n })}>{n}</button>
                   ))}
                 </div>
+              </div>
+            )}
+            {editing.sale_type === "office" && (
+              <div className="field">
+                <label className="label">Field rep (whose sale it is)</label>
+                <select className="inp" value={editing.rep || ""}
+                        onChange={e => setEditing({ ...editing, rep: e.target.value })}>
+                  <option value="">— pick the rep —</option>
+                  {reps.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
+                </select>
               </div>
             )}
             <div className="field">

@@ -87,6 +87,24 @@ RAW_COPIES = [
 ]
 
 
+# ── Search Console straight copies (renamed, same region) ───────────────────
+# Currently backed by the one-off 16-month API backfill in bronze; Google's
+# native `searchconsole` bulk export was enabled 10 Aug 2026 and once its
+# daily tables start landing these switch to a union/replace of backfill +
+# native rows. Both sources are europe-west2, same as the mart, so this is a
+# plain CREATE TABLE AS SELECT - not the cross-region dataframe path used for
+# app.sales (US). The mart drops the "_backfill" suffix; marketing shouldn't
+# care about provenance.
+# The big table is ~520MB and its source changes at most daily, so the hourly
+# run skips the copy when source and mart row counts already match — the
+# check reads __TABLES__ metadata, which BigQuery answers without scanning.
+
+GSC_COPIES = [
+    ("gsc_search_analytics", "gsc_search_analytics_backfill"),
+    ("gsc_daily_totals", "gsc_daily_totals_backfill"),
+]
+
+
 # ── derived tables, in dependency order ──────────────────────────────────────
 
 SHARPSPRING_LEADS = f"""
@@ -454,6 +472,30 @@ def main() -> None:
             failed.append((t, str(e).splitlines()[0][:90]))
             print(f"  FAIL {t:<45} {str(e).splitlines()[0][:55]}")
 
+    gsc_counts = {
+        (r.dataset, r.table_id): r.row_count
+        for r in client.query(f"""
+            SELECT 'bronze' AS dataset, table_id, row_count
+            FROM `{PROJECT}.bronze.__TABLES__` WHERE table_id LIKE 'gsc%'
+            UNION ALL
+            SELECT '{DST}', table_id, row_count
+            FROM `{PROJECT}.{DST}.__TABLES__` WHERE table_id LIKE 'gsc%'
+        """).result()
+    }
+    for dest, src in GSC_COPIES:
+        try:
+            src_n = gsc_counts.get(("bronze", src))
+            if src_n is not None and gsc_counts.get((DST, dest)) == src_n:
+                done.append((dest, src_n))
+                print(f"  skip {dest:<45} {src_n:>10,} (source unchanged)")
+                continue
+            n = build(dest, f"SELECT * FROM `{PROJECT}.bronze.{src}`")
+            done.append((dest, n))
+            print(f"  ok   {dest:<45} {n:>10,}")
+        except Exception as e:
+            failed.append((dest, str(e).splitlines()[0][:90]))
+            print(f"  FAIL {dest:<45} {str(e).splitlines()[0][:55]}")
+
     # before the derived tables, because sales_attributed does not depend on it
     # but a failure here shouldn't stop the rest of the mart rebuilding
     try:
@@ -482,7 +524,7 @@ def main() -> None:
       FROM UNNEST([{rows}])
     """).result()
 
-    print(f"\n{len(done)}/{len(RAW_COPIES) + len(DERIVED) + 1} tables, "
+    print(f"\n{len(done)}/{len(RAW_COPIES) + len(GSC_COPIES) + len(DERIVED) + 1} tables, "
           f"{sum(n for _, n in done):,} rows")
     if failed:
         print("FAILURES:")

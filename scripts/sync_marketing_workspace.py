@@ -489,7 +489,9 @@ def main() -> None:
                 done.append((dest, src_n))
                 print(f"  skip {dest:<45} {src_n:>10,} (source unchanged)")
                 continue
-            n = build(dest, f"SELECT * FROM `{PROJECT}.bronze.{src}`")
+            # bronze keeps date as the API's raw string; the mart types it so
+            # consumers can write `WHERE date >= <date>` without casting
+            n = build(dest, f"SELECT * REPLACE (DATE(date) AS date) FROM `{PROJECT}.bronze.{src}`")
             done.append((dest, n))
             print(f"  ok   {dest:<45} {n:>10,}")
         except Exception as e:

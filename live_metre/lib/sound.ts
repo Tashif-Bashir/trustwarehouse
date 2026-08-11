@@ -9,18 +9,20 @@
 let ctx: AudioContext | null = null
 let noiseBuf: AudioBuffer | null = null
 
-// Optional real recording. If a file is dropped in (see public/sounds/README),
-// it is used verbatim and the synthesised versions below become the fallback.
-let fileBuf: AudioBuffer | null = null
-let filePending: Promise<void> | null = null
+// Optional real recording(s). If a file is dropped in (see
+// public/sounds/README), it is used verbatim and the synthesised versions
+// below become the fallback. Keyed by url so the sale ka-ching and the
+// end-of-day clip can both be cached at once without stomping each other.
+const fileBufs = new Map<string, AudioBuffer>()
+const filePendings = new Map<string, Promise<void>>()
 // Set only when the fetch/decode actually failed, so a sale that lands while
 // the file is still downloading waits for it instead of firing the synth.
-let fileFailed = false
-// Where the audible part of the recording ends, in seconds. Sound files are
+const fileFailedUrls = new Set<string>()
+// Where the audible part of each recording ends, in seconds. Sound files are
 // usually padded with silence (the supplied ka-ching is 3.02s long but stops
 // making noise at 1.32s), and chaining on the full buffer length would leave
 // a dead gap between repeats.
-let fileEnd = 0
+const fileEnds = new Map<string, number>()
 
 /** Last sample above the noise floor, in seconds — i.e. the real end. */
 function audibleEnd(buf: AudioBuffer): number {
@@ -263,22 +265,96 @@ export function playCashRegister(opts: { volume?: number; amount?: number } = {}
  */
 export function primeSaleFile(url?: string | null): void {
   const c = audioCtx()
-  if (!c || !url || fileBuf || filePending) return
-  filePending = fetch(url)
+  if (!c || !url || fileBufs.has(url) || filePendings.has(url)) return
+  const pending = fetch(url)
     .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
     .then((buf) => c.decodeAudioData(buf))
     .then((decoded) => {
-      fileBuf = decoded
-      fileEnd = audibleEnd(decoded)
+      fileBufs.set(url, decoded)
+      fileEnds.set(url, audibleEnd(decoded))
     })
     .catch(() => {
-      /* no file, or undecodable — synthesised sound stays in charge */
-      fileFailed = true
+      /* no file, or undecodable — synthesised sound (or silence) stays in charge */
+      fileFailedUrls.add(url)
     })
+  filePendings.set(url, pending)
 }
 
-export function hasSaleFile(): boolean {
-  return fileBuf !== null
+export function hasSaleFile(url: string): boolean {
+  return fileBufs.has(url)
+}
+
+export interface FileSoundHandle {
+  /** Fade out over fadeMs then stop the source. Safe to call more than once. */
+  stop(fadeMs: number): void
+}
+
+const NOOP_HANDLE: FileSoundHandle = { stop() {} }
+
+/**
+ * Play a file-backed clip with NO synthesised fallback — for sounds like the
+ * end-of-day takeover that must FAIL SOFT: if the clip is missing or won't
+ * decode, this stays silent rather than reaching for the ka-ching. Shares the
+ * fetch/decode/priming pipeline (and its per-url cache) with playSaleSound.
+ *
+ * Returns a handle so a long clip (the EOD track outlasts the ~45s takeover)
+ * can be faded out and stopped by the caller instead of playing to the end
+ * unattended — a plain fire-and-forget start() left it running under the
+ * board after the takeover unmounted.
+ */
+export function playFileSound(url: string, opts: { volume?: number } = {}): FileSoundHandle {
+  const c = audioCtx()
+
+  let stopped = false
+  let active: { src: AudioBufferSourceNode; gain: GainNode } | null = null
+
+  const stop = (fadeMs: number) => {
+    if (stopped) return // guard double-stop
+    stopped = true
+    if (!active || !c) return // never started (missing file / still deciding) — nothing to stop
+    const { src, gain } = active
+    const now = c.currentTime
+    const fadeSec = Math.max(0, fadeMs) / 1000
+    try {
+      gain.gain.cancelScheduledValues(now)
+      gain.gain.setValueAtTime(gain.gain.value, now)
+      gain.gain.linearRampToValueAtTime(0, now + fadeSec)
+      src.stop(now + fadeSec)
+    } catch {
+      // already ended/stopped — nothing to do
+    }
+  }
+
+  if (!c || c.state !== 'running') return NOOP_HANDLE
+
+  primeSaleFile(url)
+
+  const fire = (buf: AudioBuffer) => {
+    if (stopped) return // stop() already called before the decode/prime resolved
+    const src = c.createBufferSource()
+    src.buffer = buf
+    const g = c.createGain()
+    g.gain.value = opts.volume ?? 0.35
+    src.connect(g).connect(c.destination)
+    src.start()
+    active = { src, gain: g }
+  }
+
+  const buf = fileBufs.get(url)
+  if (buf) {
+    fire(buf)
+    return { stop }
+  }
+  // Still decoding (or just failed) — wait for the in-flight fetch, but never
+  // fall back to a synthesised sound; a missing clip stays silent.
+  const pending = filePendings.get(url)
+  if (!fileFailedUrls.has(url) && pending) {
+    pending.then(() => {
+      const decoded = fileBufs.get(url)
+      if (decoded) fire(decoded)
+    })
+  }
+  return { stop }
 }
 
 /** Play the real recording if one is loaded, else the configured synth style. */
@@ -297,15 +373,16 @@ export function playSaleSound(
   primeSaleFile(opts.file)
 
   const playFile = (): boolean => {
-    if (!fileBuf) return false
+    const buf = opts.file ? fileBufs.get(opts.file) : undefined
+    if (!buf) return false
     // Chain the recording so a sale lands with a proper run of the till. Space
     // the repeats by where the audio ACTUALLY ends, not the buffer length, or
     // the file's trailing silence shows up as a gap between them.
     const times = Math.max(1, Math.round(opts.repeat ?? 1))
-    const step = Math.max(0.05, (fileEnd || fileBuf.duration) - 0.02)
+    const step = Math.max(0.05, (fileEnds.get(opts.file as string) || buf.duration) - 0.02)
     for (let i = 0; i < times; i++) {
       const src = c.createBufferSource()
-      src.buffer = fileBuf
+      src.buffer = buf
       const g = c.createGain()
       g.gain.value = opts.volume ?? 0.35
       src.connect(g).connect(c.destination)
@@ -322,8 +399,9 @@ export function playSaleSound(
   // would otherwise always get the synth stand-in even though a real recording
   // is sitting there. Wait for the decode instead — it is a local file and the
   // delay is imperceptible. Only a genuine failure falls back to the synth.
-  if (opts.file && !fileFailed && filePending) {
-    filePending.then(() => {
+  const pending = opts.file ? filePendings.get(opts.file) : undefined
+  if (opts.file && !fileFailedUrls.has(opts.file) && pending) {
+    pending.then(() => {
       if (!playFile()) playSynth()
     })
     return true

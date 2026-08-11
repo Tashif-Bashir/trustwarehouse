@@ -1,6 +1,6 @@
 import { BigQuery } from '@google-cloud/bigquery'
-import { BOARDS, SOURCE_NAMES, TEAM_AGENTS, TEAM_ASCEND_NAMES } from '../config'
-import type { Metrics, SalesMetrics } from '../types'
+import { AGENTS, BOARDS, MORNING_QUERY_WINDOW, SOURCE_NAMES, TEAM_AGENTS, TEAM_ASCEND_NAMES } from '../config'
+import type { DoorsMetrics, Metrics, SalesMetrics } from '../types'
 
 // Real data provider.
 //
@@ -58,6 +58,31 @@ const ASCEND_MAP: Record<string, Map<string, string>> = {
   team: byAscendTeam,
 }
 
+// UK-local date arithmetic shared by querySales, queryAppointments and the
+// doors-open payload — noon UTC keeps it clear of any DST midnight edge.
+function addDays(s: string, n: number): string {
+  const d = new Date(s + 'T12:00:00Z')
+  return new Date(d.getTime() + n * 86_400_000).toISOString().slice(0, 10)
+}
+
+// Exported so app/api/metrics/route.ts can decide whether to ask for the
+// doors-open morning payload without duplicating the Europe/London clock math.
+export function isMorningQueryWindow(): boolean {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date())
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? ''
+  if (['Sat', 'Sun'].includes(get('weekday'))) return false
+  const mins = Number(get('hour')) * 60 + Number(get('minute'))
+  const start = MORNING_QUERY_WINDOW.startHour * 60 + MORNING_QUERY_WINDOW.startMinute
+  const end = MORNING_QUERY_WINDOW.endHour * 60 + MORNING_QUERY_WINDOW.endMinute
+  return mins >= start && mins < end
+}
+
 interface CallRow {
   agent: string
   total_calls: number
@@ -111,19 +136,30 @@ async function queryCalls(nameMap: Map<string, string>): Promise<Map<string, Cal
   return out
 }
 
-// Booking events today, one per lead, agent-id attributed. Each source is
-// fetched independently and failures degrade to the other source rather
-// than blanking the board.
-async function queryAppointments(): Promise<Map<string, number>> {
+interface AppointmentsResult {
+  today: Map<string, number> // agent id -> count, today only
+  yesterdayCount: number
+  yesterdayTopBooker: string | null
+}
+
+// Booking events today AND yesterday, one per lead, agent-id attributed.
+// Yesterday's rows exist purely for the doors-open morning takeover
+// (yesterdayCount/yesterdayTopBooker below) — this widens the SAME two
+// query arms' date filter by one day rather than issuing new queries.
+// Each source is fetched independently and failures degrade to the other
+// source rather than blanking the board.
+async function queryAppointments(): Promise<AppointmentsResult> {
   const crmPromise = client()
     .query({
       query: `
-        SELECT lead_id, appointment_made_by AS name
+        SELECT lead_id, appointment_made_by AS name,
+               CAST(DATE(SAFE_CAST(appointment_booked_at AS TIMESTAMP), 'Europe/London') AS STRING) AS day
         FROM \`${PROJECT}.silver.silver_sharpspring_leads\`
         WHERE appointment_made_by IN UNNEST(@names)
           AND appointment_booked_at IS NOT NULL
           AND DATE(SAFE_CAST(appointment_booked_at AS TIMESTAMP), 'Europe/London')
-              = CURRENT_DATE('Europe/London')
+              BETWEEN DATE_SUB(CURRENT_DATE('Europe/London'), INTERVAL 1 DAY)
+                  AND CURRENT_DATE('Europe/London')
           AND (appointment_booked = 'Yes'
                OR LOWER(COALESCE(domestic_appointment_status, '')) IN
                   ('appointment', 'whatsapp appointment', 'appointment cancelled'))
@@ -131,16 +167,19 @@ async function queryAppointments(): Promise<Map<string, number>> {
       params: { names: [...byCrm.keys()] },
       location: 'europe-west2',
     })
-    .then(([rows]) => rows as { lead_id: string; name: string }[])
+    .then(([rows]) => rows as { lead_id: string; name: string; day: string }[])
     .catch(() => [])
 
   const appPromise = client()
     .query({
       query: `
-        SELECT lead_id, booker_name AS name
+        SELECT lead_id, booker_name AS name,
+               CAST(DATE(booked_at, 'Europe/London') AS STRING) AS day
         FROM \`${PROJECT}.app.bookings\`
         WHERE booker_name IN UNNEST(@names)
-          AND DATE(booked_at, 'Europe/London') = CURRENT_DATE('Europe/London')
+          AND DATE(booked_at, 'Europe/London')
+              BETWEEN DATE_SUB(CURRENT_DATE('Europe/London'), INTERVAL 1 DAY)
+                  AND CURRENT_DATE('Europe/London')
           AND customer NOT LIKE 'Zzz Testlead%'
           -- unlinked (calendar-only) rows can't be deduped against the CRM
           -- and reschedules aren't new bookings — neither counts (22 Jul 2026)
@@ -150,25 +189,92 @@ async function queryAppointments(): Promise<Map<string, number>> {
       params: { names: [...byBooker.keys()] },
       location: 'US',
     })
-    .then(([rows]) => rows as { lead_id: string; name: string }[])
+    .then(([rows]) => rows as { lead_id: string; name: string; day: string }[])
     .catch(() => [])
 
   const [crmRows, appRows] = await Promise.all([crmPromise, appPromise])
 
   // dedupe on lead: CRM first so its attribution wins when both have the row
-  const agentByLead = new Map<string, string>()
+  const agentByLead = new Map<string, { id: string; day: string }>()
   for (const row of crmRows) {
     const id = byCrm.get(row.name)
-    if (id) agentByLead.set(String(row.lead_id), id)
+    if (id) agentByLead.set(String(row.lead_id), { id, day: row.day })
   }
   for (const row of appRows) {
     const id = byBooker.get(row.name)
-    if (id && !agentByLead.has(String(row.lead_id))) agentByLead.set(String(row.lead_id), id)
+    if (id && !agentByLead.has(String(row.lead_id))) {
+      agentByLead.set(String(row.lead_id), { id, day: row.day })
+    }
   }
 
-  const counts = new Map<string, number>()
-  for (const id of agentByLead.values()) counts.set(id, (counts.get(id) ?? 0) + 1)
-  return counts
+  const today = ukToday()
+  const yesterday = addDays(today, -1)
+  const todayCounts = new Map<string, number>()
+  const yesterdayByAgent = new Map<string, number>()
+  for (const { id, day } of agentByLead.values()) {
+    if (day === today) todayCounts.set(id, (todayCounts.get(id) ?? 0) + 1)
+    else if (day === yesterday) yesterdayByAgent.set(id, (yesterdayByAgent.get(id) ?? 0) + 1)
+  }
+
+  let yesterdayCount = 0
+  let yesterdayTopBooker: string | null = null
+  let topN = 0
+  for (const [id, n] of yesterdayByAgent) {
+    yesterdayCount += n
+    if (n > topN) {
+      topN = n
+      yesterdayTopBooker = AGENTS.find((a) => a.id === id)?.name ?? null
+    }
+  }
+
+  return { today: todayCounts, yesterdayCount, yesterdayTopBooker }
+}
+
+const EMPTY_APPOINTMENTS: AppointmentsResult = {
+  today: new Map(),
+  yesterdayCount: 0,
+  yesterdayTopBooker: null,
+}
+
+// Leads to chase this morning: ALL of yesterday's leads (the team works the
+// whole prior day's backlog, not just post-close arrivals) — window starts
+// yesterday 00:00 Europe/London, EXCEPT on a Monday where it starts Saturday
+// 00:00 so the weekend backlog is swept in too (Friday's leads were already
+// worked on Friday, so Friday itself isn't included). Excludes test leads.
+// New small query arm, but gated: only ever called from getBronzeMetrics
+// when the request lands in the morning window or carries ?morning/?doors —
+// never on every poll. Cached like everything else so several screens
+// polling in that hour share one BigQuery read.
+let freshLeadsCache: { value: number; at: number; ukDate: string } | null = null
+
+async function queryFreshLeadsToChase(): Promise<number> {
+  const today = ukToday()
+  if (
+    freshLeadsCache &&
+    Date.now() - freshLeadsCache.at < CACHE_TTL_MS &&
+    freshLeadsCache.ukDate === today
+  ) {
+    return freshLeadsCache.value
+  }
+  const [rows] = await client().query({
+    query: `
+      SELECT COUNT(*) AS n
+      FROM \`${PROJECT}.silver.silver_sharpspring_leads\`
+      WHERE first_name NOT LIKE 'Zzz Testlead%'
+        AND SAFE_CAST(created_at AS TIMESTAMP) >= CAST(
+              DATETIME_SUB(
+                DATETIME_TRUNC(CURRENT_DATETIME('Europe/London'), DAY),
+                INTERVAL IF(
+                  FORMAT_DATE('%A', CURRENT_DATE('Europe/London')) = 'Monday', 2, 1
+                ) DAY
+              ) AS TIMESTAMP
+            )
+    `,
+    location: 'europe-west2',
+  })
+  const value = Number((rows as { n: number }[])[0]?.n ?? 0)
+  freshLeadsCache = { value, at: Date.now(), ukDate: today }
+  return value
 }
 
 // Sales tiles (team board) — live from app.sales (US region), the Trust Sales
@@ -291,10 +397,6 @@ async function querySales(): Promise<SalesMetrics | null> {
 
     // derive the windows from the daily grain (all dates are UK-local)
     const today = ukToday()
-    const addDays = (s: string, n: number) => {
-      const d = new Date(s + 'T12:00:00Z')
-      return new Date(d.getTime() + n * 86_400_000).toISOString().slice(0, 10)
-    }
     const monthStart = today.slice(0, 8) + '01'
     const dow = new Date(today + 'T12:00:00Z').getUTCDay() // 0 = Sun
     const weekStart = addDays(today, -((dow + 6) % 7))
@@ -470,6 +572,7 @@ async function querySales(): Promise<SalesMetrics | null> {
       todayHeating: todayAgg.heat,
       todayWater: todayAgg.water,
       yesterdayRevenue: yesterdayAgg.total,
+      yesterdayCount: yesterdayAgg.n,
       last7,
       monthTrend,
       weekTrend,
@@ -505,18 +608,27 @@ function ukToday(): string {
   }).format(new Date())
 }
 
-export async function getBronzeMetrics(boardId: string = 'telesales'): Promise<Metrics> {
+export async function getBronzeMetrics(
+  boardId: string = 'telesales',
+  opts: { morning?: boolean } = {}
+): Promise<Metrics> {
   const board = BOARDS[boardId] ?? BOARDS.telesales
   const cache = caches[board.id]
   if (cache && Date.now() - cache.at < CACHE_TTL_MS && cache.ukDate === ukToday()) {
     return cache.data
   }
 
+  // The leads-to-chase query is the one genuinely NEW query arm here
+  // (everything else above just widens existing arms) — gate it to the real
+  // morning window or an explicit override, never every 15s/20s poll all day.
+  const wantsMorningData = board.features.appointments && !!opts.morning
+
   try {
-    const [calls, appointments, sales] = await Promise.all([
+    const [calls, appointments, sales, freshLeadsOvernight] = await Promise.all([
       queryCalls(ASCEND_MAP[board.id]),
-      board.features.appointments ? queryAppointments() : Promise.resolve(new Map<string, number>()),
+      board.features.appointments ? queryAppointments() : Promise.resolve(EMPTY_APPOINTMENTS),
       board.features.sales ? querySales() : Promise.resolve(null),
+      wantsMorningData ? queryFreshLeadsToChase() : Promise.resolve(null),
     ])
     const today = ukToday()
     const prevByAgent = new Map(
@@ -535,7 +647,7 @@ export async function getBronzeMetrics(boardId: string = 'telesales'): Promise<M
         totalCalls: Math.max(Number(c?.total_calls ?? 0), prev?.totalCalls ?? 0),
         callsOver1m: Math.max(Number(c?.calls_over_1m ?? 0), prev?.callsOver1m ?? 0),
         talktimeSeconds: Math.max(Number(c?.talk_seconds ?? 0), prev?.talktimeSeconds ?? 0),
-        appointmentsBooked: appointments.get(agent.id) ?? 0,
+        appointmentsBooked: appointments.today.get(agent.id) ?? 0,
       }
     })
     const data: Metrics = {
@@ -543,6 +655,15 @@ export async function getBronzeMetrics(boardId: string = 'telesales'): Promise<M
       source: board.features.sales ? 'Ascend + Trust Sales' : 'Ascend',
       agents,
       ...(sales ? { sales } : {}),
+      ...(board.features.appointments
+        ? {
+            doors: {
+              yesterdayAppointments: appointments.yesterdayCount,
+              yesterdayTopBooker: appointments.yesterdayTopBooker,
+              freshLeadsOvernight,
+            } as DoorsMetrics,
+          }
+        : {}),
     }
     caches[board.id] = { data, at: Date.now(), ukDate: today }
     return data

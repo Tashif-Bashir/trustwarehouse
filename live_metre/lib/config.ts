@@ -137,6 +137,56 @@ export const CELEBRATION = {
   weekdaysOnly: true,
 }
 
+// End-of-day celebration for the SALES & OPS STATIC BOARD ONLY (owner
+// request, 10 Aug 2026) — the telesales board's CELEBRATION above is a
+// separate, unrelated feature and stays untouched. At this UK time, Mon-Fri
+// EVERY weekday (no Friday exception — the sales team finishes at 5 daily,
+// unlike telesales), the board takes over the screen for durationMs with
+// today's numbers and plays sound.file through the existing file-playback
+// pipeline (lib/sound.ts). Fires once per day per browser; graceMinutes lets
+// a screen that wakes late still celebrate. ?eod=1 forces a demo run without
+// marking the day as celebrated.
+export const EOD_CELEBRATION = {
+  enabled: true,
+  hour: 16,
+  minute: 59,
+  graceMinutes: 5,
+  weekdaysOnly: true,
+  durationMs: 45_000,
+  sound: {
+    // Dropped in later by the brain — see public/sounds/README. Missing/
+    // undecodable file = the takeover runs silently (lib/sound.ts's
+    // playFileSound has no synthesised fallback, unlike the sale ka-ching).
+    file: '/sounds/endofday.mp3',
+    volume: SALES_SOUND.volume,
+  },
+}
+
+// "Doors open" morning takeover: at this UK time on working days, EVERY
+// board (telesales AND sales & ops) shows a ~30s takeover — yesterday's
+// headline number plus a look at today — then melts back into the live
+// board. Softer than the EOD confetti (sunrise gradient, no sound). Fires
+// once per day per browser; graceMinutes lets a screen that wakes late still
+// catch it. ?doors=1 forces a demo run without marking the day as
+// celebrated. If EOD and DOORS are both forced in the same demo, EOD wins
+// (Wallboard checks the ?eod param directly, not just state, so the two
+// effects can't race on the same mount).
+export const DOORS_CELEBRATION = {
+  enabled: true,
+  hour: 8,
+  minute: 50,
+  graceMinutes: 5,
+  weekdaysOnly: true,
+  durationMs: 30_000,
+}
+
+// Server-side gate for the telesales "fresh leads overnight" count (lib/
+// provider/bronze.ts): that query only runs inside this window (or with a
+// ?morning/?doors param), never on every 15s/20s poll all day — a wider
+// window than DOORS_CELEBRATION.graceMinutes so the number is ready for
+// screens that load a little before/after the takeover itself.
+export const MORNING_QUERY_WINDOW = { startHour: 8, startMinute: 30, endHour: 9, endMinute: 30 }
+
 // Frontend polling cadence and the threshold after which the feed is
 // declared stale (amber pill).
 export const POLL_INTERVAL_MS = 20_000

@@ -47,7 +47,13 @@ function ukClock(): { dayKey: number; minutesIntoDay: number } {
   }
 }
 
-export async function getMockMetrics(boardId: string = 'telesales'): Promise<Metrics> {
+export async function getMockMetrics(
+  boardId: string = 'telesales',
+  // Doors-open morning takeover only reads real sales/CRM data (see bronze.ts)
+  // — the mock has neither, so this is accepted for signature parity and
+  // otherwise ignored.
+  _opts: { morning?: boolean } = {}
+): Promise<Metrics> {
   const board = BOARDS[boardId] ?? BOARDS.telesales
   const { dayKey, minutesIntoDay } = ukClock()
   const dayStart = WORKDAY.startHour * 60 + WORKDAY.startMinute

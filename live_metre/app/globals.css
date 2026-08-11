@@ -57,6 +57,19 @@
   background: radial-gradient(1000px 600px at 50% 18%, #17181d 0%, #0a0a0b 70%, #070708 100%);
 }
 
+/* Doors-open morning takeover — softer than the EOD confetti: a warm
+   sunrise glow low in the frame, fading into the same dark broadcast base
+   the rest of the board sits on, rather than a full attention-grabbing burst. */
+.doors-takeover {
+  background: radial-gradient(
+      900px 500px at 50% 78%,
+      rgba(251, 191, 36, 0.16) 0%,
+      rgba(251, 191, 36, 0.05) 45%,
+      transparent 72%
+    ),
+    radial-gradient(1000px 600px at 50% 18%, #17181d 0%, #0a0a0b 70%, #070708 100%);
+}
+
 @keyframes confetti-fall {
   0% {
     transform: translateY(-8vh) rotate(0deg);

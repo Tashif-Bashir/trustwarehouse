@@ -45,6 +45,7 @@ export interface SalesMetrics {
   todayHeating: number
   todayWater: number
   yesterdayRevenue: number
+  yesterdayCount: number // already in the daily grain query (n per day) — just exposed here
   // six periods each, oldest first, current period last; gaps are zero-filled
   monthTrend: { label: string; total: number }[]
   weekTrend: { label: string; total: number }[]
@@ -61,9 +62,21 @@ export interface SalesMetrics {
   lastSale: LastSale | null
 }
 
+// Doors-open morning takeover extras (telesales board only — sales-ops reuses
+// SalesMetrics directly, see yesterdayCount/monthTarget/monthRevenue above).
+export interface DoorsMetrics {
+  yesterdayAppointments: number
+  yesterdayTopBooker: string | null
+  // Leads created since 17:00 yesterday (Europe/London), excluding test leads.
+  // null outside the morning query-gate window/?morning param — never queried
+  // on every poll (10MB floor × poll rate). The takeover hides the line when null.
+  freshLeadsOvernight: number | null
+}
+
 export interface Metrics {
   asOf: string // ISO timestamp of when the source produced these numbers
   source: string // human label shown in the header subtitle
   agents: AgentMetrics[]
   sales?: SalesMetrics // team board only
+  doors?: DoorsMetrics // telesales board only
 }

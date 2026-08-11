@@ -3,17 +3,25 @@
 import { useEffect, useRef, useState } from 'react'
 import Celebration from '@/components/Celebration'
 import ColumnChart from '@/components/ColumnChart'
+import DoorsCelebration from '@/components/DoorsCelebration'
+import EodCelebration from '@/components/EodCelebration'
 import Header from '@/components/Header'
 import Leaderboard from '@/components/Leaderboard'
 import { BarRow, LastSaleBanner, StatBarList, StaticSalesKpis } from '@/components/SalesTiles'
 import SummaryCards from '@/components/SummaryCards'
 import {
-  BOARDS, CELEBRATION, POLL_INTERVAL_MS, SALES_SOUND, STALE_AFTER_MS,
+  BOARDS, CELEBRATION, DOORS_CELEBRATION, EOD_CELEBRATION, POLL_INTERVAL_MS, SALES_SOUND,
+  STALE_AFTER_MS,
 } from '@/lib/config'
-import { playSaleSound, primeSaleFile, tryAutoUnlock, unlockSound } from '@/lib/sound'
+import {
+  FileSoundHandle, playFileSound, playSaleSound, primeSaleFile, tryAutoUnlock, unlockSound,
+} from '@/lib/sound'
 import type { AgentMetrics, Metrics } from '@/lib/types'
 
 const gbp = (v: number) => `£${Math.round(v).toLocaleString('en-GB')}`
+// Fade-out length when the EOD clip is cut short by the takeover ending or the
+// board unmounting — the track (212s) far outlasts the ~45s takeover.
+const EOD_SOUND_FADE_MS = 2000
 const sellerRows = (list: { name: string; color: string; total: number; count: number }[]): BarRow[] =>
   list.map((r) => ({
     key: r.name.toLowerCase(),
@@ -62,7 +70,15 @@ export default function Wallboard({ boardId }: { boardId: string }) {
 
     async function refresh() {
       try {
-        const res = await fetch(`/api/metrics?board=${board.id}`, { cache: 'no-store' })
+        // ?doors=1 forwards ?morning=1 so the demo takeover has fresh-leads
+        // data even outside the real morning window — an ordinary poll never
+        // sets this, so the server only pays for that query in the window
+        // itself (see app/api/metrics/route.ts).
+        const forceMorning = new URLSearchParams(window.location.search).has('doors')
+        const res = await fetch(
+          `/api/metrics?board=${board.id}${forceMorning ? '&morning=1' : ''}`,
+          { cache: 'no-store' }
+        )
         if (!res.ok) return
         const data: Metrics = await res.json()
         if (cancelled) return
@@ -153,6 +169,125 @@ export default function Wallboard({ boardId }: { boardId: string }) {
     []
   )
 
+  // ── End-of-day celebration (SALES & OPS STATIC BOARD ONLY — gated on
+  //    board.features.sales, which only the team board has, same as the coins
+  //    effects below): this UK time, EVERY weekday (no Friday exception, unlike
+  //    the telesales CELEBRATION above), once per day per screen; ?eod=1 forces
+  //    a demo run without marking the day as celebrated. Unrelated to, and
+  //    does not touch, the telesales celebration above. ──
+  const [eodCelebrating, setEodCelebrating] = useState(false)
+  const eodTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const eodDemoDone = useRef(false)
+  // The clip runs far longer than the takeover (212s vs ~45s) — fire-and-forget
+  // left it playing under the board long after the takeover unmounted. Keep the
+  // handle so the timer (and any unmount) can fade it out instead.
+  const eodSound = useRef<FileSoundHandle | null>(null)
+
+  useEffect(() => {
+    if (!board.features.sales || !EOD_CELEBRATION.enabled || eodCelebrating) return
+    if (!metrics?.sales) return
+
+    const forced = new URLSearchParams(window.location.search).has('eod')
+    if (forced) {
+      if (eodDemoDone.current) return
+      eodDemoDone.current = true
+    } else {
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(
+        new Date(nowMs)
+      )
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        weekday: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).formatToParts(new Date(nowMs))
+      const get = (t: string) => parts.find((p) => p.type === t)?.value ?? ''
+      if (EOD_CELEBRATION.weekdaysOnly && ['Sat', 'Sun'].includes(get('weekday'))) return
+      const mins = Number(get('hour')) * 60 + Number(get('minute'))
+      const start = EOD_CELEBRATION.hour * 60 + EOD_CELEBRATION.minute
+      if (mins < start || mins >= start + EOD_CELEBRATION.graceMinutes) return
+      if (localStorage.getItem('metre:eod-celebrated') === today) return
+      localStorage.setItem('metre:eod-celebrated', today)
+    }
+
+    setEodCelebrating(true)
+    // FAIL SOFT: a missing/undecodable clip plays nothing (no synth fallback,
+    // unlike the sale ka-ching) — the takeover itself is never blocked on audio.
+    eodSound.current = playFileSound(EOD_CELEBRATION.sound.file, {
+      volume: EOD_CELEBRATION.sound.volume,
+    })
+    eodTimer.current = setTimeout(() => {
+      setEodCelebrating(false)
+      // The clip outlasts the takeover, so fade it out here rather than let it
+      // keep playing under the board once the DOM has already unmounted.
+      eodSound.current?.stop(EOD_SOUND_FADE_MS)
+      eodSound.current = null
+    }, EOD_CELEBRATION.durationMs)
+  }, [nowMs, metrics, eodCelebrating, board.features.sales])
+
+  useEffect(
+    () => () => {
+      if (eodTimer.current) clearTimeout(eodTimer.current)
+      // Board navigated away / unmounted mid-takeover — same fade-out, not an
+      // abrupt cut. stop() no-ops if the timer callback already fired.
+      eodSound.current?.stop(EOD_SOUND_FADE_MS)
+      eodSound.current = null
+    },
+    []
+  )
+
+  // ── Doors-open morning takeover (BOTH boards): 08:50 UK weekdays, once per
+  //    day per screen; ?doors=1 forces a demo run without marking the day.
+  //    No sound (owner brief). If ?eod=1 is ALSO in the URL, EOD wins — we
+  //    check the raw param here (not eodCelebrating state) so the two demo
+  //    effects can't race on the same mount. ──
+  const [doorsCelebrating, setDoorsCelebrating] = useState(false)
+  const doorsTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const doorsDemoDone = useRef(false)
+
+  useEffect(() => {
+    if (!DOORS_CELEBRATION.enabled || doorsCelebrating) return
+    if (!metrics) return
+
+    const search = new URLSearchParams(window.location.search)
+    if (search.has('eod')) return // EOD wins when both are forced in a demo
+
+    const forced = search.has('doors')
+    if (forced) {
+      if (doorsDemoDone.current) return
+      doorsDemoDone.current = true
+    } else {
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(
+        new Date(nowMs)
+      )
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        weekday: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).formatToParts(new Date(nowMs))
+      const get = (t: string) => parts.find((p) => p.type === t)?.value ?? ''
+      if (DOORS_CELEBRATION.weekdaysOnly && ['Sat', 'Sun'].includes(get('weekday'))) return
+      const mins = Number(get('hour')) * 60 + Number(get('minute'))
+      const start = DOORS_CELEBRATION.hour * 60 + DOORS_CELEBRATION.minute
+      if (mins < start || mins >= start + DOORS_CELEBRATION.graceMinutes) return
+      if (localStorage.getItem('metre:doors-celebrated') === today) return
+      localStorage.setItem('metre:doors-celebrated', today)
+    }
+
+    setDoorsCelebrating(true)
+    doorsTimer.current = setTimeout(() => setDoorsCelebrating(false), DOORS_CELEBRATION.durationMs)
+  }, [nowMs, metrics, doorsCelebrating])
+
+  useEffect(
+    () => () => {
+      if (doorsTimer.current) clearTimeout(doorsTimer.current)
+    },
+    []
+  )
+
   // ── Coins when a new sale lands. Keyed on the month's SALE COUNT so it
   //    fires once per sale, not once per revenue card, and never on the first
   //    paint (or the board would ring every time a screen reloads). ──
@@ -173,7 +308,12 @@ export default function Wallboard({ boardId }: { boardId: string }) {
     tryAutoUnlock().then((armed) => {
       if (cancelled) return
       setSoundLocked(!armed)
-      if (armed) primeSaleFile(SALES_SOUND.file)
+      if (armed) {
+        primeSaleFile(SALES_SOUND.file)
+        // Pre-decode the end-of-day clip too, so it's ready to fire the moment
+        // the 16:59 gate opens instead of racing a fetch at takeover time.
+        if (EOD_CELEBRATION.enabled) primeSaleFile(EOD_CELEBRATION.sound.file)
+      }
       // ?sound=1 fires the whole celebration — sound and card pop — once, so it
       // can be checked without waiting for a real sale.
       if (new URLSearchParams(window.location.search).has('sound')) {
@@ -365,6 +505,17 @@ export default function Wallboard({ boardId }: { boardId: string }) {
       )}
 
       {celebrating && <Celebration winners={celebrating} />}
+      {eodCelebrating && sales && <EodCelebration sales={sales} />}
+      {/* EOD wins if both are somehow active (see the gating effect above —
+          this is a belt-and-braces second check). */}
+      {doorsCelebrating && !eodCelebrating && (
+        <DoorsCelebration
+          isSalesBoard={board.features.sales}
+          sales={sales}
+          doors={metrics?.doors}
+          nowMs={nowMs}
+        />
+      )}
     </main>
   )
 }

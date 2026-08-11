@@ -438,6 +438,65 @@ SELECT
 FROM `{PROJECT}.gold.gold_lead_calls`
 """
 
+# Meta creative performance — one row per date x ad, joined to the ACTIVE-only
+# creative fetch (LEFT JOIN: historical ads keep NULL creative fields, never
+# dropped). JSON shapes confirmed against real rows 11 Aug 2026, see
+# business_plan/analysis_output/data/meta_ad_level_probe.md:
+#   - actions / cost_per_action_type are JSON arrays of {action_type, value}
+#   - four lead-shaped action_types co-occur with IDENTICAL values on every
+#     converting row (lead, onsite_web_lead, offsite_lead_add_20_s_calls,
+#     offsite_conversion.fb_pixel_lead) - action_type = 'lead' only, or spend
+#     gets multiply-counted 4x on results
+#   - object_story_spec.video_data (object) -> video; .link_data (object) ->
+#     image/link; landing URL is video_data.call_to_action.value.link OR
+#     link_data.link; asset_feed_spec.link_urls is empty account-wide, not used
+# Scalar subqueries over UNNEST(JSON_EXTRACT_ARRAY(...)) return NULL cleanly
+# when the array is NULL/empty or the action_type is absent from that row.
+META_CREATIVE_PERFORMANCE = f"""
+SELECT
+  CAST(d.date AS DATE) AS date,
+  d.campaign_id,
+  d.campaign_name,
+  d.adset_name,
+  d.ad_id,
+  d.ad_name,
+  c.creative_id,
+  c.creative_name,
+  CASE
+    WHEN JSON_QUERY(c.object_story_spec, '$.video_data') IS NOT NULL THEN 'video'
+    WHEN JSON_QUERY(c.object_story_spec, '$.link_data')  IS NOT NULL THEN 'image/link'
+    WHEN c.object_story_spec IS NOT NULL                              THEN 'other'
+  END AS creative_format,
+  COALESCE(
+    JSON_VALUE(c.object_story_spec, '$.video_data.call_to_action.value.link'),
+    JSON_VALUE(c.object_story_spec, '$.link_data.link')
+  ) AS landing_page_url,
+  d.impressions,
+  d.spend_gbp AS spend,
+  d.reach,
+  d.frequency,
+  d.cpm,
+  d.cpc,
+  d.inline_link_clicks AS link_clicks,
+  d.cost_per_inline_link_click AS cost_per_link_click,
+  (SELECT SAFE_CAST(JSON_VALUE(a, '$.value') AS FLOAT64)
+     FROM UNNEST(JSON_EXTRACT_ARRAY(NULLIF(d.actions, ''))) AS a
+    WHERE JSON_VALUE(a, '$.action_type') = 'lead') AS results,
+  (SELECT SAFE_CAST(JSON_VALUE(a, '$.value') AS FLOAT64)
+     FROM UNNEST(JSON_EXTRACT_ARRAY(NULLIF(d.cost_per_action_type, ''))) AS a
+    WHERE JSON_VALUE(a, '$.action_type') = 'lead') AS cost_per_result,
+  (SELECT SAFE_CAST(JSON_VALUE(a, '$.value') AS FLOAT64)
+     FROM UNNEST(JSON_EXTRACT_ARRAY(NULLIF(d.actions, ''))) AS a
+    WHERE JSON_VALUE(a, '$.action_type') = 'landing_page_view') AS landing_page_views,
+  (SELECT SAFE_CAST(JSON_VALUE(a, '$.value') AS FLOAT64)
+     FROM UNNEST(JSON_EXTRACT_ARRAY(NULLIF(d.cost_per_action_type, ''))) AS a
+    WHERE JSON_VALUE(a, '$.action_type') = 'landing_page_view') AS cost_per_landing_page_view,
+  c.updated_time AS last_edit_proxy
+FROM `{PROJECT}.bronze.meta_api_ad_daily` d
+LEFT JOIN `{PROJECT}.bronze.meta_api_ad_creatives` c
+  ON c.ad_id = d.ad_id
+"""
+
 # order matters: leads_per_day and sales_attributed read the lead_attribution
 # table built earlier in the same run
 DERIVED = [
@@ -449,6 +508,7 @@ DERIVED = [
     ("lead_calls", LEAD_CALLS),
     ("sales_reconciled", SALES_RECONCILED),
     ("sales_attributed", SALES_ATTRIBUTED),
+    ("meta_creative_performance", META_CREATIVE_PERFORMANCE),
 ]
 
 

@@ -63,28 +63,46 @@ def utm(param: str) -> str:
     )
 
 
-# ── straight copies of the ad platform tables ────────────────────────────────
+# ── straight copies of non-ad tables (hardcoded — small, stable list) ───────
 
 RAW_COPIES = [
-    "google_ads_api_campaign_daily",
-    "google_ads_api_geo_target_constants",
-    "meta_api_campaign_daily",
-    "meta_api_geographic_daily",
-    "bing_adsaccount_performance_report_daily",
-    "bing_adsaccounts",
-    "bing_adsad_group_labels",
-    "bing_adsad_group_performance_report_daily",
-    "bing_adsad_groups",
-    "bing_adsad_performance_report_daily",
-    "bing_adsads",
-    "bing_adscampaign_labels",
-    "bing_adscampaign_performance_report_daily",
-    "bing_adscampaigns",
-    "bing_adskeyword_labels",
-    "bing_adskeyword_performance_report_daily",
-    "bing_adskeywords",
     "sharpspring_campaigns",
 ]
+
+# ── ad platform tables: RUNTIME DISCOVERY, not a hardcoded list ─────────────
+# Owner ruling (11 Aug 2026): marketing_workspace must carry ALL bronze tables
+# from the three ad platforms, not a curated subset. A hardcoded list silently
+# drifts as Airbyte adds tables. Verified prefixes in bronze (inspected via
+# __TABLES__, not assumed): Google Ads lands as `google_ads%` (dlt, includes
+# the `google_ads_api_` family), Bing as `bing_ads%`. Meta/Facebook does NOT
+# land as `facebook_` — it lands as `meta_api_%`. Mart table name = bronze
+# table name, unchanged, so CREATE OR REPLACE makes duplication structurally
+# impossible: same name in, same name out, every run.
+
+# Cost (11 Aug 2026 inventory): 17 tables, ~0.36GB raw, ~0.46GB billed after
+# the 10MB-per-query floor (11 of the 17 tables are tiny lookup/label tables
+# that each round up to 10MB). That is under the ~2GB/run threshold, so this
+# stays plain CREATE OR REPLACE copies — no row-count skip-guard needed here
+# (GSC_COPIES below already has one, for its much larger tables). Hourly for
+# a month: ~0.46GB * 24 * 30 / 1024 = ~0.32TB * £4.7/TB ≈ £1.55/month. Re-check
+# this threshold if Airbyte lands a new large ad report table.
+
+AD_PLATFORM_PREFIXES = ["google_ads%", "meta_api%", "bing_ads%"]
+
+
+def discover_ad_tables() -> list[tuple[str, int, int]]:
+    """Return (table_id, row_count, size_bytes) for every bronze ad table.
+
+    Reads __TABLES__ metadata only — no data scanned, zero-cost check.
+    """
+    where = " OR ".join(f"table_id LIKE '{p}'" for p in AD_PLATFORM_PREFIXES)
+    rows = client.query(f"""
+        SELECT table_id, row_count, size_bytes
+        FROM `{PROJECT}.bronze.__TABLES__`
+        WHERE {where}
+        ORDER BY table_id
+    """).result()
+    return [(r.table_id, r.row_count, r.size_bytes) for r in rows]
 
 
 # ── Search Console straight copies (renamed, same region) ───────────────────
@@ -460,10 +478,38 @@ def build_cross_region(name: str, sql: str, source_location: str) -> int:
     return len(df)
 
 
+def assert_no_collisions(ad_tables: list[str]) -> None:
+    """Fail loudly if a discovered ad table name collides with anything else
+    the mart writes. Mart name = bronze name is only safe while ad-platform
+    names stay in their own namespace — this is the tripwire if that ever
+    stops being true.
+    """
+    other_names = (
+        set(RAW_COPIES)
+        | {dest for dest, _ in GSC_COPIES}
+        | {name for name, _ in DERIVED}
+        | {"sales"}
+    )
+    collisions = set(ad_tables) & other_names
+    if collisions:
+        raise SystemExit(
+            f"COLLISION: discovered ad table name(s) {collisions} clash with "
+            "an existing RAW_COPIES/GSC_COPIES/DERIVED/cross-region table name. "
+            "Aborting — mart name = bronze name only works if these namespaces "
+            "never overlap."
+        )
+
+
 def main() -> None:
     done, failed = [], []
 
-    for t in RAW_COPIES:
+    ad_tables = discover_ad_tables()
+    assert_no_collisions([t for t, _, _ in ad_tables])
+    total_bytes = sum(b for _, _, b in ad_tables)
+    print(f"discovered {len(ad_tables)} ad-platform bronze tables, "
+          f"{total_bytes / (1024**3):.3f} GB total (metadata only, no scan)")
+
+    for t in RAW_COPIES + [t for t, _, _ in ad_tables]:
         try:
             n = build(t, f"SELECT * FROM `{PROJECT}.bronze.{t}`")
             done.append((t, n))
@@ -526,7 +572,7 @@ def main() -> None:
       FROM UNNEST([{rows}])
     """).result()
 
-    print(f"\n{len(done)}/{len(RAW_COPIES) + len(GSC_COPIES) + len(DERIVED) + 1} tables, "
+    print(f"\n{len(done)}/{len(RAW_COPIES) + len(ad_tables) + len(GSC_COPIES) + len(DERIVED) + 1} tables, "
           f"{sum(n for _, n in done):,} rows")
     if failed:
         print("FAILURES:")

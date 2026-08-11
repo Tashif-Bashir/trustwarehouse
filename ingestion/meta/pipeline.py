@@ -52,10 +52,28 @@ _AD_CREATIVE_FIELDS = [
     "creative{id,name,thumbnail_url,object_story_spec,asset_feed_spec}",
 ]
 
-# Probe (business_plan/analysis_output/data/meta_ad_level_probe.md) confirmed
-# 150 active ads / 134 distinct creatives via this exact filter. Full-replace
-# scopes to currently-active ads, per the brief's acceptance target (~150 rows).
-_ACTIVE_AD_FILTER = [{"field": "effective_status", "operator": "IN", "value": ["ACTIVE"]}]
+# No filtering param at all — confirmed live: /act_X/ads with no filter
+# already excludes DELETED ads by default (7-page, 3,063-row pull with no
+# filter showed only ACTIVE/PAUSED/ADSET_PAUSED/CAMPAIGN_PAUSED/WITH_ISSUES,
+# never DELETED), so an explicit "exclude DELETED" filter would be a no-op.
+
+_CAMPAIGN_FIELDS = [
+    "id",
+    "name",
+    "status",
+    "effective_status",
+    "updated_time",
+    "objective",
+]
+
+_ADSET_FIELDS = [
+    "id",
+    "name",
+    "campaign_id",
+    "status",
+    "effective_status",
+    "updated_time",
+]
 
 
 _GEO_FIELDS = [
@@ -166,6 +184,28 @@ def _row_ad_creative(row: dict) -> dict:
     }
 
 
+def _row_campaign(row: dict) -> dict:
+    return {
+        "campaign_id": row.get("id"),
+        "campaign_name": row.get("name"),
+        "status": row.get("status"),
+        "effective_status": row.get("effective_status"),
+        "updated_time": row.get("updated_time"),
+        "objective": row.get("objective"),
+    }
+
+
+def _row_adset(row: dict) -> dict:
+    return {
+        "adset_id": row.get("id"),
+        "adset_name": row.get("name"),
+        "campaign_id": row.get("campaign_id"),
+        "status": row.get("status"),
+        "effective_status": row.get("effective_status"),
+        "updated_time": row.get("updated_time"),
+    }
+
+
 def _chunk_dates(since: str, until: str, chunk_days: int = 90):
     """Yield (chunk_start, chunk_end) pairs covering [since, until] in
     chunk_days windows. Meta's insights endpoint times out on very long ranges
@@ -265,14 +305,40 @@ def _ad_creatives_resource():
     )
     def ad_creatives():
         client = MetaClient()
+        # No effective_status filter — all ads regardless of status (Meta
+        # excludes DELETED from this edge by default, confirmed live).
         # page_limit=100: the default 500-row page 500s here once
         # object_story_spec/asset_feed_spec are requested (confirmed live).
-        for row in client.ads(
-            fields=_AD_CREATIVE_FIELDS, filtering=_ACTIVE_AD_FILTER, page_limit=100
-        ):
+        for row in client.ads(fields=_AD_CREATIVE_FIELDS, filtering=None, page_limit=100):
             yield _row_ad_creative(row)
 
     return ad_creatives
+
+
+def _campaigns_resource():
+    @dlt.resource(
+        name="meta_api_campaigns",
+        write_disposition="replace",
+    )
+    def campaigns():
+        client = MetaClient()
+        for row in client.campaigns(fields=_CAMPAIGN_FIELDS):
+            yield _row_campaign(row)
+
+    return campaigns
+
+
+def _adsets_resource():
+    @dlt.resource(
+        name="meta_api_adsets",
+        write_disposition="replace",
+    )
+    def adsets():
+        client = MetaClient()
+        for row in client.adsets(fields=_ADSET_FIELDS):
+            yield _row_adset(row)
+
+    return adsets
 
 
 def backfill_ad_daily(months: int = 12, pause_seconds: float = 8.0) -> list[dict]:
@@ -376,7 +442,8 @@ def run_pipeline(
       for Meta's restatements, unless a backfill start_date is given, in
       which case ad_daily shares the same start_date as everything else.
     - Backfill / all-time: pass start_date='2020-01-01'.
-    - Ad creatives are always full-replaced (small: active ads only).
+    - Ad creatives, campaigns and adsets are always full-replaced (small
+      dimension tables, all statuses — not just active).
     """
     end = date.today()
     if start_date:
@@ -403,6 +470,8 @@ def run_pipeline(
             _geographic_daily_resource(since, until)(),
             _ad_daily_resource(ad_since, until)(),
             _ad_creatives_resource()(),
+            _campaigns_resource()(),
+            _adsets_resource()(),
         ]
     )
     print(load_info)

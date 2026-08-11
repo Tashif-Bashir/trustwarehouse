@@ -152,21 +152,24 @@ class MetaClient:
             url = data.get("paging", {}).get("next")
             first = False
 
-    def ads(
+    def _edge(
         self,
+        edge: str,
         fields: list[str],
         filtering: list[dict] | None = None,
-        page_limit: int = 100,
+        page_limit: int = 500,
     ) -> Iterator[dict]:
-        """Yield rows from /act_X/ads — ad objects with nested creative fields.
+        """Yield rows from any /act_X/{edge} object-list endpoint (ads, campaigns, adsets).
 
         fields: Graph API field list, dot/brace syntax supported, e.g.
             "creative{id,name,object_story_spec,asset_feed_spec,thumbnail_url}".
         filtering: optional Graph API filtering spec, e.g.
             [{"field": "effective_status", "operator": "IN", "value": ["ACTIVE"]}]
-        page_limit: rows per page. Confirmed empirically: the default insights
-            page size of 500 500s here ("reduce the amount of data") once
-            object_story_spec/asset_feed_spec are requested — 100 is safe.
+        page_limit: rows per page. Confirmed empirically: 500 (the insights
+            default) 500s ("reduce the amount of data") on /ads once
+            object_story_spec/asset_feed_spec are requested — 100 is safe
+            there. campaigns/adsets have no such heavy nested fields and are
+            fine at 500 (confirmed live).
         """
         params: dict[str, Any] = {
             "fields": ",".join(fields),
@@ -175,7 +178,7 @@ class MetaClient:
         if filtering:
             params["filtering"] = json.dumps(filtering)
 
-        url: str | None = f"{_BASE}/act_{self.account_id}/ads"
+        url: str | None = f"{_BASE}/act_{self.account_id}/{edge}"
         first = True
         while url:
             data = self._get(url, params=params if first else None)
@@ -183,3 +186,28 @@ class MetaClient:
                 yield row
             url = data.get("paging", {}).get("next")
             first = False
+
+    def ads(
+        self,
+        fields: list[str],
+        filtering: list[dict] | None = None,
+        page_limit: int = 100,
+    ) -> Iterator[dict]:
+        """Yield rows from /act_X/ads — ad objects with nested creative fields."""
+        yield from self._edge("ads", fields=fields, filtering=filtering, page_limit=page_limit)
+
+    def campaigns(
+        self,
+        fields: list[str],
+        filtering: list[dict] | None = None,
+    ) -> Iterator[dict]:
+        """Yield rows from /act_X/campaigns — confirmed live: 234 rows, single page."""
+        yield from self._edge("campaigns", fields=fields, filtering=filtering, page_limit=500)
+
+    def adsets(
+        self,
+        fields: list[str],
+        filtering: list[dict] | None = None,
+    ) -> Iterator[dict]:
+        """Yield rows from /act_X/adsets — confirmed live: paginates beyond 500 rows."""
+        yield from self._edge("adsets", fields=fields, filtering=filtering, page_limit=500)

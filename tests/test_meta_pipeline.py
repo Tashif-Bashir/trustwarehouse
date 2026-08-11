@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from ingestion.meta.pipeline import _row_ad_creative, _row_ad_daily
+from ingestion.meta.pipeline import _row_ad_creative, _row_ad_daily, _row_adset, _row_campaign
 
 
 @pytest.fixture
@@ -125,3 +125,49 @@ def test_row_ad_creative_handles_missing_creative():
     assert row["creative_id"] is None
     assert row["object_story_spec"] is None
     assert row["asset_feed_spec"] is None
+
+
+@pytest.fixture
+def campaign_row() -> dict:
+    """One row as returned by /act_X/campaigns?fields=id,name,status,..."""
+    return {
+        "id": "120250329693230588",
+        "name": "[31.07.2026]-[TOF]-[ON]-[GENERAL]-UK-TEST 2- [2026]",
+        "status": "ACTIVE",
+        "effective_status": "ACTIVE",
+        "updated_time": "2026-08-11T05:13:05+0100",
+        "objective": "OUTCOME_LEADS",
+    }
+
+
+@pytest.fixture
+def adset_row() -> dict:
+    """One row as returned by /act_X/adsets?fields=id,name,campaign_id,status,..."""
+    return {
+        "id": "120250516710990588",
+        "name": "A50+-broad-QUOTE-UK- No more charge and hope variations",
+        "campaign_id": "120250329693230588",
+        "status": "PAUSED",
+        "effective_status": "CAMPAIGN_PAUSED",
+        "updated_time": "2026-08-08T00:30:01+0100",
+    }
+
+
+def test_row_campaign_flattens_fields(campaign_row):
+    row = _row_campaign(campaign_row)
+    assert row["campaign_id"] == "120250329693230588"
+    assert row["campaign_name"] == campaign_row["name"]
+    assert row["status"] == "ACTIVE"
+    assert row["effective_status"] == "ACTIVE"
+    assert row["updated_time"] == "2026-08-11T05:13:05+0100"
+    assert row["objective"] == "OUTCOME_LEADS"
+
+
+def test_row_adset_flattens_fields(adset_row):
+    row = _row_adset(adset_row)
+    assert row["adset_id"] == "120250516710990588"
+    assert row["adset_name"] == adset_row["name"]
+    assert row["campaign_id"] == "120250329693230588"
+    assert row["status"] == "PAUSED"
+    assert row["effective_status"] == "CAMPAIGN_PAUSED"
+    assert row["updated_time"] == "2026-08-08T00:30:01+0100"

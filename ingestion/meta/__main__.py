@@ -6,6 +6,7 @@ Usage:
     python -m ingestion.meta --run --days 30                     # custom window
     python -m ingestion.meta --run --start-date 2024-01-01       # custom backfill
     python -m ingestion.meta --run --all-time                    # full history
+    python -m ingestion.meta --backfill-ad-daily --months 12     # checkpointed ad-daily backfill
 """
 
 import argparse
@@ -48,6 +49,14 @@ def _run(days: int | None, start_date: str | None) -> int:
     return 0
 
 
+def _backfill_ad_daily(months: int) -> int:
+    from ingestion.meta.pipeline import backfill_ad_daily
+
+    print(f"Running checkpointed meta_api_ad_daily backfill ({months} months, per-chunk commits)...")
+    outcomes = backfill_ad_daily(months=months)
+    return 1 if any(o["status"] == "failed" for o in outcomes) else 0
+
+
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(prog="ingestion.meta")
     p.add_argument("--verify", action="store_true", help="auth check, no writes")
@@ -57,10 +66,16 @@ def main(argv: list[str]) -> int:
                    help="YYYY-MM-DD start date (overrides --days)")
     p.add_argument("--all-time", action="store_true",
                    help="pull from 2020-01-01 onwards (Meta retains 37+ months)")
+    p.add_argument("--backfill-ad-daily", action="store_true",
+                   help="checkpointed meta_api_ad_daily backfill, one commit per 15-day chunk")
+    p.add_argument("--months", type=int, default=12,
+                   help="months of trailing history for --backfill-ad-daily (default 12)")
     args = p.parse_args(argv)
 
     if args.verify:
         return _verify()
+    if args.backfill_ad_daily:
+        return _backfill_ad_daily(args.months)
     if args.run:
         start_date = args.start_date
         if args.all_time:

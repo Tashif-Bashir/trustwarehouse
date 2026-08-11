@@ -66,17 +66,33 @@ class MetaClient:
             full_params = dict(params)
             full_params["access_token"] = self.token
 
-        for attempt in range(4):
+        max_attempts = 6
+        for attempt in range(max_attempts):
             try:
                 r = requests.get(url, params=full_params, timeout=90)
             except requests.RequestException as e:
-                if attempt == 3:
-                    raise MetaAPIError(f"Network error after 3 retries: {e}") from e
+                if attempt == max_attempts - 1:
+                    raise MetaAPIError(f"Network error after {max_attempts} retries: {e}") from e
                 time.sleep(2 ** attempt)
                 continue
 
-            if r.status_code == 429 or 500 <= r.status_code < 600:
-                time.sleep(2 ** attempt)
+            # App-level throttling ("Application request limit reached",
+            # subcode 1504022) comes back as 403 with is_transient=true in
+            # the body — confirmed live during ad-daily backfill testing.
+            # Treat it like 429/5xx: back off and retry.
+            transient_403 = False
+            if r.status_code == 403:
+                try:
+                    transient_403 = bool(r.json().get("error", {}).get("is_transient"))
+                except ValueError:
+                    transient_403 = False
+
+            if r.status_code == 429 or 500 <= r.status_code < 600 or transient_403:
+                if attempt == max_attempts - 1:
+                    raise MetaAPIError(
+                        f"HTTP {r.status_code} after {max_attempts} retries: {r.text[:500]}"
+                    )
+                time.sleep(min(2**attempt, 30))
                 continue
 
             if not r.ok:
@@ -84,7 +100,7 @@ class MetaClient:
 
             return r.json()
 
-        raise MetaAPIError(f"Failed after 4 attempts: {url}")
+        raise MetaAPIError(f"Failed after {max_attempts} attempts: {url}")
 
     def verify(self) -> dict:
         """Read-only auth ping. Returns token debug info + account metadata."""
@@ -128,6 +144,38 @@ class MetaClient:
             params["breakdowns"] = ",".join(breakdowns)
 
         url: str | None = f"{_BASE}/act_{self.account_id}/insights"
+        first = True
+        while url:
+            data = self._get(url, params=params if first else None)
+            for row in data.get("data", []):
+                yield row
+            url = data.get("paging", {}).get("next")
+            first = False
+
+    def ads(
+        self,
+        fields: list[str],
+        filtering: list[dict] | None = None,
+        page_limit: int = 100,
+    ) -> Iterator[dict]:
+        """Yield rows from /act_X/ads — ad objects with nested creative fields.
+
+        fields: Graph API field list, dot/brace syntax supported, e.g.
+            "creative{id,name,object_story_spec,asset_feed_spec,thumbnail_url}".
+        filtering: optional Graph API filtering spec, e.g.
+            [{"field": "effective_status", "operator": "IN", "value": ["ACTIVE"]}]
+        page_limit: rows per page. Confirmed empirically: the default insights
+            page size of 500 500s here ("reduce the amount of data") once
+            object_story_spec/asset_feed_spec are requested — 100 is safe.
+        """
+        params: dict[str, Any] = {
+            "fields": ",".join(fields),
+            "limit": page_limit,
+        }
+        if filtering:
+            params["filtering"] = json.dumps(filtering)
+
+        url: str | None = f"{_BASE}/act_{self.account_id}/ads"
         first = True
         while url:
             data = self._get(url, params=params if first else None)

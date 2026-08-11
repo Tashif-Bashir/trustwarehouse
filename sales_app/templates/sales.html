@@ -248,8 +248,11 @@ function LogSale({ onLogged, showToast }) {
 
   const num = (s) => { const v = parseFloat(s); return isNaN(v) || v <= 0 ? null : v; };
   const amountsOk = saleType === "chc" ? !!num(chc) : (!!num(heating) || !!num(water));
-  const sellerOk = saleType === "chc" ? true : !!soldBy;
+  const sellerOk = !!soldBy;
   const custOk = customer || (manualMode && manualName.trim());
+  // Dec/Josh log CHC sales themselves most of the time — pre-fill from their
+  // own login so they don't have to pick themselves every time.
+  const officePrefill = office.find(n => n.toLowerCase() === LOGIN_USERNAME) || "";
   const canConfirm = custOk && amountsOk && sellerOk && !!saleDate;
 
   const submit = async () => {
@@ -264,7 +267,7 @@ function LogSale({ onLogged, showToast }) {
         heating_amount: saleType === "chc" ? null : num(heating),
         water_amount: saleType === "chc" ? null : num(water),
         chc_amount: saleType === "chc" ? num(chc) : null,
-        sold_by: saleType === "chc" ? null : soldBy,
+        sold_by: soldBy,
         rep: saleType === "office" ? (rep || null) : null,
         sold_by_owner_id: (reps.find(r => r.name === soldBy) || {}).owner_id || "",
         note: note.trim(),
@@ -387,7 +390,7 @@ function LogSale({ onLogged, showToast }) {
               <div className="type-pills">
                 {["on_site", "sold", "office", "chc"].map(t => (
                   <button key={t} className={"tpill" + (saleType === t ? " on" : "")}
-                          onClick={() => { setSaleType(t); setSoldBy(""); }}>
+                          onClick={() => { setSaleType(t); setSoldBy(t === "chc" ? officePrefill : ""); }}>
                     {TYPE_LABEL[t]}
                   </button>
                 ))}
@@ -436,7 +439,7 @@ function LogSale({ onLogged, showToast }) {
                 </select>
               </div>
             )}
-            {saleType === "office" && (
+            {(saleType === "office" || saleType === "chc") && (
               <div className="field">
                 <label className="label">Closed by (office)</label>
                 <div className="type-pills">
@@ -515,6 +518,7 @@ function Ledger({ refreshKey, showToast }) {
   const [busy, setBusy] = useState(false);
   const [reps, setReps] = useState([]);
   const [office, setOffice] = useState(["Dec", "Josh"]);
+  const officePrefill = office.find(n => n.toLowerCase() === LOGIN_USERNAME) || "";
 
   useEffect(() => {
     fetch("/api/reps").then(r => r.json()).then(d => {
@@ -699,7 +703,8 @@ function Ledger({ refreshKey, showToast }) {
               <div className="type-pills">
                 {["on_site", "sold", "office", "chc"].map(t => (
                   <button key={t} className={"tpill" + (editing.sale_type === t ? " on" : "")}
-                          onClick={() => setEditing({ ...editing, sale_type: t, sold_by: "" })}>
+                          onClick={() => setEditing({ ...editing, sale_type: t,
+                                                       sold_by: t === "chc" ? officePrefill : "" })}>
                     {TYPE_LABEL[t]}
                   </button>
                 ))}
@@ -741,7 +746,7 @@ function Ledger({ refreshKey, showToast }) {
                 </select>
               </div>
             )}
-            {editing.sale_type === "office" && (
+            {(editing.sale_type === "office" || editing.sale_type === "chc") && (
               <div className="field">
                 <label className="label">Closed by (office)</label>
                 <div className="type-pills">

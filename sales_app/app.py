@@ -308,7 +308,7 @@ def _crm_writeback(lead_id: str, sale_type: str, sold_by: str | None,
             obj[F_APPT_STATUS] = status_val
         if add_w:
             obj[F_APPT_STATUS_WATER] = status_val
-    if sale_type == "office" and sold_by in OFFICE_SELLERS:
+    if sale_type in ("office", "chc") and sold_by in OFFICE_SELLERS:
         obj[F_SOLD_BY] = sold_by
     if sale_type in REP_SALE_TYPES:
         obj[F_SOLD_BY] = ""                   # Dec/Josh field is office-only
@@ -571,10 +571,10 @@ def api_create_sale():
     sold_by = (d.get("sold_by") or "").strip() or None
     if sale_type == "office" and sold_by not in OFFICE_SELLERS:
         return jsonify({"error": "office sales must be sold by Dec or Josh"}), 400
+    if sale_type == "chc" and sold_by not in OFFICE_SELLERS:
+        return jsonify({"error": "CHC sales must be sold by Dec or Josh"}), 400
     if sale_type in REP_SALE_TYPES and not sold_by:
         return jsonify({"error": "pick the rep who sold it"}), 400
-    if sale_type == "chc":
-        sold_by = None
 
     # An office sale is closed by Dec/Josh but it is a FIELD REP's sale — both
     # are credited, so both names are recorded. Only office sales carry `rep`.
@@ -834,10 +834,10 @@ def api_edit_sale(sale_id: str):
     sold_by = (d.get("sold_by") or "").strip() or None
     if sale_type == "office" and sold_by not in OFFICE_SELLERS:
         return jsonify({"error": "office sales must be sold by Dec or Josh"}), 400
+    if sale_type == "chc" and sold_by not in OFFICE_SELLERS:
+        return jsonify({"error": "CHC sales must be sold by Dec or Josh"}), 400
     if sale_type in REP_SALE_TYPES and not sold_by:
         return jsonify({"error": "pick the rep who sold it"}), 400
-    if sale_type == "chc":
-        sold_by = None
 
     rep = (d.get("rep") or "").strip() or None
     if sale_type == "office" and not rep:

@@ -452,14 +452,24 @@ FROM `{PROJECT}.gold.gold_lead_calls`
 #     link_data.link; asset_feed_spec.link_urls is empty account-wide, not used
 # Scalar subqueries over UNNEST(JSON_EXTRACT_ARRAY(...)) return NULL cleanly
 # when the array is NULL/empty or the action_type is absent from that row.
+#
+# 11 Aug 2026 follow-up: bronze.meta_api_ad_creatives now covers ALL statuses
+# (was ACTIVE-only, 150 rows -> now 3,063), and two new dims landed —
+# meta_api_campaigns, meta_api_adsets. Added campaign_status/adset_status/
+# ad_status (effective_status: reflects inherited pauses, e.g. an ad shows
+# paused if its adset or campaign is paused even if the ad object itself is
+# still "active" — the truthful field per the coordinator's ruling).
 META_CREATIVE_PERFORMANCE = f"""
 SELECT
   CAST(d.date AS DATE) AS date,
   d.campaign_id,
   d.campaign_name,
+  camp.effective_status AS campaign_status,
   d.adset_name,
+  adset.effective_status AS adset_status,
   d.ad_id,
   d.ad_name,
+  c.effective_status AS ad_status,
   c.creative_id,
   c.creative_name,
   CASE
@@ -495,6 +505,10 @@ SELECT
 FROM `{PROJECT}.bronze.meta_api_ad_daily` d
 LEFT JOIN `{PROJECT}.bronze.meta_api_ad_creatives` c
   ON c.ad_id = d.ad_id
+LEFT JOIN `{PROJECT}.bronze.meta_api_campaigns` camp
+  ON camp.campaign_id = d.campaign_id
+LEFT JOIN `{PROJECT}.bronze.meta_api_adsets` adset
+  ON adset.adset_id = d.adset_id
 """
 
 # order matters: leads_per_day and sales_attributed read the lead_attribution

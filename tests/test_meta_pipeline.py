@@ -129,7 +129,12 @@ def test_row_ad_creative_handles_missing_creative():
 
 @pytest.fixture
 def campaign_row() -> dict:
-    """One row as returned by /act_X/campaigns?fields=id,name,status,..."""
+    """One row as returned by /act_X/campaigns?fields=id,name,status,...
+
+    daily_budget/budget_remaining present, lifetime_budget absent — this is
+    a real, normal shape (budget lives at the campaign level here, no
+    lifetime cap set). Confirmed live on the real account 2026-08-12.
+    """
     return {
         "id": "120250329693230588",
         "name": "[31.07.2026]-[TOF]-[ON]-[GENERAL]-UK-TEST 2- [2026]",
@@ -137,12 +142,18 @@ def campaign_row() -> dict:
         "effective_status": "ACTIVE",
         "updated_time": "2026-08-11T05:13:05+0100",
         "objective": "OUTCOME_LEADS",
+        "daily_budget": "8000",
+        "budget_remaining": "5467",
     }
 
 
 @pytest.fixture
 def adset_row() -> dict:
-    """One row as returned by /act_X/adsets?fields=id,name,campaign_id,status,..."""
+    """One row as returned by /act_X/adsets?fields=id,name,campaign_id,status,...
+
+    No budget fields at all — this is a real, normal shape when the parent
+    campaign carries the budget instead (Meta budgets at either level).
+    """
     return {
         "id": "120250516710990588",
         "name": "A50+-broad-QUOTE-UK- No more charge and hope variations",
@@ -161,6 +172,22 @@ def test_row_campaign_flattens_fields(campaign_row):
     assert row["effective_status"] == "ACTIVE"
     assert row["updated_time"] == "2026-08-11T05:13:05+0100"
     assert row["objective"] == "OUTCOME_LEADS"
+
+
+def test_row_campaign_lands_budget_fields_raw_unconverted(campaign_row):
+    """Bronze rule: budgets land as the raw minor-unit strings Meta returns."""
+    row = _row_campaign(campaign_row)
+    assert row["daily_budget"] == "8000"
+    assert isinstance(row["daily_budget"], str)
+    assert row["budget_remaining"] == "5467"
+    assert row["lifetime_budget"] is None  # absent at this level — normal
+
+
+def test_row_adset_lands_budget_fields_as_none_when_absent(adset_row):
+    row = _row_adset(adset_row)
+    assert row["daily_budget"] is None
+    assert row["lifetime_budget"] is None
+    assert row["budget_remaining"] is None
 
 
 def test_row_adset_flattens_fields(adset_row):

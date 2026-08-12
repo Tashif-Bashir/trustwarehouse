@@ -64,6 +64,9 @@ _CAMPAIGN_FIELDS = [
     "effective_status",
     "updated_time",
     "objective",
+    "daily_budget",
+    "lifetime_budget",
+    "budget_remaining",
 ]
 
 _ADSET_FIELDS = [
@@ -73,6 +76,9 @@ _ADSET_FIELDS = [
     "status",
     "effective_status",
     "updated_time",
+    "daily_budget",
+    "lifetime_budget",
+    "budget_remaining",
 ]
 
 
@@ -192,6 +198,12 @@ def _row_campaign(row: dict) -> dict:
         "effective_status": row.get("effective_status"),
         "updated_time": row.get("updated_time"),
         "objective": row.get("objective"),
+        # Raw strings, minor units (pennies) as Meta returns them — bronze
+        # rule: no conversion. Blank at this level is normal when the
+        # budget instead lives on the adset (Meta budgets at either level).
+        "daily_budget": row.get("daily_budget"),
+        "lifetime_budget": row.get("lifetime_budget"),
+        "budget_remaining": row.get("budget_remaining"),
     }
 
 
@@ -203,6 +215,12 @@ def _row_adset(row: dict) -> dict:
         "status": row.get("status"),
         "effective_status": row.get("effective_status"),
         "updated_time": row.get("updated_time"),
+        # Raw strings, minor units (pennies) as Meta returns them — bronze
+        # rule: no conversion. Blank at this level is normal when the
+        # budget instead lives on the campaign (Meta budgets at either level).
+        "daily_budget": row.get("daily_budget"),
+        "lifetime_budget": row.get("lifetime_budget"),
+        "budget_remaining": row.get("budget_remaining"),
     }
 
 

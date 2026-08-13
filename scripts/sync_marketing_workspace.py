@@ -511,6 +511,111 @@ LEFT JOIN `{PROJECT}.bronze.meta_api_adsets` adset
   ON adset.adset_id = d.adset_id
 """
 
+
+def _geo_string(root: str) -> str:
+    """Assemble one readable geo string from a targeting JSON sub-object.
+
+    `root` is 'geo_locations' (included) or 'excluded_geo_locations'
+    (excluded) inside bronze.meta_api_adsets.targeting. Components, in a
+    fixed order: countries -> regions (names) -> medium_geo_areas (names,
+    same shape as regions, present on both include and exclude sides in the
+    real data even though only the exclude side was called out explicitly)
+    -> cities as "name (+Nkm)" or "name (+Nmi)" -> custom_locations as
+    "lat,lon (+Nkm)" or "lat,lon (+Nmi)". The unit label is read from each
+    location's own `distance_unit` (kilometer -> km, mile -> mi) — never
+    relabelled. Checked 13 Aug 2026: every radius row in bronze carries an
+    explicit distance_unit (0 absent-unit rows found for cities or
+    custom_locations), so 'mi' below is a defensive default only, never
+    actually exercised on current data. Every piece is a correlated scalar
+    subquery over UNNEST — same idiom as meta_creative_performance's
+    actions/cost lookups above — so a missing key just yields NULL and
+    drops out of the final ARRAY_TO_STRING silently. No key is assumed
+    present.
+    """
+    countries = (
+        f"(SELECT STRING_AGG(x, ', ') FROM UNNEST("
+        f"JSON_VALUE_ARRAY(targeting, '$.{root}.countries')) AS x)"
+    )
+    names = (
+        "(SELECT STRING_AGG(JSON_VALUE(x, '$.name'), ', ') FROM UNNEST("
+        "JSON_EXTRACT_ARRAY(targeting, '$.{root}.{key}')) AS x)"
+    )
+    regions = names.format(root=root, key="regions")
+    medium_geo_areas = names.format(root=root, key="medium_geo_areas")
+    unit_label = (
+        "CASE JSON_VALUE(x, '$.distance_unit') "
+        "WHEN 'kilometer' THEN 'km' WHEN 'mile' THEN 'mi' ELSE 'mi' END"
+    )
+    cities = (
+        "(SELECT STRING_AGG(CONCAT(JSON_VALUE(x, '$.name'), "
+        "IF(JSON_VALUE(x, '$.radius') IS NOT NULL, "
+        f"CONCAT(' (+', JSON_VALUE(x, '$.radius'), {unit_label}, ')'), '')), ', ') "
+        f"FROM UNNEST(JSON_EXTRACT_ARRAY(targeting, '$.{root}.cities')) AS x)"
+    )
+    custom_locations = (
+        "(SELECT STRING_AGG(CONCAT(JSON_VALUE(x, '$.latitude'), ',', "
+        "JSON_VALUE(x, '$.longitude'), "
+        "IF(JSON_VALUE(x, '$.radius') IS NOT NULL, "
+        f"CONCAT(' (+', JSON_VALUE(x, '$.radius'), {unit_label}, ')'), '')), ', ') "
+        f"FROM UNNEST(JSON_EXTRACT_ARRAY(targeting, '$.{root}.custom_locations')) AS x)"
+    )
+    return (
+        "NULLIF(ARRAY_TO_STRING(ARRAY(SELECT p FROM UNNEST(["
+        f"{countries}, {regions}, {medium_geo_areas}, {cities}, {custom_locations}"
+        "]) AS p WHERE p IS NOT NULL AND p != ''), ', '), '')"
+    )
+
+
+# Meta adset targeting — one row per adset, config parsed from the raw
+# `targeting` JSON landed on bronze.meta_api_adsets as of commit d74f974
+# (790/790 populated, confirmed 13 Aug 2026). Built defensively: every
+# targeting shape below is pulled from a real sample row first (see probe
+# queries run this session) and every extraction degrades to NULL rather
+# than erroring when a key is absent — targeting shapes vary per adset
+# (interest-based adsets carry flexible_spec, radius adsets carry
+# custom_locations, broad adsets carry neither).
+#   - genders: Meta encodes "All" two ways in this account — the key is
+#     either absent, or present as the literal array [0]; [1]=Men, [2]=Women.
+#     All three collapse to 'All' here.
+#   - geo_included / geo_excluded: see _geo_string() above. Real data shows
+#     excluded_geo_locations carrying explicit cities (e.g. London, 40mi
+#     exclusion ring) as well as country and region-level excludes.
+#   - radius units are mixed (kilometer and mile both appear in
+#     distance_unit) — each radius is labelled with its OWN unit ("+Nkm" or
+#     "+Nmi"), never relabelled. 13 Aug 2026 correction after an earlier
+#     draft literal-labelled everything "mi" per an incorrect brief detail.
+META_ADSET_TARGETING = f"""
+SELECT
+  a.adset_id,
+  a.adset_name,
+  a.effective_status AS adset_status,
+  a.campaign_id,
+  camp.campaign_name,
+  camp.effective_status AS campaign_status,
+  a.daily_budget,
+  SAFE_CAST(JSON_VALUE(a.targeting, '$.age_min') AS INT64) AS age_min,
+  SAFE_CAST(JSON_VALUE(a.targeting, '$.age_max') AS INT64) AS age_max,
+  CASE
+    WHEN JSON_QUERY(a.targeting, '$.genders') IS NULL THEN 'All'
+    WHEN JSON_QUERY(a.targeting, '$.genders') = '[0]' THEN 'All'
+    WHEN JSON_QUERY(a.targeting, '$.genders') = '[1]' THEN 'Men'
+    WHEN JSON_QUERY(a.targeting, '$.genders') = '[2]' THEN 'Women'
+    ELSE (
+      SELECT STRING_AGG(
+        CASE CAST(g AS INT64) WHEN 1 THEN 'Men' WHEN 2 THEN 'Women' END, ' + '
+      )
+      FROM UNNEST(JSON_EXTRACT_ARRAY(a.targeting, '$.genders')) AS g
+      WHERE CAST(g AS INT64) != 0
+    )
+  END AS genders,
+  {_geo_string('geo_locations')} AS geo_included,
+  {_geo_string('excluded_geo_locations')} AS geo_excluded,
+  a.targeting AS targeting_raw
+FROM `{PROJECT}.bronze.meta_api_adsets` a
+LEFT JOIN `{PROJECT}.bronze.meta_api_campaigns` camp
+  ON camp.campaign_id = a.campaign_id
+"""
+
 # order matters: leads_per_day and sales_attributed read the lead_attribution
 # table built earlier in the same run
 DERIVED = [
@@ -523,6 +628,7 @@ DERIVED = [
     ("sales_reconciled", SALES_RECONCILED),
     ("sales_attributed", SALES_ATTRIBUTED),
     ("meta_creative_performance", META_CREATIVE_PERFORMANCE),
+    ("meta_adset_targeting", META_ADSET_TARGETING),
 ]
 
 

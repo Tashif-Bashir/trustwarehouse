@@ -208,6 +208,7 @@ class MetaClient:
         self,
         fields: list[str],
         filtering: list[dict] | None = None,
+        page_limit: int = 500,
     ) -> Iterator[dict]:
         """Yield rows from /act_X/adsets — confirmed live: paginates beyond 500 rows."""
-        yield from self._edge("adsets", fields=fields, filtering=filtering, page_limit=500)
+        yield from self._edge("adsets", fields=fields, filtering=filtering, page_limit=page_limit)

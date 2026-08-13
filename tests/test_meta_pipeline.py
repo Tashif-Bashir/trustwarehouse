@@ -153,6 +153,7 @@ def adset_row() -> dict:
 
     No budget fields at all — this is a real, normal shape when the parent
     campaign carries the budget instead (Meta budgets at either level).
+    targeting shape confirmed live at page_limit=100 (2026-08-13 probe).
     """
     return {
         "id": "120250516710990588",
@@ -161,6 +162,23 @@ def adset_row() -> dict:
         "status": "PAUSED",
         "effective_status": "CAMPAIGN_PAUSED",
         "updated_time": "2026-08-08T00:30:01+0100",
+        "targeting": {
+            "age_max": 65,
+            "age_min": 50,
+            "excluded_geo_locations": {
+                "countries": ["IE", "IM"],
+                "regions": [{"key": "4082", "name": "Northern Ireland", "country": "GB"}],
+            },
+            "geo_locations": {
+                "regions": [
+                    {"key": "4079", "name": "England", "country": "GB"},
+                    {"key": "4080", "name": "Wales", "country": "GB"},
+                    {"key": "4081", "name": "Scotland", "country": "GB"},
+                ],
+                "location_types": ["home", "recent"],
+            },
+            "publisher_platforms": ["facebook", "instagram", "messenger"],
+        },
     }
 
 
@@ -198,3 +216,17 @@ def test_row_adset_flattens_fields(adset_row):
     assert row["status"] == "PAUSED"
     assert row["effective_status"] == "CAMPAIGN_PAUSED"
     assert row["updated_time"] == "2026-08-08T00:30:01+0100"
+
+
+def test_row_adset_lands_targeting_as_raw_json_string(adset_row):
+    """Bronze rule: targeting lands RAW, no unnesting."""
+    row = _row_adset(adset_row)
+    assert isinstance(row["targeting"], str)
+    parsed = json.loads(row["targeting"])
+    assert parsed == adset_row["targeting"]
+    assert parsed["geo_locations"]["regions"][0]["name"] == "England"
+
+
+def test_row_adset_handles_missing_targeting():
+    row = _row_adset({"id": "1", "name": "no targeting attached"})
+    assert row["targeting"] is None

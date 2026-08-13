@@ -79,6 +79,7 @@ _ADSET_FIELDS = [
     "daily_budget",
     "lifetime_budget",
     "budget_remaining",
+    "targeting",
 ]
 
 
@@ -221,6 +222,10 @@ def _row_adset(row: dict) -> dict:
         "daily_budget": row.get("daily_budget"),
         "lifetime_budget": row.get("lifetime_budget"),
         "budget_remaining": row.get("budget_remaining"),
+        # Raw JSON string, no unnesting — bronze rule. Geo targeting
+        # (geo_locations.regions/cities + excluded_geo_locations) confirmed
+        # live at page_limit=100; 500 500s ("reduce the amount of data").
+        "targeting": json.dumps(row.get("targeting")) if row.get("targeting") else None,
     }
 
 
@@ -353,7 +358,11 @@ def _adsets_resource():
     )
     def adsets():
         client = MetaClient()
-        for row in client.adsets(fields=_ADSET_FIELDS):
+        # page_limit=100: probed live before this run. 500 500s ("reduce the
+        # amount of data") on /adsets once targeting is requested; 100
+        # confirmed OK on 2/2 attempts (same shape as the /ads
+        # object_story_spec constraint).
+        for row in client.adsets(fields=_ADSET_FIELDS, page_limit=100):
             yield _row_adset(row)
 
     return adsets

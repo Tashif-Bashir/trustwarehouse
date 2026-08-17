@@ -935,7 +935,11 @@ def _noindex(resp):
 
 @app.route("/robots.txt")
 def _robots():
-    return "User-agent: *\nDisallow: /\n", 200, {"Content-Type": "text/plain"}
+    # Deliberately ALLOW crawling: Google must be able to fetch the page to see
+    # the X-Robots-Tag noindex above. A Disallow here blocks the crawl, so
+    # Google keeps serving its stale cached copy forever (bit us Aug 2026 —
+    # a June cache with company numbers survived 11 days of Disallow+noindex).
+    return "User-agent: *\nAllow: /\n", 200, {"Content-Type": "text/plain"}
 
 
 _html_cache = None

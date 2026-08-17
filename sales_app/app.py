@@ -38,7 +38,7 @@ def _noindex(resp):
 
 @app.route("/robots.txt")
 def _robots():
-    return "User-agent: *\nDisallow: /\n", 200, {"Content-Type": "text/plain"}
+    return "User-agent: *\nAllow: /\n", 200, {"Content-Type": "text/plain"}
 
 
 # ---------------------------------------------------------------------------

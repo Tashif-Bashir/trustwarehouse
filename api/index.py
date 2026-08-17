@@ -1,11 +1,13 @@
 """Vercel serverless API — self-contained Flask entry point."""
-import os, time, threading, json as _json
+import os, time, secrets, threading, json as _json
 from datetime import date, datetime, timedelta, timezone
+from functools import wraps
 
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from google.cloud import bigquery
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, redirect, session, Response
+from werkzeug.security import check_password_hash
 
 PROJECT   = os.getenv('GCP_PROJECT_ID', 'trustwarehouse')
 # Dashboard is now live — VM-side cron syncs every 60-90s and busts this cache
@@ -925,6 +927,126 @@ def _load_all(d0s, d1s):
 
 app = Flask(__name__)
 
+# Serverless function: no local disk to persist a secret across cold starts.
+# DASHBOARD_SECRET_KEY should be set in Vercel env — if it isn't, we fail
+# "closed enough": generate a random key per cold start so nothing is ever
+# signed with a guessable/empty key, at the cost of sessions dying whenever
+# the function cold-starts (same trade-off as sales_app / availability_app).
+app.secret_key = os.environ.get("DASHBOARD_SECRET_KEY") or secrets.token_hex(32)
+app.permanent_session_lifetime = timedelta(days=30)
+
+# ---------------------------------------------------------------------------
+# Auth — env-var user store (no local file persistence at runtime here).
+# DASHBOARD_USERS = '{"username": "<werkzeug password hash>", ...}'
+# ---------------------------------------------------------------------------
+
+try:
+    _DASHBOARD_USERS = _json.loads(os.environ.get("DASHBOARD_USERS") or "{}")
+except ValueError:
+    _DASHBOARD_USERS = {}
+
+
+def _check_login(username: str, password: str) -> bool:
+    stored_hash = _DASHBOARD_USERS.get(username)
+    if not stored_hash:
+        return False
+    return check_password_hash(stored_hash, password)
+
+
+def login_required(f):
+    @wraps(f)
+    def wrapped(*args, **kwargs):
+        if not session.get("username"):
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "not logged in"}), 401
+            return redirect(f"/login?next={request.path}")
+        return f(*args, **kwargs)
+    return wrapped
+
+
+_LOGIN_PAGE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in — Trust Dashboard</title>
+<style>
+  *,*::before,*::after{{ box-sizing:border-box; margin:0; padding:0; }}
+  html,body{{
+    background:#14161F; color:#E7E9F2;
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    font-size:14px; min-height:100vh;
+    display:flex; align-items:center; justify-content:center;
+  }}
+  .card{{
+    background:#1D2030; border:1px solid #2C3046; border-radius:14px;
+    box-shadow:0 12px 40px rgba(0,0,0,.45); padding:36px 32px;
+    width:100%; max-width:360px;
+  }}
+  h1{{ font-size:19px; font-weight:700; margin-bottom:4px; }}
+  .subtitle{{ color:#8A8FA8; font-size:13px; margin-bottom:24px; }}
+  label{{ display:block; font-size:12.5px; font-weight:600; color:#B7BBD1; margin-bottom:6px; }}
+  input[type=text], input[type=password]{{
+    width:100%; padding:11px 13px; border-radius:9px;
+    border:1px solid #2C3046; background:#14161F;
+    font-family:inherit; font-size:14px; color:#E7E9F2;
+    outline:none; margin-bottom:16px;
+  }}
+  input:focus{{ border-color:#5B6CFF; }}
+  .btn{{
+    width:100%; padding:12px; border-radius:9px; border:none;
+    background:#5B6CFF; color:#fff; font-family:inherit;
+    font-size:14px; font-weight:600; cursor:pointer;
+  }}
+  .btn:hover{{ opacity:.9; }}
+  .error{{
+    background:#3A1F26; color:#FF8B98; border-radius:8px;
+    padding:10px 13px; font-size:13px; font-weight:500; margin-bottom:16px;
+  }}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Sign in</h1>
+  <p class="subtitle">Trust Dashboard — internal tool</p>
+  {error_html}
+  <form method="post">
+    <label for="username">Username</label>
+    <input type="text" id="username" name="username" autocomplete="username" autofocus required>
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" autocomplete="current-password" required>
+    <button type="submit" class="btn">Sign in</button>
+  </form>
+</div>
+</body>
+</html>
+"""
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    error = ""
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip().lower()
+        password = request.form.get("password") or ""
+        if _check_login(username, password):
+            session.permanent = True
+            session["username"] = username
+            nxt = request.args.get("next") or "/"
+            if not nxt.startswith("/") or nxt.startswith("//"):
+                nxt = "/"
+            return redirect(nxt)
+        error = "Incorrect username or password."
+    error_html = f'<div class="error">{error}</div>' if error else ""
+    return Response(_LOGIN_PAGE.format(error_html=error_html), mimetype="text/html")
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login")
+
+
 # Internal tool: keep it out of search engines. noindex stops Google listing
 # it; it does NOT make the app private - that is what the login is for.
 @app.after_request
@@ -962,6 +1084,7 @@ def _get_html():
     return _html_cache
 
 @app.route('/api/data')
+@login_required
 def get_data():
     d0 = request.args.get('d0')
     d1 = request.args.get('d1')
@@ -974,6 +1097,7 @@ def get_data():
         return jsonify({'error': str(ex)}), 500
 
 @app.route('/api/refresh', methods=['GET', 'POST'])
+@login_required
 def refresh():
     with _cache_lock:
         cleared = len(_cache)
@@ -982,8 +1106,8 @@ def refresh():
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
+@login_required
 def serve_frontend(path):
-    from flask import Response
     html = _get_html()
     if html is None:
         return 'Dashboard unavailable', 404

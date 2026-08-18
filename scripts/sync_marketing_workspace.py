@@ -150,7 +150,10 @@ SELECT
   owner_id,
   campaign_id,
   exact_marketing_campaign_64d0b4a09e91b AS utm_campaign,
-  exact_marketing_url_64d0bebced518 AS marketing_url,
+  COALESCE(
+    NULLIF(TRIM(exact_marketing_url_64d0bebced518), ''),
+    NULLIF(TRIM(page_submitted_5af30a9090796), '')
+  ) AS marketing_url,
   gclid1_66dad68843cd4 AS gclid,
   tracking_id,
   title,
@@ -174,7 +177,18 @@ WITH src AS (
     id AS lead_id,
     DATE(create_timestamp) AS created_date,
     create_timestamp,
-    exact_marketing_url_64d0bebced518 AS url,
+    -- Exact Marketing URL first; fall back to the Page Submitted field, which
+    -- often carries the full tagged URL when Exact Marketing URL is empty
+    -- (18 Aug 2026: rescued ~9% of leads whose UTMs were sitting unparsed —
+    -- found by Ananthu comparing CRM values against the warehouse)
+    COALESCE(
+      NULLIF(TRIM(exact_marketing_url_64d0bebced518), ''),
+      NULLIF(TRIM(page_submitted_5af30a9090796), '')
+    ) AS url,
+    CASE
+      WHEN NULLIF(TRIM(exact_marketing_url_64d0bebced518), '') IS NOT NULL THEN 'exact_marketing_url'
+      WHEN NULLIF(TRIM(page_submitted_5af30a9090796), '') IS NOT NULL THEN 'page_submitted'
+    END AS url_source,
     NULLIF(NULLIF(LOWER(TRIM(exact_marketing_campaign_64d0b4a09e91b)), ''), '/url')
       AS crm_campaign_field,
     campaign_id,
@@ -268,6 +282,7 @@ SELECT
   mobile_phone,
   {norm_phone('phone')} AS phone_normalised,
   url AS marketing_url,
+  url_source,
   landing_host,
   landing_path,
   crm_channel,

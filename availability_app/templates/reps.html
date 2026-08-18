@@ -160,6 +160,69 @@
   .cancel-warn{font-size:12.5px;color:var(--muted);background:var(--bg);border-radius:10px;padding:10px 12px;margin-top:12px;line-height:1.45}
   .cancel-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;font-size:13px;font-weight:500;padding:12px 18px;border-radius:10px;box-shadow:var(--shadow-md);z-index:400;cursor:pointer;max-width:90%;animation:fadeIn .15s ease-out}
+
+  /* Reschedule appointment (sits alongside Cancel) */
+  .appt-reschedule{flex-shrink:0;font-size:11.5px;font-weight:600;color:var(--muted);padding:4px 10px;border-radius:7px;border:1.5px solid var(--line);background:var(--panel);transition:all .12s;opacity:0}
+  .appt-row:hover .appt-reschedule{opacity:1}
+  .appt-reschedule:hover{background:var(--indigo-soft);color:var(--indigo);border-color:var(--indigo-soft)}
+  .appt-row.today .appt-reschedule{opacity:1;background:#fff}
+
+  /* View toggle (List / Calendar) */
+  .view-toggle{display:flex;background:var(--bg);border-radius:9px;padding:3px;gap:2px}
+  .view-toggle-btn{padding:6px 12px;border-radius:7px;font-size:12.5px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .view-toggle-btn.active{background:var(--panel);color:var(--indigo);box-shadow:var(--shadow-sm)}
+  .view-toggle-btn svg{width:13px;height:13px}
+
+  /* Week calendar */
+  .week-nav{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .week-nav-btn{padding:6px 11px;border-radius:8px;font-size:12.5px;font-weight:600;color:var(--ink2);background:var(--bg)}
+  .week-nav-btn:hover{background:var(--indigo-soft);color:var(--indigo)}
+  .week-nav-label{font-size:13px;font-weight:700;color:var(--ink);min-width:170px}
+  .week-cal{overflow-x:auto}
+  .week-cal-grid{display:grid;grid-template-columns:52px repeat(7,minmax(112px,1fr));min-width:860px}
+  .week-cal-corner{height:40px}
+  .week-cal-day-head{height:40px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:11.5px;font-weight:700;color:var(--ink2);border-bottom:1.5px solid var(--line);text-transform:uppercase;letter-spacing:.4px}
+  .week-cal-day-head.is-today{color:var(--indigo)}
+  .week-cal-day-head .wd-date{font-size:10px;font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0;margin-top:1px}
+  .week-cal-gutter{position:relative;border-right:1px solid var(--line)}
+  .week-cal-gutter-label{position:absolute;right:8px;transform:translateY(-6px);font-size:10px;font-weight:600;color:var(--muted)}
+  .week-cal-day-col{position:relative;border-right:1px solid var(--line)}
+  .week-cal-day-col.is-today{background:var(--indigo-soft)}
+  .week-cal-hline{position:absolute;left:0;right:0;height:1px;background:var(--line)}
+  .week-block{position:absolute;left:3px;right:3px;background:linear-gradient(135deg,#5B6CFF,#8B5CF6);color:#fff;border-radius:7px;padding:4px 7px;font-size:10.5px;line-height:1.35;overflow:hidden;cursor:pointer;box-shadow:0 3px 8px rgba(91,108,255,.28);transition:transform .1s}
+  .week-block:hover{transform:translateY(-1px) scale(1.01)}
+  .week-block.is-past{background:var(--muted2);box-shadow:none}
+  .week-block-time{font-weight:700;opacity:.9}
+  .week-block-cust{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .week-block-pc{opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .week-cal-empty{text-align:center;color:var(--muted);padding:30px 0;font-size:13px}
+
+  /* Appointment detail popover (calendar block click) */
+  .detail-box{background:var(--panel);border-radius:18px;padding:22px;max-width:340px;width:90%;box-shadow:var(--shadow-md)}
+  .detail-title{font-size:15.5px;font-weight:700;letter-spacing:-.2px;margin-bottom:4px}
+  .detail-meta{font-size:12.5px;color:var(--muted);margin-bottom:14px}
+  .detail-row{display:flex;justify-content:space-between;font-size:13px;color:var(--ink2);padding:6px 0;border-top:1px solid var(--line)}
+  .detail-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
+
+  /* Reschedule modal */
+  .reschedule-box{background:var(--panel);border-radius:18px;padding:26px;max-width:440px;width:92%;box-shadow:var(--shadow-md);max-height:86vh;overflow-y:auto}
+  .reschedule-title{font-size:16px;font-weight:700;letter-spacing:-.2px;margin-bottom:4px}
+  .reschedule-current{font-size:12.5px;color:var(--muted);margin-bottom:16px}
+  .field-label{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+  input.date-input{width:100%;padding:9px 12px;border-radius:9px;border:1.5px solid var(--line);font-family:inherit;font-size:13px;color:var(--ink);outline:none;margin-bottom:16px}
+  input.date-input:focus{border-color:var(--indigo)}
+  .slot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px;margin-bottom:6px}
+  .slot{padding:7px 8px;border-radius:8px;text-align:center;font-size:12px;font-weight:600;transition:all .15s}
+  .slot.free{background:var(--mint-soft);color:#1a7a5a;cursor:pointer}
+  .slot.free:hover{background:#bdf2df;transform:translateY(-1px)}
+  .slot.buffer{background:var(--amber-soft);color:#92400e;cursor:pointer}
+  .slot.buffer:hover{background:#fde68a;transform:translateY(-1px)}
+  .slot.booked{background:var(--line);color:var(--muted);cursor:default}
+  .slot.off{background:var(--rose-soft);color:#c0392b;cursor:default}
+  .slot.past{background:var(--bg);color:var(--muted2);cursor:default;opacity:.6}
+  .slot.sel-range{background:#DBEAFE;color:#1D4ED8;outline:1px solid #93C5FD;cursor:pointer}
+  .slot.sel-start,.slot.sel-end{background:var(--indigo);color:#fff;box-shadow:0 2px 8px rgba(91,108,255,.4);cursor:pointer}
+  .reschedule-hint{font-size:11.5px;color:var(--muted);margin:6px 0 14px}
 </style>
 </head>
 <body>
@@ -374,7 +437,7 @@ function RepList({ reps, selected, onSelect }) {
 }
 
 /* ── Single appointment row ── */
-function ApptRow({ appt, onCancel }) {
+function ApptRow({ appt, onCancel, onReschedule }) {
   const d = new Date(appt.date + 'T00:00:00');
   const dayStr = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
   const kind   = appt.is_today ? 'today' : appt.is_past ? 'past' : 'future';
@@ -384,17 +447,287 @@ function ApptRow({ appt, onCancel }) {
       <div className="appt-time">{appt.start}{appt.end ? `–${appt.end}` : ''}</div>
       <div className="appt-subject" title={appt.subject}>{appt.subject || '(no title)'}</div>
       {appt.cancellable && !appt.is_past && (
-        <button className="appt-cancel" onClick={() => onCancel(appt)}
-          title="Cancel this appointment — removes the calendar event and reverts the CRM">
-          Cancel
-        </button>
+        <>
+          <button className="appt-reschedule" onClick={() => onReschedule(appt)}
+            title="Reschedule — move this appointment to a new date/time">
+            Reschedule
+          </button>
+          <button className="appt-cancel" onClick={() => onCancel(appt)}
+            title="Cancel this appointment — removes the calendar event and reverts the CRM">
+            Cancel
+          </button>
+        </>
       )}
     </div>
   );
 }
 
+/* ── View toggle: List / Calendar ── */
+function ViewToggle({ mode, onChange }) {
+  return (
+    <div className="view-toggle">
+      <button className={`view-toggle-btn${mode === 'list' ? ' active' : ''}`} onClick={() => onChange('list')}>
+        {Ic.list} List
+      </button>
+      <button className={`view-toggle-btn${mode === 'calendar' ? ' active' : ''}`} onClick={() => onChange('calendar')}>
+        {Ic.calendar} Calendar
+      </button>
+    </div>
+  );
+}
+
+/* ── Week calendar — per-rep appointment blocks (time, customer, postcode) ── */
+const CAL_START_MIN = 8 * 60;   // 08:00
+const CAL_END_MIN   = 18 * 60;  // 18:00
+const CAL_STEP_MIN  = 30;
+const CAL_ROWS      = (CAL_END_MIN - CAL_START_MIN) / CAL_STEP_MIN;
+const CAL_ROW_H      = 26; // px
+
+function mondayOf(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  const dow = (d.getDay() + 6) % 7; // Mon=0
+  d.setDate(d.getDate() - dow);
+  return d.toISOString().slice(0, 10);
+}
+function addDaysIso(iso, n) {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+function minsOf(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function WeekCalendar({ rep, weekStart, onPrevWeek, onNextWeek, onThisWeek, onSelectAppt }) {
+  const days = Array.from({ length: 7 }, (_, i) => addDaysIso(weekStart, i));
+  const weekEnd = days[6];
+  const byDay = {};
+  for (const a of rep.appointments) {
+    if (a.date >= weekStart && a.date <= weekEnd) (byDay[a.date] = byDay[a.date] || []).push(a);
+  }
+  const hourMarks = [];
+  for (let m = CAL_START_MIN; m <= CAL_END_MIN; m += 60) hourMarks.push(m);
+
+  const anyThisWeek = Object.keys(byDay).length > 0;
+
+  return (
+    <div>
+      <div className="week-nav">
+        <button className="week-nav-btn" onClick={onPrevWeek}>‹ Prev</button>
+        <button className="week-nav-btn" onClick={onThisWeek}>This week</button>
+        <button className="week-nav-btn" onClick={onNextWeek}>Next ›</button>
+        <div className="week-nav-label">{fmtIso(weekStart)} – {fmtIso(weekEnd)}</div>
+      </div>
+      {!anyThisWeek && <div className="week-cal-empty">No appointments for {rep.name} this week.</div>}
+      <div className="week-cal">
+        <div className="week-cal-grid">
+          <div className="week-cal-corner"></div>
+          {days.map(iso => {
+            const d = new Date(iso + 'T00:00:00');
+            const isToday = iso === TODAY_ISO;
+            return (
+              <div key={iso} className={`week-cal-day-head${isToday ? ' is-today' : ''}`}>
+                <div>{d.toLocaleDateString('en-GB', { weekday: 'short' })}</div>
+                <div className="wd-date">{d.getDate()} {MONTH_NAMES[d.getMonth()].slice(0, 3)}</div>
+              </div>
+            );
+          })}
+
+          <div className="week-cal-gutter" style={{ height: CAL_ROWS * CAL_ROW_H }}>
+            {hourMarks.map(m => (
+              <div key={m} className="week-cal-gutter-label" style={{ top: ((m - CAL_START_MIN) / CAL_STEP_MIN) * CAL_ROW_H }}>
+                {String(Math.floor(m / 60)).padStart(2, '0')}:00
+              </div>
+            ))}
+          </div>
+
+          {days.map(iso => {
+            const isToday = iso === TODAY_ISO;
+            const appts = byDay[iso] || [];
+            return (
+              <div key={iso} className={`week-cal-day-col${isToday ? ' is-today' : ''}`} style={{ height: CAL_ROWS * CAL_ROW_H }}>
+                {hourMarks.map(m => (
+                  <div key={m} className="week-cal-hline" style={{ top: ((m - CAL_START_MIN) / CAL_STEP_MIN) * CAL_ROW_H }} />
+                ))}
+                {appts.map(a => {
+                  const startMin = Math.min(Math.max(minsOf(a.start), CAL_START_MIN), CAL_END_MIN);
+                  const rawEnd   = a.end ? minsOf(a.end) : startMin + 30;
+                  const endMin   = Math.min(Math.max(rawEnd, startMin + CAL_STEP_MIN), CAL_END_MIN);
+                  const top    = ((startMin - CAL_START_MIN) / CAL_STEP_MIN) * CAL_ROW_H;
+                  const height = Math.max(CAL_ROW_H - 3, ((endMin - startMin) / CAL_STEP_MIN) * CAL_ROW_H - 3);
+                  return (
+                    <div key={a.event_id || `${a.date}-${a.start}`}
+                      className={`week-block${a.is_past ? ' is-past' : ''}`}
+                      style={{ top, height }}
+                      onClick={() => onSelectAppt(a)}
+                      title={a.subject}>
+                      <div className="week-block-time">{a.start}{a.end ? `–${a.end}` : ''}</div>
+                      <div className="week-block-cust">{a.customer || a.subject || '(no title)'}</div>
+                      {a.postcode && <div className="week-block-pc">{a.postcode}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Appointment detail popover (opened from a calendar block) ── */
+function ApptDetail({ appt, repName, onClose, onReschedule, onCancel }) {
+  return (
+    <div className="cancel-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="detail-box">
+        <div className="detail-title">{appt.customer || appt.subject || '(no title)'}</div>
+        <div className="detail-meta">{repName} · {fmtIso(appt.date)} · {appt.start}{appt.end ? `–${appt.end}` : ''}</div>
+        {appt.postcode && <div className="detail-row"><span>Postcode</span><span>{appt.postcode}</span></div>}
+        <div className="detail-row"><span>Subject</span><span>{appt.subject || '—'}</span></div>
+        <div className="detail-actions">
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>Close</button>
+          {appt.cancellable && !appt.is_past && (
+            <>
+              <button className="btn btn-ghost btn-sm" onClick={() => onReschedule(appt)}>Reschedule</button>
+              <button className="btn btn-danger btn-sm" onClick={() => onCancel(appt)}>Cancel</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Reschedule modal — respects availability like a new booking would ── */
+function RescheduleModal({ appt, repName, onClose, onDone }) {
+  const origDuration = appt.end ? (minsOf(appt.end) - minsOf(appt.start)) : 30;
+  const [pickDate, setPickDate] = useState(appt.date);
+  const [slots,    setSlots]    = useState([]);
+  const [loading,  setLoading]  = useState(false);
+  const [selStart, setSelStart] = useState(null);
+  const [selEnd,   setSelEnd]   = useState(null);
+  const [busy,     setBusy]     = useState(false);
+  const [result,   setResult]   = useState(null);
+
+  useEffect(() => {
+    setSelStart(null); setSelEnd(null); setLoading(true);
+    fetch(`/api/availability?start_date=${pickDate}&days=1`)
+      .then(r => r.json())
+      .then(d => {
+        const repGrid = (d.reps || []).find(r => r.name === repName);
+        setSlots((repGrid && repGrid.days && repGrid.days[pickDate]) || []);
+      })
+      .catch(() => setSlots([]))
+      .finally(() => setLoading(false));
+  }, [pickDate]);
+
+  function addMins(t, m) {
+    const [h, min] = t.split(':').map(Number);
+    const tot = h * 60 + min + m;
+    return `${String(Math.floor(tot / 60)).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
+  }
+  const bookingEnd = selEnd ? selEnd : (selStart ? addMins(selStart, origDuration) : null);
+
+  function slotClass(s) {
+    if (selStart && s.time >= selStart && s.time < bookingEnd) {
+      return s.time === selStart ? 'sel-start' : (s.time === selEnd ? 'sel-end' : 'sel-range');
+    }
+    return s.status;
+  }
+
+  function handleSlotClick(s) {
+    if (result || (s.status !== 'free' && s.status !== 'buffer')) return;
+    if (!selStart) { setSelStart(s.time); setSelEnd(null); }
+    else if (!selEnd) {
+      if (s.time === selStart) setSelStart(null);
+      else if (s.time > selStart) setSelEnd(s.time);
+      else { setSelStart(s.time); setSelEnd(null); }
+    } else { setSelStart(s.time); setSelEnd(null); }
+  }
+
+  const occupied    = slots.filter(s => selStart && bookingEnd && s.time >= selStart && s.time < bookingEnd);
+  const hasConflict = occupied.some(s => s.status === 'booked' || s.status === 'off' || s.status === 'past');
+  const isSameSlot  = pickDate === appt.date && selStart === appt.start && bookingEnd === appt.end;
+
+  async function confirm() {
+    setBusy(true);
+    try {
+      const resp = await fetch('/api/reschedule', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_id: appt.event_id, date: pickDate, start: selStart, end: bookingEnd }),
+      });
+      const data = await resp.json();
+      setResult(data);
+      if (data.ok) setTimeout(() => onDone(data.message), 900);
+    } catch (e) {
+      setResult({ ok: false, message: String(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="cancel-overlay" onClick={e => e.target === e.currentTarget && !busy && onClose()}>
+      <div className="reschedule-box">
+        <div className="reschedule-title">Reschedule appointment</div>
+        <div className="reschedule-current">
+          {repName} · currently {fmtIso(appt.date)} · {appt.start}{appt.end ? `–${appt.end}` : ''}
+          {appt.customer ? ` · ${appt.customer}` : ''}
+        </div>
+
+        {!result && <>
+          <div className="field-label">New date</div>
+          <input className="date-input" type="date" value={pickDate} min={TODAY_ISO}
+            onChange={e => e.target.value && setPickDate(e.target.value)} />
+
+          <div className="field-label">New time</div>
+          {loading && <div className="loader" style={{ padding: '14px 0' }}><div className="spinner" /></div>}
+          {!loading && slots.length === 0 && (
+            <div className="reschedule-hint">{repName} doesn't work this day — pick another date.</div>
+          )}
+          {!loading && slots.length > 0 && (
+            <div className="slot-grid">
+              {slots.map(s => (
+                <div key={s.time} className={`slot ${slotClass(s)}`} onClick={() => handleSlotClick(s)}>{s.time}</div>
+              ))}
+            </div>
+          )}
+          <div className="reschedule-hint">
+            {!selStart && 'Click a start slot — the original length is kept by default; click a later slot to change the end time.'}
+            {selStart && `${selStart} – ${bookingEnd}${hasConflict ? ' — overlaps a booked/off slot' : ''}`}
+          </div>
+
+          <div className="cancel-actions">
+            <button className="btn btn-ghost" onClick={onClose} disabled={busy}>Keep current time</button>
+            <button className="btn btn-danger" style={{ background: 'var(--indigo)', boxShadow: '0 5px 14px rgba(91,108,255,.32)' }}
+              onClick={confirm} disabled={busy || !selStart || hasConflict || isSameSlot}>
+              {busy ? 'Rescheduling…' : 'Confirm reschedule'}
+            </button>
+          </div>
+        </>}
+
+        {result && (
+          <>
+            <div className="cancel-detail" style={{ color: result.ok ? 'var(--ink2)' : 'var(--rose)' }}>
+              {result.message}
+            </div>
+            {!result.ok && (
+              <div className="cancel-actions">
+                <button className="btn btn-ghost" onClick={onClose}>Close</button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ── Timeline for one rep ── */
-function Timeline({ rep, filterRange, onClearFilter, onCancel }) {
+function Timeline({ rep, filterRange, onClearFilter, onCancel, onReschedule,
+                    viewMode, onViewModeChange, weekStart, onWeekChange, onSelectAppt }) {
   const all = rep.appointments;
 
   const filtered = filterRange
@@ -424,56 +757,70 @@ function Timeline({ rep, filterRange, onClearFilter, onCancel }) {
             {rep.is_fallback ? 'Flexible coverage' : rep.regions?.join(' · ')}
             {rep.is_freelancer ? ' · Freelancer / Ambivo' : ''}
           </div>
-          {filterLabel && (
+          {viewMode === 'list' && filterLabel && (
             <div className="tl-filter-badge">
               {Ic.calendar} {filterLabel}
               <button onClick={onClearFilter} title="Clear date filter">×</button>
             </div>
           )}
         </div>
-        <div className="tl-totals">
-          <div className="tl-total">
-            <div className="tl-total-num" style={{color:'var(--mint)'}}>{upcoming}</div>
-            <div className="tl-total-label">upcoming</div>
-          </div>
-          <div className="tl-total">
-            <div className="tl-total-num" style={{color:'var(--muted)'}}>{past.length}</div>
-            <div className="tl-total-label">past</div>
+        <div style={{display:'flex',alignItems:'center',gap:16}}>
+          <ViewToggle mode={viewMode} onChange={onViewModeChange} />
+          <div className="tl-totals">
+            <div className="tl-total">
+              <div className="tl-total-num" style={{color:'var(--mint)'}}>{upcoming}</div>
+              <div className="tl-total-label">upcoming</div>
+            </div>
+            <div className="tl-total">
+              <div className="tl-total-num" style={{color:'var(--muted)'}}>{past.length}</div>
+              <div className="tl-total-label">past</div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="appt-list">
-        {filtered.length === 0 && (
-          <div className="tl-empty">
-            {filterLabel ? `No appointments in this period (${filterLabel}).` : 'No appointments found in this period.'}
-          </div>
-        )}
+      {viewMode === 'calendar' ? (
+        <WeekCalendar
+          rep={rep}
+          weekStart={weekStart}
+          onPrevWeek={() => onWeekChange(addDaysIso(weekStart, -7))}
+          onNextWeek={() => onWeekChange(addDaysIso(weekStart, 7))}
+          onThisWeek={() => onWeekChange(mondayOf(TODAY_ISO))}
+          onSelectAppt={onSelectAppt}
+        />
+      ) : (
+        <div className="appt-list">
+          {filtered.length === 0 && (
+            <div className="tl-empty">
+              {filterLabel ? `No appointments in this period (${filterLabel}).` : 'No appointments found in this period.'}
+            </div>
+          )}
 
-        {past.length > 0 && (
-          <>
-            <div className="tl-section-label">Past</div>
-            {past.map(a => <ApptRow key={`${a.date}-${a.start}`} appt={a} onCancel={onCancel} />)}
-          </>
-        )}
+          {past.length > 0 && (
+            <>
+              <div className="tl-section-label">Past</div>
+              {past.map(a => <ApptRow key={`${a.date}-${a.start}`} appt={a} onCancel={onCancel} onReschedule={onReschedule} />)}
+            </>
+          )}
 
-        {showTodayDivider && filtered.length > 0 && (
-          <div className="today-divider">Today</div>
-        )}
+          {showTodayDivider && filtered.length > 0 && (
+            <div className="today-divider">Today</div>
+          )}
 
-        {showTodayDivider && (
-          todays.length > 0
-            ? todays.map(a => <ApptRow key={`${a.date}-${a.start}`} appt={a} onCancel={onCancel} />)
-            : <div className="tl-empty" style={{padding:'8px 0',fontSize:12}}>No appointments today</div>
-        )}
+          {showTodayDivider && (
+            todays.length > 0
+              ? todays.map(a => <ApptRow key={`${a.date}-${a.start}`} appt={a} onCancel={onCancel} onReschedule={onReschedule} />)
+              : <div className="tl-empty" style={{padding:'8px 0',fontSize:12}}>No appointments today</div>
+          )}
 
-        {future.length > 0 && (
-          <>
-            <div className="tl-section-label" style={{paddingTop:14}}>Upcoming</div>
-            {future.map(a => <ApptRow key={`${a.date}-${a.start}`} appt={a} onCancel={onCancel} />)}
-          </>
-        )}
-      </div>
+          {future.length > 0 && (
+            <>
+              <div className="tl-section-label" style={{paddingTop:14}}>Upcoming</div>
+              {future.map(a => <ApptRow key={`${a.date}-${a.start}`} appt={a} onCancel={onCancel} onReschedule={onReschedule} />)}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -491,6 +838,10 @@ function App() {
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelBusy,   setCancelBusy]   = useState(false);
   const [toast,        setToast]        = useState(null);
+  const [viewMode,      setViewMode]      = useState('list');
+  const [weekStart,     setWeekStart]     = useState(mondayOf(TODAY_ISO));
+  const [detailTarget,  setDetailTarget]  = useState(null);
+  const [rescheduleTarget, setRescheduleTarget] = useState(null);
   const calRef = useRef(null);
 
   useEffect(() => { loadDiary(daysBack); }, [daysBack]);
@@ -556,6 +907,23 @@ function App() {
       setCancelBusy(false);
       setTimeout(() => setToast(null), 6000);
     }
+  }
+
+  function handleReschedule(appt) {
+    setDetailTarget(null);
+    setRescheduleTarget(appt);
+  }
+
+  function handleCancelFromDetail(appt) {
+    setDetailTarget(null);
+    setCancelTarget(appt);
+  }
+
+  function handleRescheduleDone(message) {
+    setToast(message || 'Appointment rescheduled.');
+    setRescheduleTarget(null);
+    fetch('/api/reps/diary/refresh').then(() => loadDiary(daysBack));
+    setTimeout(() => setToast(null), 6000);
   }
 
   const allReps = diary?.reps || [];
@@ -632,6 +1000,12 @@ function App() {
                     filterRange={filterRange}
                     onClearFilter={() => setFilterRange(null)}
                     onCancel={setCancelTarget}
+                    onReschedule={setRescheduleTarget}
+                    viewMode={viewMode}
+                    onViewModeChange={setViewMode}
+                    weekStart={weekStart}
+                    onWeekChange={setWeekStart}
+                    onSelectAppt={setDetailTarget}
                   />
                 : <div className="tl-no-select">Select a rep to see their diary</div>
               }
@@ -660,6 +1034,25 @@ function App() {
               </div>
             </div>
           </div>
+        )}
+
+        {detailTarget && (
+          <ApptDetail
+            appt={detailTarget}
+            repName={selectedRep}
+            onClose={() => setDetailTarget(null)}
+            onReschedule={handleReschedule}
+            onCancel={handleCancelFromDetail}
+          />
+        )}
+
+        {rescheduleTarget && (
+          <RescheduleModal
+            appt={rescheduleTarget}
+            repName={selectedRep}
+            onClose={() => setRescheduleTarget(null)}
+            onDone={handleRescheduleDone}
+          />
         )}
 
         {toast && <div className="toast" onClick={() => setToast(null)}>{toast}</div>}

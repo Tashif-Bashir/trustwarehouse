@@ -723,11 +723,24 @@ def all_regions() -> list[str]:
 # Rep diary (per-rep appointment history + upcoming)
 # ---------------------------------------------------------------------------
 
+def _split_subject(subject: str) -> tuple[str, str]:
+    """Split a booking subject "POSTCODE - Customer Name" into (postcode, customer).
+
+    Booking always writes this exact format (see app.py api_book). Falls back to
+    ("", subject) for anything that doesn't match — banners, manually-created
+    calendar entries, etc.
+    """
+    if " - " in subject:
+        postcode, _, customer = subject.partition(" - ")
+        return postcode.strip(), customer.strip()
+    return "", subject.strip()
+
+
 def build_rep_diary(events: list[dict]) -> dict:
     """Build a per-rep appointment list from a pre-fetched event set.
 
     Returns past + upcoming appointments grouped by rep, suitable for
-    the /reps diary page.
+    the /reps diary page (both the list view and the calendar view).
     """
     today = date.today()
     # Diary lists reps alphabetically (regional + fallback together)
@@ -745,11 +758,15 @@ def build_rep_diary(events: list[dict]) -> dict:
         end_dt   = _parse_dt(event, "end")
         if start_dt is None:
             continue
+        subject = (event.get("subject") or "").strip()
+        postcode, customer = _split_subject(subject)
         rep_appts[rep].append({
             "date":     start_dt.date().isoformat(),
             "start":    start_dt.strftime("%H:%M"),
             "end":      end_dt.strftime("%H:%M") if end_dt else "",
-            "subject":  (event.get("subject") or "").strip(),
+            "subject":  subject,
+            "customer": customer,
+            "postcode": postcode,
             "event_id": event.get("id", ""),
             "is_past":  start_dt.date() < today,
             "is_today": start_dt.date() == today,

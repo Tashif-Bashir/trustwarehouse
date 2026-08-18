@@ -474,6 +474,47 @@ FROM `{PROJECT}.gold.gold_lead_calls`
 # ad_status (effective_status: reflects inherited pauses, e.g. an ad shows
 # paused if its adset or campaign is paused even if the ad object itself is
 # still "active" — the truthful field per the coordinator's ruling).
+def _ad_copy_cols(alias: str) -> str:
+    """Ad copy columns parsed from the creative specs (18 Aug 2026, for
+    marketing's copy QC — typos, URL params, variant checks).
+
+    Flexible-format ads carry text as arrays in asset_feed_spec (bodies /
+    titles / descriptions — Meta's UI calls these "Primary text" and
+    "Headline (ad settings)"); classic ads carry single values in
+    object_story_spec.link_data or .video_data. primary_text/headline/
+    description give the first (shown) value from whichever exists;
+    *_all give every variant, ' | '-joined, for side-by-side QC.
+    """
+    afs = f"NULLIF({alias}.asset_feed_spec, 'null')"
+    oss = f"{alias}.object_story_spec"
+    def arr(path: str) -> str:
+        return (
+            f"ARRAY(SELECT JSON_VALUE(x, '$.text') "
+            f"FROM UNNEST(JSON_EXTRACT_ARRAY({afs}, '$.{path}')) x)"
+        )
+    return f"""
+  COALESCE(
+    (SELECT JSON_VALUE(x, '$.text')
+       FROM UNNEST(JSON_EXTRACT_ARRAY({afs}, '$.bodies')) x LIMIT 1),
+    JSON_VALUE({oss}, '$.link_data.message'),
+    JSON_VALUE({oss}, '$.video_data.message')
+  ) AS primary_text,
+  COALESCE(
+    (SELECT JSON_VALUE(x, '$.text')
+       FROM UNNEST(JSON_EXTRACT_ARRAY({afs}, '$.titles')) x LIMIT 1),
+    JSON_VALUE({oss}, '$.link_data.name'),
+    JSON_VALUE({oss}, '$.video_data.title')
+  ) AS headline,
+  COALESCE(
+    (SELECT JSON_VALUE(x, '$.text')
+       FROM UNNEST(JSON_EXTRACT_ARRAY({afs}, '$.descriptions')) x LIMIT 1),
+    JSON_VALUE({oss}, '$.link_data.description')
+  ) AS description,
+  NULLIF(ARRAY_TO_STRING({arr('bodies')}, ' | '), '') AS primary_text_all,
+  NULLIF(ARRAY_TO_STRING({arr('titles')}, ' | '), '') AS headline_all,
+  NULLIF(ARRAY_TO_STRING({arr('descriptions')}, ' | '), '') AS description_all,"""
+
+
 META_CREATIVE_PERFORMANCE = f"""
 SELECT
   CAST(d.date AS DATE) AS date,
@@ -496,6 +537,7 @@ SELECT
     JSON_VALUE(c.object_story_spec, '$.video_data.call_to_action.value.link'),
     JSON_VALUE(c.object_story_spec, '$.link_data.link')
   ) AS landing_page_url,
+{_ad_copy_cols('c')}
   d.impressions,
   d.spend_gbp AS spend,
   d.reach,
@@ -524,6 +566,31 @@ LEFT JOIN `{PROJECT}.bronze.meta_api_campaigns` camp
   ON camp.campaign_id = d.campaign_id
 LEFT JOIN `{PROJECT}.bronze.meta_api_adsets` adset
   ON adset.adset_id = d.adset_id
+"""
+
+
+# One row per ad: the copy QC dim (18 Aug 2026, asked by marketing — "Primary
+# text" / "Headline (ad settings)" / URL, so ads can be checked for typos and
+# URL-parameter setup without opening Ads Manager). Join to anything by ad_id.
+META_AD_CREATIVE_TEXT = f"""
+SELECT
+  c.ad_id,
+  c.ad_name,
+  c.effective_status AS ad_status,
+  c.creative_id,
+  c.creative_name,
+  CASE
+    WHEN JSON_QUERY(c.object_story_spec, '$.video_data') IS NOT NULL THEN 'video'
+    WHEN JSON_QUERY(c.object_story_spec, '$.link_data')  IS NOT NULL THEN 'image/link'
+    WHEN c.object_story_spec IS NOT NULL                              THEN 'other'
+  END AS creative_format,
+  COALESCE(
+    JSON_VALUE(c.object_story_spec, '$.video_data.call_to_action.value.link'),
+    JSON_VALUE(c.object_story_spec, '$.link_data.link')
+  ) AS landing_page_url,
+{_ad_copy_cols('c')}
+  c.updated_time
+FROM `{PROJECT}.bronze.meta_api_ad_creatives` c
 """
 
 
@@ -643,6 +710,7 @@ DERIVED = [
     ("sales_reconciled", SALES_RECONCILED),
     ("sales_attributed", SALES_ATTRIBUTED),
     ("meta_creative_performance", META_CREATIVE_PERFORMANCE),
+    ("meta_ad_creative_text", META_AD_CREATIVE_TEXT),
     ("meta_adset_targeting", META_ADSET_TARGETING),
 ]
 

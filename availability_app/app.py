@@ -345,24 +345,54 @@ def _get_active_booking(event_id: str) -> dict | None:
     return dict(rows[0]) if rows else None
 
 
-def _booking_started(booking: dict) -> bool:
-    """True once a booking's appointment start is now or in the past.
+CANCEL_LOCK_MINUTES = 15  # Reschedule/Cancel lock this many minutes before an appointment starts
 
-    Full datetime comparison on Europe/London wall clock (_now_uk — same BST/GMT
-    handling as the availability engine's _now_london, just this file's own copy)
-    — never UTC, and never date-only (an appointment that started earlier TODAY
-    must count as started, not just ones from an earlier date). Used to lock
-    Reschedule/Cancel server-side once an appointment is underway or done —
-    the UI hides the buttons too, but that alone is bypassable.
-    """
+
+def _booking_start_dt(booking: dict) -> datetime | None:
+    """Parse a booking row's appt_date + appt_start into a naive Europe/London datetime, or None."""
     try:
-        start_dt = datetime.strptime(
+        return datetime.strptime(
             f"{booking.get('appt_date', '')} {booking.get('appt_start', '')}",
             "%Y-%m-%d %H:%M",
         )
     except (ValueError, TypeError):
+        return None
+
+
+def _booking_locked(booking: dict) -> bool:
+    """True once we're inside the CANCEL_LOCK_MINUTES window before start, or past it.
+
+    Full datetime comparison on Europe/London wall clock (_now_uk — same BST/GMT
+    handling as the availability engine's _now_london, just this file's own copy)
+    — never UTC, and never date-only (an appointment that started earlier TODAY
+    must count as locked, not just ones from an earlier date). Locks
+    CANCEL_LOCK_MINUTES before start (owner refinement, 18 Aug) and stays locked
+    once the appointment is underway or done. Used to gate Reschedule/Cancel
+    server-side — the UI hides the buttons too, but that alone is bypassable.
+    """
+    start_dt = _booking_start_dt(booking)
+    if start_dt is None:
         return False  # can't parse -> don't lock on a guess
-    return start_dt <= _now_uk()
+    return _now_uk() >= start_dt - timedelta(minutes=CANCEL_LOCK_MINUTES)
+
+
+def _booking_lock_message(booking: dict, action: str) -> str | None:
+    """409 message if `booking` is locked for `action` ('cancelled'/'rescheduled'), else None.
+
+    Two cases, per the owner's refinement: still-to-come but inside the lock
+    window (starts soon) vs. already underway/finished — the team gets a
+    clearer reason either way.
+    """
+    start_dt = _booking_start_dt(booking)
+    if start_dt is None:
+        return None  # can't parse -> don't lock on a guess
+    now = _now_uk()
+    if now < start_dt - timedelta(minutes=CANCEL_LOCK_MINUTES):
+        return None
+    if now < start_dt:
+        return (f"This appointment starts in less than {CANCEL_LOCK_MINUTES} minutes "
+                f"and can't be {action} here.")
+    return f"This appointment has already started and can't be {action} here."
 
 
 def _ss_cancel_lead(lead: dict, booker_owner_id: str, appt_type: str = "heating") -> bool:
@@ -1351,9 +1381,9 @@ def api_cancel():
         return jsonify({"ok": False, "message": "This appointment can't be cancelled here "
                         "(it wasn't booked through this tool)."}), 404
 
-    if _booking_started(booking):
-        return jsonify({"ok": False, "message": "This appointment has already started "
-                        "and can't be cancelled here."}), 409
+    lock_msg = _booking_lock_message(booking, "cancelled")
+    if lock_msg:
+        return jsonify({"ok": False, "message": lock_msg}), 409
 
     # 1. Remove the calendar event (the appointment itself). Critical — abort if it fails,
     #    so we never revert the CRM while the event still stands.
@@ -1424,9 +1454,9 @@ def api_reschedule():
         return jsonify({"ok": False, "message": "This appointment can't be rescheduled here "
                         "(it wasn't booked through this tool)."}), 404
 
-    if _booking_started(booking):
-        return jsonify({"ok": False, "message": "This appointment has already started "
-                        "and can't be rescheduled here."}), 409
+    lock_msg = _booking_lock_message(booking, "rescheduled")
+    if lock_msg:
+        return jsonify({"ok": False, "message": lock_msg}), 409
 
     rep_name = booking.get("rep_name") or ""
     rep_email = REP_EMAIL.get(rep_name)

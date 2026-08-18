@@ -727,6 +727,9 @@ def _split_subject(subject: str) -> tuple[str, str]:
     return "", subject.strip()
 
 
+CANCEL_LOCK_MINUTES = 15  # Reschedule/Cancel lock this many minutes before an appointment starts
+
+
 def build_rep_diary(events: list[dict]) -> dict:
     """Build a per-rep appointment list from a pre-fetched event set.
 
@@ -761,11 +764,12 @@ def build_rep_diary(events: list[dict]) -> dict:
             "event_id": event.get("id", ""),
             "is_past":  start_dt.date() < today,
             "is_today": start_dt.date() == today,
-            # Locked once the appointment has STARTED (full datetime compare,
-            # Europe/London wall clock — an appointment in progress right now
-            # counts as started). Gates Reschedule/Cancel in the UI; the
-            # /api/reschedule and /api/cancel routes re-check this server-side.
-            "is_started": start_dt <= now_uk,
+            # Locked from CANCEL_LOCK_MINUTES before start onward (full datetime
+            # compare, Europe/London wall clock — an appointment in progress right
+            # now, or starting imminently, counts as locked). Gates Reschedule/
+            # Cancel in the UI; the /api/reschedule and /api/cancel routes
+            # re-check this server-side with their own CANCEL_LOCK_MINUTES.
+            "is_locked": now_uk >= start_dt - timedelta(minutes=CANCEL_LOCK_MINUTES),
         })
 
     result = []

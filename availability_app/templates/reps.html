@@ -251,6 +251,7 @@ const Ic = {
 };
 
 const TODAY_ISO = new Date().toISOString().slice(0, 10);
+const CANCEL_LOCK_MINUTES = 15; // must match app.py's CANCEL_LOCK_MINUTES — cosmetic label only, server enforces it
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 function fmtRelativeTime(d) {
@@ -264,6 +265,15 @@ function fmtIso(iso) {
   if (!iso) return '';
   const d = new Date(iso + 'T00:00:00');
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// Two-case label for a locked appointment (appt.is_locked, set server-side from
+// CANCEL_LOCK_MINUTES) — mirrors the two /api/cancel and /api/reschedule 409
+// messages: already under way/done vs. still to come but inside the lock window.
+function apptLockLabel(appt) {
+  const startsAt = new Date(`${appt.date}T${appt.start}:00`);
+  if (startsAt <= new Date()) return { text: 'past', title: 'This appointment has already started — locked' };
+  return { text: 'locked — starts soon', title: `This appointment starts in less than ${CANCEL_LOCK_MINUTES} minutes — locked` };
 }
 
 const initials = USERNAME.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
@@ -451,8 +461,8 @@ function ApptRow({ appt, onCancel, onReschedule }) {
       <div className="appt-time">{appt.start}{appt.end ? `–${appt.end}` : ''}</div>
       <div className="appt-subject" title={appt.subject}>{appt.subject || '(no title)'}</div>
       {appt.cancellable && (
-        appt.is_started
-          ? <span className="appt-locked" title="This appointment has already started — locked">past</span>
+        appt.is_locked
+          ? <span className="appt-locked" title={apptLockLabel(appt).title}>{apptLockLabel(appt).text}</span>
           : <>
               <button className="appt-reschedule" onClick={() => onReschedule(appt)}
                 title="Reschedule — move this appointment to a new date/time">
@@ -564,7 +574,7 @@ function WeekCalendar({ rep, weekStart, onPrevWeek, onNextWeek, onThisWeek, onSe
                   const height = Math.max(CAL_ROW_H - 3, ((endMin - startMin) / CAL_STEP_MIN) * CAL_ROW_H - 3);
                   return (
                     <div key={a.event_id || `${a.date}-${a.start}`}
-                      className={`week-block${a.is_started ? ' is-past' : ''}`}
+                      className={`week-block${a.is_locked ? ' is-past' : ''}`}
                       style={{ top, height }}
                       onClick={() => onSelectAppt(a)}
                       title={a.subject}>
@@ -592,12 +602,16 @@ function ApptDetail({ appt, repName, onClose, onReschedule, onCancel }) {
         <div className="detail-meta">{repName} · {fmtIso(appt.date)} · {appt.start}{appt.end ? `–${appt.end}` : ''}</div>
         {appt.postcode && <div className="detail-row"><span>Postcode</span><span>{appt.postcode}</span></div>}
         <div className="detail-row"><span>Subject</span><span>{appt.subject || '—'}</span></div>
-        {appt.cancellable && appt.is_started && (
-          <div className="detail-locked">This appointment has already started — locked</div>
+        {appt.cancellable && appt.is_locked && (
+          <div className="detail-locked">
+            {apptLockLabel(appt).text === 'past'
+              ? 'This appointment has already started — locked'
+              : `This appointment starts in less than ${CANCEL_LOCK_MINUTES} minutes — locked`}
+          </div>
         )}
         <div className="detail-actions">
           <button className="btn btn-ghost btn-sm" onClick={onClose}>Close</button>
-          {appt.cancellable && !appt.is_started && (
+          {appt.cancellable && !appt.is_locked && (
             <>
               <button className="btn btn-ghost btn-sm" onClick={() => onReschedule(appt)}>Reschedule</button>
               <button className="btn btn-danger btn-sm" onClick={() => onCancel(appt)}>Cancel</button>

@@ -121,7 +121,8 @@ export const SOURCE_NAMES: Record<
 
 // The trophy is a daily TARGET: every agent who books at least this many
 // appointments today wears one (not just the leader — team decision).
-export const TROPHY_MIN_APPTS = 5
+// Raised 5 -> 6, owner 18 Aug 2026.
+export const TROPHY_MIN_APPTS = 6
 
 // End-of-day celebration: at this UK time on working days, every screen
 // showing the board celebrates the day's top performer(s) full-screen for

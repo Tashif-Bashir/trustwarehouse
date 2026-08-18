@@ -345,6 +345,26 @@ def _get_active_booking(event_id: str) -> dict | None:
     return dict(rows[0]) if rows else None
 
 
+def _booking_started(booking: dict) -> bool:
+    """True once a booking's appointment start is now or in the past.
+
+    Full datetime comparison on Europe/London wall clock (_now_uk — same BST/GMT
+    handling as the availability engine's _now_london, just this file's own copy)
+    — never UTC, and never date-only (an appointment that started earlier TODAY
+    must count as started, not just ones from an earlier date). Used to lock
+    Reschedule/Cancel server-side once an appointment is underway or done —
+    the UI hides the buttons too, but that alone is bypassable.
+    """
+    try:
+        start_dt = datetime.strptime(
+            f"{booking.get('appt_date', '')} {booking.get('appt_start', '')}",
+            "%Y-%m-%d %H:%M",
+        )
+    except (ValueError, TypeError):
+        return False  # can't parse -> don't lock on a guess
+    return start_dt <= _now_uk()
+
+
 def _ss_cancel_lead(lead: dict, booker_owner_id: str, appt_type: str = "heating") -> bool:
     """Revert a lead on cancellation: status→Cancelled, Booked→No, owner→booker.
 
@@ -1331,6 +1351,10 @@ def api_cancel():
         return jsonify({"ok": False, "message": "This appointment can't be cancelled here "
                         "(it wasn't booked through this tool)."}), 404
 
+    if _booking_started(booking):
+        return jsonify({"ok": False, "message": "This appointment has already started "
+                        "and can't be cancelled here."}), 409
+
     # 1. Remove the calendar event (the appointment itself). Critical — abort if it fails,
     #    so we never revert the CRM while the event still stands.
     if not _ss_delete_event(event_id):
@@ -1399,6 +1423,10 @@ def api_reschedule():
     if not booking:
         return jsonify({"ok": False, "message": "This appointment can't be rescheduled here "
                         "(it wasn't booked through this tool)."}), 404
+
+    if _booking_started(booking):
+        return jsonify({"ok": False, "message": "This appointment has already started "
+                        "and can't be rescheduled here."}), 409
 
     rep_name = booking.get("rep_name") or ""
     rep_email = REP_EMAIL.get(rep_name)

@@ -734,6 +734,7 @@ def build_rep_diary(events: list[dict]) -> dict:
     the /reps diary page (both the list view and the calendar view).
     """
     today = date.today()
+    now_uk = _now_london()  # wall-clock Europe/London — full datetime, not just the date
     all_reps = list(REP_REGION.keys()) + FALLBACK_REPS
 
     rep_appts: dict[str, list[dict]] = {r: [] for r in all_reps}
@@ -760,6 +761,11 @@ def build_rep_diary(events: list[dict]) -> dict:
             "event_id": event.get("id", ""),
             "is_past":  start_dt.date() < today,
             "is_today": start_dt.date() == today,
+            # Locked once the appointment has STARTED (full datetime compare,
+            # Europe/London wall clock — an appointment in progress right now
+            # counts as started). Gates Reschedule/Cancel in the UI; the
+            # /api/reschedule and /api/cancel routes re-check this server-side.
+            "is_started": start_dt <= now_uk,
         })
 
     result = []

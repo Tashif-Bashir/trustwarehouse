@@ -144,6 +144,10 @@
   .cal-btn-apply{font-size:12.5px;font-weight:700;color:#fff;background:linear-gradient(135deg,#5B6CFF,#8B5CF6);border:none;border-radius:8px;padding:7px 16px}
   .cal-btn-apply:disabled{opacity:.4;cursor:default}
 
+  /* Locked (already started) — replaces Reschedule/Cancel, always visible unlike the hover-only buttons */
+  .appt-locked{flex-shrink:0;font-size:10.5px;font-weight:700;color:var(--muted2);font-family:'SFMono-Regular',Consolas,Menlo,monospace;letter-spacing:.5px;text-transform:uppercase;padding:4px 10px}
+  .detail-locked{font-size:12px;font-weight:600;color:var(--muted2);font-family:'SFMono-Regular',Consolas,Menlo,monospace;letter-spacing:.3px;background:var(--bg);border-radius:8px;padding:8px 10px;margin-top:12px}
+
   /* Cancel appointment */
   .appt-cancel{flex-shrink:0;font-size:11.5px;font-weight:600;color:var(--muted);padding:4px 10px;border-radius:7px;border:1.5px solid var(--line);background:var(--panel);transition:all .12s;opacity:0}
   .appt-row:hover .appt-cancel{opacity:1}
@@ -446,17 +450,19 @@ function ApptRow({ appt, onCancel, onReschedule }) {
       <div className="appt-date">{dayStr}</div>
       <div className="appt-time">{appt.start}{appt.end ? `–${appt.end}` : ''}</div>
       <div className="appt-subject" title={appt.subject}>{appt.subject || '(no title)'}</div>
-      {appt.cancellable && !appt.is_past && (
-        <>
-          <button className="appt-reschedule" onClick={() => onReschedule(appt)}
-            title="Reschedule — move this appointment to a new date/time">
-            Reschedule
-          </button>
-          <button className="appt-cancel" onClick={() => onCancel(appt)}
-            title="Cancel this appointment — removes the calendar event and reverts the CRM">
-            Cancel
-          </button>
-        </>
+      {appt.cancellable && (
+        appt.is_started
+          ? <span className="appt-locked" title="This appointment has already started — locked">past</span>
+          : <>
+              <button className="appt-reschedule" onClick={() => onReschedule(appt)}
+                title="Reschedule — move this appointment to a new date/time">
+                Reschedule
+              </button>
+              <button className="appt-cancel" onClick={() => onCancel(appt)}
+                title="Cancel this appointment — removes the calendar event and reverts the CRM">
+                Cancel
+              </button>
+            </>
       )}
     </div>
   );
@@ -558,7 +564,7 @@ function WeekCalendar({ rep, weekStart, onPrevWeek, onNextWeek, onThisWeek, onSe
                   const height = Math.max(CAL_ROW_H - 3, ((endMin - startMin) / CAL_STEP_MIN) * CAL_ROW_H - 3);
                   return (
                     <div key={a.event_id || `${a.date}-${a.start}`}
-                      className={`week-block${a.is_past ? ' is-past' : ''}`}
+                      className={`week-block${a.is_started ? ' is-past' : ''}`}
                       style={{ top, height }}
                       onClick={() => onSelectAppt(a)}
                       title={a.subject}>
@@ -586,9 +592,12 @@ function ApptDetail({ appt, repName, onClose, onReschedule, onCancel }) {
         <div className="detail-meta">{repName} · {fmtIso(appt.date)} · {appt.start}{appt.end ? `–${appt.end}` : ''}</div>
         {appt.postcode && <div className="detail-row"><span>Postcode</span><span>{appt.postcode}</span></div>}
         <div className="detail-row"><span>Subject</span><span>{appt.subject || '—'}</span></div>
+        {appt.cancellable && appt.is_started && (
+          <div className="detail-locked">This appointment has already started — locked</div>
+        )}
         <div className="detail-actions">
           <button className="btn btn-ghost btn-sm" onClick={onClose}>Close</button>
-          {appt.cancellable && !appt.is_past && (
+          {appt.cancellable && !appt.is_started && (
             <>
               <button className="btn btn-ghost btn-sm" onClick={() => onReschedule(appt)}>Reschedule</button>
               <button className="btn btn-danger btn-sm" onClick={() => onCancel(appt)}>Cancel</button>

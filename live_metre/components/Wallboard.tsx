@@ -504,6 +504,12 @@ export default function Wallboard({ boardId }: { boardId: string }) {
               </div>
             </div>
           </div>
+
+          {/* The rep pipeline — money waiting to be chased (owner ruling:
+              lives on the sales & ops board, not telesales). */}
+          {board.features.pipeline && metrics?.pipeline && (
+            <PipelineBoard pipeline={metrics.pipeline} />
+          )}
         </div>
       ) : (
         callsSection

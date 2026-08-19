@@ -46,8 +46,8 @@ export interface BoardSpec {
     celebration: boolean
     sales: boolean
     // "the pipeline" (owner-approved 19 Aug 2026): field reps' attended-but-
-    // unsold appointments, chased within 14 days of the visit. Telesales board
-    // only — the sales & ops board has its own sold-ledger view already.
+    // unsold appointments, chased within 14 days of the visit. SALES & OPS
+    // board (owner ruling 19 Aug: "the live sales metre, not telesales").
     pipeline: boolean
   }
 }
@@ -58,7 +58,7 @@ export const BOARDS: Record<string, BoardSpec> = {
     title: 'Live telesales metre',
     agents: AGENTS,
     features: {
-      appointments: true, leaderboard: true, celebration: true, sales: false, pipeline: true,
+      appointments: true, leaderboard: true, celebration: true, sales: false, pipeline: false,
     },
   },
   team: {
@@ -66,7 +66,7 @@ export const BOARDS: Record<string, BoardSpec> = {
     title: 'Live sales & ops metre',
     agents: TEAM_AGENTS,
     features: {
-      appointments: false, leaderboard: false, celebration: false, sales: true, pipeline: false,
+      appointments: false, leaderboard: false, celebration: false, sales: true, pipeline: true,
     },
   },
 }

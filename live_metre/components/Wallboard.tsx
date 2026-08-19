@@ -7,6 +7,7 @@ import DoorsCelebration from '@/components/DoorsCelebration'
 import EodCelebration from '@/components/EodCelebration'
 import Header from '@/components/Header'
 import Leaderboard from '@/components/Leaderboard'
+import PipelineBoard from '@/components/PipelineBoard'
 import { BarRow, LastSaleBanner, StatBarList, StaticSalesKpis } from '@/components/SalesTiles'
 import SummaryCards from '@/components/SummaryCards'
 import {
@@ -388,6 +389,10 @@ export default function Wallboard({ boardId }: { boardId: string }) {
 
       {board.features.leaderboard && agents.length > 0 && (
         <Leaderboard agents={agents} flashingIds={flashingIds} />
+      )}
+
+      {board.features.pipeline && metrics?.pipeline && (
+        <PipelineBoard pipeline={metrics.pipeline} />
       )}
 
       <section className="grid grid-cols-1 gap-10 md:grid-cols-3">

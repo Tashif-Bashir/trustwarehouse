@@ -45,6 +45,10 @@ export interface BoardSpec {
     leaderboard: boolean
     celebration: boolean
     sales: boolean
+    // "the pipeline" (owner-approved 19 Aug 2026): field reps' attended-but-
+    // unsold appointments, chased within 14 days of the visit. Telesales board
+    // only — the sales & ops board has its own sold-ledger view already.
+    pipeline: boolean
   }
 }
 
@@ -53,13 +57,17 @@ export const BOARDS: Record<string, BoardSpec> = {
     id: 'telesales',
     title: 'Live telesales metre',
     agents: AGENTS,
-    features: { appointments: true, leaderboard: true, celebration: true, sales: false },
+    features: {
+      appointments: true, leaderboard: true, celebration: true, sales: false, pipeline: true,
+    },
   },
   team: {
     id: 'team',
     title: 'Live sales & ops metre',
     agents: TEAM_AGENTS,
-    features: { appointments: false, leaderboard: false, celebration: false, sales: true },
+    features: {
+      appointments: false, leaderboard: false, celebration: false, sales: true, pipeline: false,
+    },
   },
 }
 
@@ -192,6 +200,12 @@ export const MORNING_QUERY_WINDOW = { startHour: 8, startMinute: 30, endHour: 9,
 // declared stale (amber pill).
 export const POLL_INTERVAL_MS = 20_000
 export const STALE_AFTER_MS = 60_000
+
+// Rep pipeline (money waiting) refresh cadence — server-side cache TTL in
+// lib/provider/bronze.ts. Slower than POLL_INTERVAL_MS on purpose: the
+// underlying leads barely move minute to minute, so there is no need to pay
+// for a fresh BigQuery read on every 20s board poll (owner brief 19 Aug 2026).
+export const PIPELINE_REFRESH_MS = 5 * 60_000
 
 // The mock provider simulates dialling inside these UK working hours.
 export const WORKDAY = { startHour: 8, startMinute: 30, endHour: 17, endMinute: 30 }

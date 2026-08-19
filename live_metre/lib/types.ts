@@ -73,10 +73,30 @@ export interface DoorsMetrics {
   freshLeadsOvernight: number | null
 }
 
+// Rep pipeline (telesales board only): appointments a field rep has ATTENDED
+// that have NOT sold and NOT died — money waiting to be chased within 14 days
+// of the visit (owner-approved concept, 19 Aug 2026).
+export interface PipelineRep {
+  name: string
+  count: number
+  estTotal: number // count * the 2026 average sale value — an ESTIMATE, never exact revenue
+  oldestDaysSince: number // days since the visit for this rep's longest-waiting lead
+  overdueCount: number // leads in this rep's pipeline past the 14-day chase window
+}
+
+export interface PipelineMetrics {
+  count: number
+  estTotal: number
+  avgSaleValue: number // 2026 average sale value used to build the estimate
+  reps: PipelineRep[] // attributed reps only, est £ desc
+  unattributed: { count: number; estTotal: number } // ladder couldn't place these
+}
+
 export interface Metrics {
   asOf: string // ISO timestamp of when the source produced these numbers
   source: string // human label shown in the header subtitle
   agents: AgentMetrics[]
   sales?: SalesMetrics // team board only
   doors?: DoorsMetrics // telesales board only
+  pipeline?: PipelineMetrics // telesales board only
 }

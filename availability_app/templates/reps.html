@@ -208,8 +208,9 @@
   .detail-row{display:flex;justify-content:space-between;font-size:13px;color:var(--ink2);padding:6px 0;border-top:1px solid var(--line)}
   .detail-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
 
-  /* Reschedule modal */
+  /* Reschedule / Edit modal */
   .reschedule-box{background:var(--panel);border-radius:18px;padding:26px;max-width:440px;width:92%;box-shadow:var(--shadow-md);max-height:86vh;overflow-y:auto}
+  .reschedule-box-wide{max-width:600px}
   .reschedule-title{font-size:16px;font-weight:700;letter-spacing:-.2px;margin-bottom:4px}
   .reschedule-current{font-size:12.5px;color:var(--muted);margin-bottom:16px}
   .field-label{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
@@ -227,6 +228,17 @@
   .slot.sel-range{background:#DBEAFE;color:#1D4ED8;outline:1px solid #93C5FD;cursor:pointer}
   .slot.sel-start,.slot.sel-end{background:var(--indigo);color:#fff;box-shadow:0 2px 8px rgba(91,108,255,.4);cursor:pointer}
   .reschedule-hint{font-size:11.5px;color:var(--muted);margin:6px 0 14px}
+
+  /* Rep×slot picker (Edit — phase one: time + rep) */
+  .resched-rep-row{border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+  .resched-rep-row.is-current{border-color:var(--indigo);background:var(--indigo-soft)}
+  .resched-rep-label{display:flex;align-items:baseline;gap:8px;margin-bottom:7px}
+  .resched-rep-name{font-size:13px;font-weight:700;color:var(--ink)}
+  .resched-rep-tag{font-size:10px;font-weight:700;color:var(--indigo);background:#fff;padding:1px 7px;border-radius:20px;text-transform:uppercase;letter-spacing:.4px}
+  .resched-rep-meta{font-size:11px;color:var(--muted)}
+  .resched-section-label{font-size:10.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--amber);padding:8px 2px 4px}
+  .resched-toggle{color:var(--muted);cursor:pointer;user-select:none;text-transform:none;letter-spacing:0;font-weight:600;font-size:12px}
+  .resched-toggle:hover{color:var(--indigo)}
 </style>
 </head>
 <body>
@@ -465,8 +477,8 @@ function ApptRow({ appt, onCancel, onReschedule }) {
           ? <span className="appt-locked" title={apptLockLabel(appt).title}>{apptLockLabel(appt).text}</span>
           : <>
               <button className="appt-reschedule" onClick={() => onReschedule(appt)}
-                title="Reschedule — move this appointment to a new date/time">
-                Reschedule
+                title="Edit — move this appointment to a new date/time and/or rep">
+                Edit
               </button>
               <button className="appt-cancel" onClick={() => onCancel(appt)}
                 title="Cancel this appointment — removes the calendar event and reverts the CRM">
@@ -613,7 +625,7 @@ function ApptDetail({ appt, repName, onClose, onReschedule, onCancel }) {
           <button className="btn btn-ghost btn-sm" onClick={onClose}>Close</button>
           {appt.cancellable && !appt.is_locked && (
             <>
-              <button className="btn btn-ghost btn-sm" onClick={() => onReschedule(appt)}>Reschedule</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => onReschedule(appt)}>Edit</button>
               <button className="btn btn-danger btn-sm" onClick={() => onCancel(appt)}>Cancel</button>
             </>
           )}
@@ -623,28 +635,48 @@ function ApptDetail({ appt, repName, onClose, onReschedule, onCancel }) {
   );
 }
 
-/* ── Reschedule modal — respects availability like a new booking would ── */
+/* ── Edit modal (phase one of "Edit appointment": time + rep, reschedule under
+   the hood) — respects availability exactly like a new booking would, using the
+   lead's region so the reps×slots picture matches the booking page: regional
+   reps first (original rep pinned to the top, highlighted), then fallback,
+   then a collapsible "other regions" group. Picking any slot in any rep's row
+   picks that rep + time in one action. ── */
 function RescheduleModal({ appt, repName, onClose, onDone }) {
   const origDuration = appt.end ? (minsOf(appt.end) - minsOf(appt.start)) : 30;
-  const [pickDate, setPickDate] = useState(appt.date);
-  const [slots,    setSlots]    = useState([]);
-  const [loading,  setLoading]  = useState(false);
-  const [selStart, setSelStart] = useState(null);
-  const [selEnd,   setSelEnd]   = useState(null);
-  const [busy,     setBusy]     = useState(false);
-  const [result,   setResult]   = useState(null);
+  const [pickDate, setPickDate]     = useState(appt.date);
+  const [region,   setRegion]       = useState(null);
+  const [regionReady, setRegionReady] = useState(false);
+  const [grid,     setGrid]         = useState(null);
+  const [loading,  setLoading]      = useState(false);
+  const [selRep,   setSelRep]       = useState(repName);
+  const [selStart, setSelStart]     = useState(null);
+  const [selEnd,   setSelEnd]       = useState(null);
+  const [showOthers, setShowOthers] = useState(false);
+  const [busy,     setBusy]         = useState(false);
+  const [result,   setResult]       = useState(null);
+
+  // Resolve the lead's region once, from the appointment's postcode — the same
+  // signal a new booking uses to decide regional/fallback/other reps.
+  useEffect(() => {
+    if (!appt.postcode) { setRegionReady(true); return; }
+    fetch(`/api/resolve-location?q=${encodeURIComponent(appt.postcode)}`)
+      .then(r => r.json())
+      .then(d => setRegion(d.region || null))
+      .catch(() => setRegion(null))
+      .finally(() => setRegionReady(true));
+  }, []);
 
   useEffect(() => {
+    if (!regionReady) return;
     setSelStart(null); setSelEnd(null); setLoading(true);
-    fetch(`/api/availability?start_date=${pickDate}&days=1`)
+    const qs = new URLSearchParams({ start_date: pickDate, days: '1' });
+    if (region) qs.set('region', region);
+    fetch(`/api/availability?${qs.toString()}`)
       .then(r => r.json())
-      .then(d => {
-        const repGrid = (d.reps || []).find(r => r.name === repName);
-        setSlots((repGrid && repGrid.days && repGrid.days[pickDate]) || []);
-      })
-      .catch(() => setSlots([]))
+      .then(d => setGrid(d))
+      .catch(() => setGrid({ reps: [] }))
       .finally(() => setLoading(false));
-  }, [pickDate]);
+  }, [pickDate, regionReady, region]);
 
   function addMins(t, m) {
     const [h, min] = t.split(':').map(Number);
@@ -653,15 +685,24 @@ function RescheduleModal({ appt, repName, onClose, onDone }) {
   }
   const bookingEnd = selEnd ? selEnd : (selStart ? addMins(selStart, origDuration) : null);
 
-  function slotClass(s) {
-    if (selStart && s.time >= selStart && s.time < bookingEnd) {
+  const allReps    = grid?.reps || [];
+  const originalRep   = allReps.find(r => r.name === repName);
+  const otherRegional = allReps.filter(r => r.name !== repName && !r.is_fallback && !r.is_other);
+  const fallbackReps   = allReps.filter(r => r.name !== repName && r.is_fallback);
+  const otherAreaReps  = allReps.filter(r => r.name !== repName && r.is_other);
+
+  function slotsFor(rep) { return (rep && rep.days && rep.days[pickDate]) || []; }
+
+  function slotClass(rn, s) {
+    if (selRep === rn && selStart && s.time >= selStart && s.time < bookingEnd) {
       return s.time === selStart ? 'sel-start' : (s.time === selEnd ? 'sel-end' : 'sel-range');
     }
     return s.status;
   }
 
-  function handleSlotClick(s) {
+  function handleSlotClick(rn, s) {
     if (result || (s.status !== 'free' && s.status !== 'buffer')) return;
+    if (selRep !== rn) { setSelRep(rn); setSelStart(s.time); setSelEnd(null); return; }
     if (!selStart) { setSelStart(s.time); setSelEnd(null); }
     else if (!selEnd) {
       if (s.time === selStart) setSelStart(null);
@@ -670,16 +711,20 @@ function RescheduleModal({ appt, repName, onClose, onDone }) {
     } else { setSelStart(s.time); setSelEnd(null); }
   }
 
-  const occupied    = slots.filter(s => selStart && bookingEnd && s.time >= selStart && s.time < bookingEnd);
-  const hasConflict = occupied.some(s => s.status === 'booked' || s.status === 'off' || s.status === 'past');
-  const isSameSlot  = pickDate === appt.date && selStart === appt.start && bookingEnd === appt.end;
+  const selRepSlots = slotsFor(allReps.find(r => r.name === selRep));
+  const occupied     = selRepSlots.filter(s => selStart && bookingEnd && s.time >= selStart && s.time < bookingEnd);
+  const hasConflict  = occupied.some(s => s.status === 'booked' || s.status === 'off' || s.status === 'past');
+  const repChanged   = selRep !== repName;
+  const isSameSlot   = !repChanged && pickDate === appt.date && selStart === appt.start && bookingEnd === appt.end;
 
   async function confirm() {
     setBusy(true);
     try {
       const resp = await fetch('/api/reschedule', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event_id: appt.event_id, date: pickDate, start: selStart, end: bookingEnd }),
+        body: JSON.stringify({
+          event_id: appt.event_id, date: pickDate, start: selStart, end: bookingEnd, rep: selRep,
+        }),
       });
       const data = await resp.json();
       setResult(data);
@@ -691,12 +736,34 @@ function RescheduleModal({ appt, repName, onClose, onDone }) {
     }
   }
 
+  function RepRow({ rep, highlight, tag }) {
+    const rs = slotsFor(rep);
+    return (
+      <div className={`resched-rep-row${highlight ? ' is-current' : ''}`}>
+        <div className="resched-rep-label">
+          <div className="resched-rep-name">{rep.name}</div>
+          {tag && <span className="resched-rep-tag">{tag}</span>}
+          <div className="resched-rep-meta">{rep.is_fallback ? 'Flexible coverage' : rep.regions?.join(', ')}</div>
+        </div>
+        {rs.length === 0
+          ? <div className="reschedule-hint" style={{ margin: 0 }}>Not working this day.</div>
+          : <div className="slot-grid">
+              {rs.map(s => (
+                <div key={s.time} className={`slot ${slotClass(rep.name, s)}`}
+                  onClick={() => handleSlotClick(rep.name, s)}>{s.time}</div>
+              ))}
+            </div>
+        }
+      </div>
+    );
+  }
+
   return (
     <div className="cancel-overlay" onClick={e => e.target === e.currentTarget && !busy && onClose()}>
-      <div className="reschedule-box">
-        <div className="reschedule-title">Reschedule appointment</div>
+      <div className="reschedule-box reschedule-box-wide">
+        <div className="reschedule-title">Edit appointment</div>
         <div className="reschedule-current">
-          {repName} · currently {fmtIso(appt.date)} · {appt.start}{appt.end ? `–${appt.end}` : ''}
+          currently {repName} · {fmtIso(appt.date)} · {appt.start}{appt.end ? `–${appt.end}` : ''}
           {appt.customer ? ` · ${appt.customer}` : ''}
         </div>
 
@@ -705,28 +772,42 @@ function RescheduleModal({ appt, repName, onClose, onDone }) {
           <input className="date-input" type="date" value={pickDate} min={TODAY_ISO}
             onChange={e => e.target.value && setPickDate(e.target.value)} />
 
-          <div className="field-label">New time</div>
+          <div className="field-label">Rep &amp; time</div>
           {loading && <div className="loader" style={{ padding: '14px 0' }}><div className="spinner" /></div>}
-          {!loading && slots.length === 0 && (
-            <div className="reschedule-hint">{repName} doesn't work this day — pick another date.</div>
+
+          {!loading && originalRep && <RepRow rep={originalRep} highlight tag="current rep" />}
+          {!loading && !originalRep && (
+            <div className="reschedule-hint">{repName} isn't showing in today's availability — pick a rep below, or try another date.</div>
           )}
-          {!loading && slots.length > 0 && (
-            <div className="slot-grid">
-              {slots.map(s => (
-                <div key={s.time} className={`slot ${slotClass(s)}`} onClick={() => handleSlotClick(s)}>{s.time}</div>
-              ))}
-            </div>
+
+          {!loading && otherRegional.map(rep => <RepRow key={rep.name} rep={rep} />)}
+
+          {!loading && fallbackReps.length > 0 && (
+            <>
+              <div className="resched-section-label">No regional rep — escalation options</div>
+              {fallbackReps.map(rep => <RepRow key={rep.name} rep={rep} />)}
+            </>
           )}
+
+          {!loading && otherAreaReps.length > 0 && (
+            <>
+              <div className="resched-section-label resched-toggle" onClick={() => setShowOthers(o => !o)}>
+                {showOthers ? '▾' : '▸'} Other regions' reps ({otherAreaReps.length}) — click to {showOthers ? 'hide' : 'show'} · travel may apply
+              </div>
+              {showOthers && otherAreaReps.map(rep => <RepRow key={rep.name} rep={rep} />)}
+            </>
+          )}
+
           <div className="reschedule-hint">
-            {!selStart && 'Click a start slot — the original length is kept by default; click a later slot to change the end time.'}
-            {selStart && `${selStart} – ${bookingEnd}${hasConflict ? ' — overlaps a booked/off slot' : ''}`}
+            {!selStart && "Click a slot in any rep's row — the original length is kept by default; click a later slot in the same row to change the end time."}
+            {selStart && `${selRep} · ${selStart} – ${bookingEnd}${repChanged ? ' (rep change)' : ''}${hasConflict ? ' — overlaps a booked/off slot' : ''}`}
           </div>
 
           <div className="cancel-actions">
-            <button className="btn btn-ghost" onClick={onClose} disabled={busy}>Keep current time</button>
+            <button className="btn btn-ghost" onClick={onClose} disabled={busy}>Keep as is</button>
             <button className="btn btn-danger" style={{ background: 'var(--indigo)', boxShadow: '0 5px 14px rgba(91,108,255,.32)' }}
               onClick={confirm} disabled={busy || !selStart || hasConflict || isSameSlot}>
-              {busy ? 'Rescheduling…' : 'Confirm reschedule'}
+              {busy ? 'Saving…' : 'Confirm edit'}
             </button>
           </div>
         </>}

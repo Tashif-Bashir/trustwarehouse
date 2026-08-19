@@ -807,6 +807,36 @@ def main() -> None:
             failed.append((dest, str(e).splitlines()[0][:90]))
             print(f"  FAIL {dest:<45} {str(e).splitlines()[0][:55]}")
 
+    # ── GA4 straight copies (19 Aug 2026, marketing asked for "everything in
+    # bronze"). Same-name copies of every bronze `ga4_api%` table, with the
+    # GSC-style row-count skip-guard: these are daily-grain API pulls (~200MB
+    # total, landing_pages alone ~110MB) that change at most once a day, so
+    # the hourly run only pays for the copy when bronze actually moved.
+    ga4_counts = {
+        (r.dataset, r.table_id): r.row_count
+        for r in client.query(f"""
+            SELECT 'bronze' AS dataset, table_id, row_count
+            FROM `{PROJECT}.bronze.__TABLES__` WHERE table_id LIKE 'ga4_api%'
+            UNION ALL
+            SELECT '{DST}', table_id, row_count
+            FROM `{PROJECT}.{DST}.__TABLES__` WHERE table_id LIKE 'ga4_api%'
+        """).result()
+    }
+    ga4_tables = sorted({t for (ds, t) in ga4_counts if ds == "bronze"})
+    for t in ga4_tables:
+        try:
+            src_n = ga4_counts.get(("bronze", t))
+            if src_n is not None and ga4_counts.get((DST, t)) == src_n:
+                done.append((t, src_n))
+                print(f"  skip {t:<45} {src_n:>10,} (source unchanged)")
+                continue
+            n = build(t, f"SELECT * FROM `{PROJECT}.bronze.{t}`")
+            done.append((t, n))
+            print(f"  ok   {t:<45} {n:>10,}")
+        except Exception as e:
+            failed.append((t, str(e).splitlines()[0][:90]))
+            print(f"  FAIL {t:<45} {str(e).splitlines()[0][:55]}")
+
     # before the derived tables, because sales_attributed does not depend on it
     # but a failure here shouldn't stop the rest of the mart rebuilding
     try:

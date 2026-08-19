@@ -218,8 +218,8 @@ export const PIPELINE_REFRESH_MS = 5 * 60_000
 // normal recurring cadence carries on once it ends.
 export const PIPELINE_TAKEOVER = {
   enabled: true,
-  everyMs: 5 * 60_000, // normal board dwell between showings
-  durationMs: 60_000, // owner: "it should stay for one minute"
+  everyMs: 3 * 60_000, // normal board dwell between showings (owner 19 Aug: every 3 min)
+  durationMs: 90_000, // owner 19 Aug: "make it stay for little longer" (was 60s)
   weekdaysOnly: false,
 }
 

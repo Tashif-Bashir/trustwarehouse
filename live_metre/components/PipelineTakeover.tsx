@@ -37,8 +37,9 @@ function agingLabel(daysSince: number): string {
 
 // Phase 1 (headline) hold before shrinking into the phase-2 header strip —
 // leaves the rest of PIPELINE_TAKEOVER.durationMs for the rep breakdown.
-// 12s, not 9: the status buckets under the total need reading time.
-const PHASE1_MS = 12_000
+// 18s of the 90s showing: the status buckets are the bit the owner wants
+// the room to actually read (19 Aug: bigger + longer).
+const PHASE1_MS = 18_000
 const COUNT_UP_MS = 2_500
 // Large cards for room-distance legibility — paginate rather than shrink.
 const ITEMS_PER_PAGE = 4
@@ -52,22 +53,60 @@ const EXIT_MS = 500
 // useCountUp hook, which animates from its previous value, not from zero:
 // this takeover always mounts fresh per showing (Wallboard unmounts it
 // between showings), so "from zero" is exactly the reveal the brief wants.
-function useCountFromZero(target: number, durationMs: number): number {
+function useCountFromZero(target: number, durationMs: number, delayMs = 0): number {
   const [value, setValue] = useState(0)
   useEffect(() => {
     let raf: number
-    const start = performance.now()
-    const step = (now: number) => {
-      const progress = Math.min(1, (now - start) / durationMs)
-      const eased = 1 - Math.pow(1 - progress, 3)
-      setValue(Math.round(target * eased))
-      if (progress < 1) raf = requestAnimationFrame(step)
+    let timer: ReturnType<typeof setTimeout>
+    const run = () => {
+      const start = performance.now()
+      const step = (now: number) => {
+        const progress = Math.min(1, (now - start) / durationMs)
+        const eased = 1 - Math.pow(1 - progress, 3)
+        setValue(Math.round(target * eased))
+        if (progress < 1) raf = requestAnimationFrame(step)
+      }
+      raf = requestAnimationFrame(step)
     }
-    raf = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(raf)
+    if (delayMs > 0) timer = setTimeout(run, delayMs)
+    else run()
+    return () => {
+      clearTimeout(timer)
+      cancelAnimationFrame(raf)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return value
+}
+
+// A chase-status bucket on the headline screen. ERUPTS in (owner 19 Aug:
+// "I want the erupt on the buckets") — the card bursts up with an overshoot
+// while its pound figure counts up from zero, timed to start as the card
+// lands. Sized for the far end of the sales office, not a desk.
+function BucketCard({
+  bucket,
+  delayMs,
+}: {
+  bucket: { status: string; count: number; estTotal: number }
+  delayMs: number
+}) {
+  const value = useCountFromZero(bucket.estTotal, 1_800, delayMs)
+  return (
+    <div
+      className="bucket-erupt min-w-[18rem] rounded-2xl border-[0.5px] border-hairline bg-surface/60 px-10 py-8 text-center"
+      style={{ animationDelay: `${delayMs}ms` }}
+    >
+      <p className="money-glow font-display text-7xl font-bold tabular-nums text-neutral-50">
+        {gbp(value)}
+      </p>
+      <p className="mt-3 text-xl font-semibold uppercase tracking-[0.18em] text-red-400/80">
+        {STATUS_LABELS[bucket.status] ?? bucket.status}
+      </p>
+      <p className="mt-1 text-lg tabular-nums text-neutral-400">
+        {bucket.count} lead{bucket.count === 1 ? '' : 's'}
+      </p>
+    </div>
+  )
 }
 
 type Item = Pick<PipelineRep, 'name' | 'count' | 'estTotal' | 'oldestDaysSince' | 'overdueCount'> & {
@@ -85,12 +124,12 @@ function RepCard({ item }: { item: Item }) {
       <div className="min-w-0 flex-1">
         <p
           className={`truncate font-display font-semibold ${
-            item.quiet ? 'text-2xl text-neutral-300' : 'text-4xl text-neutral-50'
+            item.quiet ? 'text-3xl text-neutral-300' : 'text-5xl text-neutral-50'
           }`}
         >
           {item.name}
         </p>
-        <p className={`mt-1 ${item.quiet ? 'text-base text-neutral-500' : 'text-xl text-neutral-400'}`}>
+        <p className={`mt-1 ${item.quiet ? 'text-lg text-neutral-500' : 'text-2xl text-neutral-400'}`}>
           {item.count} open lead{item.count === 1 ? '' : 's'}
           {item.overdueCount > 0 && (
             <span className="pulse-dot ml-2 inline-block font-semibold text-red-400">
@@ -99,17 +138,17 @@ function RepCard({ item }: { item: Item }) {
           )}
         </p>
       </div>
-      <div className="flex shrink-0 items-center gap-4">
+      <div className="flex shrink-0 items-center gap-5">
         <span
           className={`font-display font-semibold tabular-nums ${
-            item.quiet ? 'text-2xl text-neutral-300' : 'money-glow text-5xl text-neutral-50'
+            item.quiet ? 'text-3xl text-neutral-300' : 'money-glow text-6xl text-neutral-50'
           }`}
         >
           {gbp(item.estTotal)}
         </span>
         {!item.quiet && (
           <span
-            className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-base font-semibold tabular-nums ${CHIP_TONE[tone]}`}
+            className={`shrink-0 whitespace-nowrap rounded-full border px-4 py-2 text-xl font-semibold tabular-nums ${CHIP_TONE[tone]}`}
           >
             {agingLabel(item.oldestDaysSince)}
           </span>
@@ -187,7 +226,7 @@ export default function PipelineTakeover({ pipeline }: { pipeline: PipelineMetri
             className="pipeline-glow pointer-events-none absolute h-[60vh] w-[60vh] rounded-full bg-red-500/25 blur-[120px]"
             aria-hidden
           />
-          <p className="fade-up relative text-lg font-semibold uppercase tracking-[0.4em] text-red-400/80">
+          <p className="fade-up relative text-3xl font-semibold uppercase tracking-[0.4em] text-red-400/80">
             Waiting to be chased
           </p>
           <p
@@ -196,7 +235,7 @@ export default function PipelineTakeover({ pipeline }: { pipeline: PipelineMetri
           >
             {gbp(value)}
           </p>
-          <p className="fade-up relative text-2xl text-neutral-400" style={{ animationDelay: '260ms' }}>
+          <p className="fade-up relative text-3xl text-neutral-400" style={{ animationDelay: '260ms' }}>
             <span className="font-semibold text-neutral-200 tabular-nums">{pipeline.count}</span>{' '}
             lead{pipeline.count === 1 ? '' : 's'} &middot; est.{' '}
             <span className="font-semibold text-neutral-200 tabular-nums">
@@ -208,23 +247,9 @@ export default function PipelineTakeover({ pipeline }: { pipeline: PipelineMetri
           {/* Where the money sits — one bucket per chase status (owner ask
               19 Aug 2026: "this much in follow up, this much in this"). */}
           {pipeline.statuses.length > 0 && (
-            <div className="relative mt-4 flex flex-wrap items-stretch justify-center gap-5">
+            <div className="relative mt-6 flex flex-wrap items-stretch justify-center gap-6">
               {pipeline.statuses.map((s, i) => (
-                <div
-                  key={s.status}
-                  className="fade-up min-w-[13rem] rounded-2xl border-[0.5px] border-hairline bg-surface/60 px-7 py-5 text-center"
-                  style={{ animationDelay: `${420 + i * 140}ms` }}
-                >
-                  <p className="money-glow font-display text-4xl font-bold tabular-nums text-neutral-50">
-                    {gbp(s.estTotal)}
-                  </p>
-                  <p className="mt-2 text-sm font-semibold uppercase tracking-[0.18em] text-red-400/80">
-                    {STATUS_LABELS[s.status] ?? s.status}
-                  </p>
-                  <p className="mt-0.5 text-sm tabular-nums text-neutral-500">
-                    {s.count} lead{s.count === 1 ? '' : 's'}
-                  </p>
-                </div>
+                <BucketCard key={s.status} bucket={s} delayMs={500 + i * 180} />
               ))}
             </div>
           )}
@@ -232,14 +257,14 @@ export default function PipelineTakeover({ pipeline }: { pipeline: PipelineMetri
       )}
 
       {phase === 2 && (
-        <div className="fade-up flex w-full max-w-5xl flex-1 flex-col gap-6 py-10">
+        <div className="fade-up flex w-full max-w-6xl flex-1 flex-col gap-6 py-10">
           <div className="flex items-baseline justify-between gap-6 border-b border-hairline pb-5">
-            <p className="text-base font-semibold uppercase tracking-[0.3em] text-red-400/80">
+            <p className="text-2xl font-semibold uppercase tracking-[0.3em] text-red-400/80">
               Pipeline &middot; waiting to be chased
             </p>
-            <p className="money-glow font-display text-5xl font-bold tabular-nums text-neutral-50">
+            <p className="money-glow font-display text-7xl font-bold tabular-nums text-neutral-50">
               {gbp(pipeline.estTotal)}
-              <span className="ml-2 text-lg font-normal text-neutral-500">
+              <span className="ml-3 text-2xl font-normal text-neutral-500">
                 {pipeline.count} lead{pipeline.count === 1 ? '' : 's'}
               </span>
             </p>

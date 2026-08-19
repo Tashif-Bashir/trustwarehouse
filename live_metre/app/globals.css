@@ -132,6 +132,32 @@
   animation: money-glow 1.6s ease-in-out infinite;
 }
 
+/* Status buckets ERUPT onto the headline screen (owner 19 Aug 2026): burst
+   up from below with an overshoot, then settle. fill-mode both keeps the
+   card invisible through its stagger delay instead of flashing at full
+   size before the animation starts. */
+@keyframes bucket-erupt {
+  0% {
+    opacity: 0;
+    transform: translateY(48px) scale(0.55);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(-10px) scale(1.08);
+  }
+  75% {
+    transform: translateY(3px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.bucket-erupt {
+  animation: bucket-erupt 0.8s cubic-bezier(0.22, 1.2, 0.36, 1) both;
+}
+
 /* Both classes set the `animation` shorthand, so an element carrying both
    would lose its fade-up entrance (and stay at fade-up's opacity: 0). Run
    them in sequence instead: the pulse waits out the fade-up (0.7s delay) so

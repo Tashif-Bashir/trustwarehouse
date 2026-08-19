@@ -1,6 +1,9 @@
 import { BigQuery } from '@google-cloud/bigquery'
-import { AGENTS, BOARDS, MORNING_QUERY_WINDOW, SOURCE_NAMES, TEAM_AGENTS, TEAM_ASCEND_NAMES } from '../config'
-import type { DoorsMetrics, Metrics, SalesMetrics } from '../types'
+import {
+  AGENTS, BOARDS, MORNING_QUERY_WINDOW, PIPELINE_REFRESH_MS, SOURCE_NAMES, TEAM_AGENTS,
+  TEAM_ASCEND_NAMES,
+} from '../config'
+import type { DoorsMetrics, Metrics, PipelineMetrics, SalesMetrics } from '../types'
 
 // Real data provider.
 //
@@ -275,6 +278,199 @@ async function queryFreshLeadsToChase(): Promise<number> {
   const value = Number((rows as { n: number }[])[0]?.n ?? 0)
   freshLeadsCache = { value, at: Date.now(), ukDate: today }
   return value
+}
+
+// Rep pipeline (telesales board): appointments a field rep has ATTENDED that
+// have NOT sold and NOT died — money waiting to be chased within 14 days of
+// the visit (owner-approved concept, sized 19 Aug 2026: 76 leads ≈ £186k).
+//
+// Two regions, as always: bronze.sharpspring_leads (europe-west2) finds the
+// leads; app.bookings/app.reps/app.sales (US) resolve who should chase each
+// one and what it's worth, UNIONed into a single US query rather than three
+// (10MB floor). Cached on its own, slower cadence (PIPELINE_REFRESH_MS) —
+// these leads barely move minute to minute, unlike calls/appointments.
+let pipelineCache: { value: PipelineMetrics; at: number } | null = null
+
+const PIPELINE_DEAD_STATUSES = [
+  'Appointment Cancelled', 'Not Interested', 'Too Expensive', 'Not a Lead', 'Bought Elsewhere',
+]
+
+// Appointment Status values that mean attended-and-still-winnable (owner
+// ruling 19 Aug 2026: "everything other than what implies sold ... this is
+// all waiting money"). Sold values (sold / sold on site / sold in office /
+// chc sold) drop off by not being listed; lost outcomes (not interested,
+// too expensive, bought elsewhere, gone cold) stay out to match the
+// dead-status exit above — they are lost, not waiting.
+const PIPELINE_CHASE_STATUSES = [
+  'appointment sat', 'follow up', 'follow up text', 'no contact', 'not ready yet',
+]
+
+// Europe/London calendar-day difference between two 'YYYY-MM-DD' strings —
+// noon UTC keeps it clear of any DST midnight edge, same trick as addDays.
+function daysBetween(fromDate: string, toDate: string): number {
+  const from = new Date(fromDate + 'T12:00:00Z').getTime()
+  const to = new Date(toDate + 'T12:00:00Z').getTime()
+  return Math.round((to - from) / 86_400_000)
+}
+
+const EMPTY_PIPELINE: PipelineMetrics = {
+  count: 0,
+  estTotal: 0,
+  avgSaleValue: 0,
+  statuses: [],
+  reps: [],
+  unattributed: { count: 0, estTotal: 0 },
+}
+
+// Degrades to null on any BigQuery hiccup — the section simply doesn't
+// render rather than blanking the rest of the board (same contract as
+// querySales below).
+async function queryPipeline(): Promise<PipelineMetrics | null> {
+  if (pipelineCache && Date.now() - pipelineCache.at < PIPELINE_REFRESH_MS) {
+    return pipelineCache.value
+  }
+
+  try {
+    const [euRows] = await client().query({
+      query: `
+        SELECT
+          id AS lead_id,
+          CAST(DATE(appointment_time___date_5ae8ca2f532bc, 'Europe/London') AS STRING) AS appt_date,
+          owner_id,
+          LOWER(TRIM(appointment_status_637f8d6fa1096)) AS chase_status
+        FROM \`${PROJECT}.bronze.sharpspring_leads\`
+        WHERE LOWER(TRIM(appointment_status_637f8d6fa1096)) IN UNNEST(@chaseStatuses)
+          AND status_633ae6f6ac6fe NOT IN UNNEST(@deadStatuses)
+          AND appointment_time___date_5ae8ca2f532bc IS NOT NULL
+          AND appointment_time___date_5ae8ca2f532bc <= CURRENT_TIMESTAMP()
+          AND DATE(appointment_time___date_5ae8ca2f532bc, 'Europe/London')
+              >= DATE_SUB(CURRENT_DATE('Europe/London'), INTERVAL 60 DAY)
+          AND first_name NOT LIKE 'Zzz%'
+          AND TRIM(CONCAT(first_name, ' ', COALESCE(last_name, ''))) NOT LIKE 'Test %'
+          AND LOWER(COALESCE(first_name, '')) != 'test'
+      `,
+      params: { deadStatuses: PIPELINE_DEAD_STATUSES, chaseStatuses: PIPELINE_CHASE_STATUSES },
+      location: 'europe-west2',
+    })
+    const leads = euRows as {
+      lead_id: string
+      appt_date: string
+      owner_id: string | null
+      chase_status: string
+    }[]
+
+    if (leads.length === 0) {
+      pipelineCache = { value: EMPTY_PIPELINE, at: Date.now() }
+      return EMPTY_PIPELINE
+    }
+
+    const leadIds = leads.map((l) => String(l.lead_id))
+
+    // US side, one UNIONed query: (a) each lead's most recent ACTIVE booking
+    // -> rep_name — wins the attribution ladder; (b) the reps roster,
+    // owner_id -> name, for the CRM-owner fallback; (c) the 2026 average
+    // sale value for the £ estimate. `kind` tags which arm a row came from.
+    const [usRows] = await client().query({
+      query: `
+        SELECT 'booking' AS kind, lead_id AS k,
+               ARRAY_AGG(rep_name ORDER BY booked_at DESC LIMIT 1)[OFFSET(0)] AS v1
+        FROM \`${PROJECT}.app.bookings\`
+        WHERE status = 'active' AND lead_id IN UNNEST(@leadIds)
+          AND rep_name IS NOT NULL AND rep_name != ''
+        GROUP BY lead_id
+        UNION ALL
+        SELECT 'rep', name, sharpspring_owner_id
+        FROM \`${PROJECT}.app.reps\`
+        UNION ALL
+        SELECT 'avg',
+               CAST(ROUND(AVG(
+                 COALESCE(heating_amount, 0) + COALESCE(water_amount, 0) + COALESCE(chc_amount, 0)
+               ), 2) AS STRING),
+               CAST(NULL AS STRING)
+        FROM \`${PROJECT}.app.sales\`
+        WHERE status = 'active' AND customer_name NOT LIKE 'Zzz Testlead%'
+          AND EXTRACT(YEAR FROM sale_date) = 2026
+      `,
+      params: { leadIds },
+      location: 'US',
+    })
+    const rows = usRows as { kind: string; k: string; v1: string | null }[]
+
+    const bookingRepByLead = new Map<string, string>()
+    const repNameByOwnerId = new Map<string, string>()
+    let avgSaleValue = 0
+    for (const r of rows) {
+      if (r.kind === 'booking' && r.v1) bookingRepByLead.set(String(r.k), r.v1)
+      else if (r.kind === 'rep' && r.v1) repNameByOwnerId.set(String(r.v1), r.k)
+      else if (r.kind === 'avg') avgSaleValue = Number(r.k) || 0
+    }
+
+    // ── attribution ladder: (a) booking rep_name wins, (b) else CRM owner_id
+    //    mapped through the roster ONLY if the owner IS a rep, (c) else
+    //    "Unattributed" (measured ~91% reached, 19 Aug 2026). ──
+    const today = ukToday()
+    interface Bucket {
+      count: number
+      oldestDaysSince: number
+      overdueCount: number
+    }
+    const byRep = new Map<string, Bucket>()
+    let unattributedCount = 0
+
+    for (const lead of leads) {
+      const daysSince = daysBetween(lead.appt_date, today)
+      const repName =
+        bookingRepByLead.get(String(lead.lead_id)) ??
+        (lead.owner_id ? repNameByOwnerId.get(String(lead.owner_id)) : undefined)
+
+      if (!repName) {
+        unattributedCount++
+        continue
+      }
+      const bucket = byRep.get(repName) ?? { count: 0, oldestDaysSince: 0, overdueCount: 0 }
+      bucket.count++
+      bucket.oldestDaysSince = Math.max(bucket.oldestDaysSince, daysSince)
+      if (daysSince > 14) bucket.overdueCount++
+      byRep.set(repName, bucket)
+    }
+
+    const reps = Array.from(byRep.entries())
+      .map(([name, b]) => ({
+        name,
+        count: b.count,
+        estTotal: Math.round(b.count * avgSaleValue),
+        oldestDaysSince: b.oldestDaysSince,
+        overdueCount: b.overdueCount,
+      }))
+      .sort((a, b) => b.estTotal - a.estTotal || a.name.localeCompare(b.name))
+
+    // How the waiting money splits across the chase statuses — the takeover's
+    // headline shows these as buckets (owner ask 19 Aug 2026: "this much in
+    // follow up, this much in this category").
+    const byStatus = new Map<string, number>()
+    for (const lead of leads) {
+      byStatus.set(lead.chase_status, (byStatus.get(lead.chase_status) ?? 0) + 1)
+    }
+    const statuses = Array.from(byStatus.entries())
+      .map(([status, count]) => ({ status, count, estTotal: Math.round(count * avgSaleValue) }))
+      .sort((a, b) => b.estTotal - a.estTotal || a.status.localeCompare(b.status))
+
+    const value: PipelineMetrics = {
+      count: leads.length,
+      estTotal: Math.round(leads.length * avgSaleValue),
+      avgSaleValue,
+      statuses,
+      reps,
+      unattributed: {
+        count: unattributedCount,
+        estTotal: Math.round(unattributedCount * avgSaleValue),
+      },
+    }
+    pipelineCache = { value, at: Date.now() }
+    return value
+  } catch {
+    return null // pipeline section degrades to hidden; the rest of the board stays up
+  }
 }
 
 // Sales tiles (team board) — live from app.sales (US region), the Trust Sales
@@ -624,11 +820,12 @@ export async function getBronzeMetrics(
   const wantsMorningData = board.features.appointments && !!opts.morning
 
   try {
-    const [calls, appointments, sales, freshLeadsOvernight] = await Promise.all([
+    const [calls, appointments, sales, freshLeadsOvernight, pipeline] = await Promise.all([
       queryCalls(ASCEND_MAP[board.id]),
       board.features.appointments ? queryAppointments() : Promise.resolve(EMPTY_APPOINTMENTS),
       board.features.sales ? querySales() : Promise.resolve(null),
       wantsMorningData ? queryFreshLeadsToChase() : Promise.resolve(null),
+      board.features.pipeline ? queryPipeline() : Promise.resolve(null),
     ])
     const today = ukToday()
     const prevByAgent = new Map(
@@ -664,6 +861,7 @@ export async function getBronzeMetrics(
             } as DoorsMetrics,
           }
         : {}),
+      ...(pipeline ? { pipeline } : {}),
     }
     caches[board.id] = { data, at: Date.now(), ukDate: today }
     return data

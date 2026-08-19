@@ -345,6 +345,56 @@ def _get_active_booking(event_id: str) -> dict | None:
     return dict(rows[0]) if rows else None
 
 
+CANCEL_LOCK_MINUTES = 15  # Reschedule/Cancel lock this many minutes before an appointment starts
+
+
+def _booking_start_dt(booking: dict) -> datetime | None:
+    """Parse a booking row's appt_date + appt_start into a naive Europe/London datetime, or None."""
+    try:
+        return datetime.strptime(
+            f"{booking.get('appt_date', '')} {booking.get('appt_start', '')}",
+            "%Y-%m-%d %H:%M",
+        )
+    except (ValueError, TypeError):
+        return None
+
+
+def _booking_locked(booking: dict) -> bool:
+    """True once we're inside the CANCEL_LOCK_MINUTES window before start, or past it.
+
+    Full datetime comparison on Europe/London wall clock (_now_uk — same BST/GMT
+    handling as the availability engine's _now_london, just this file's own copy)
+    — never UTC, and never date-only (an appointment that started earlier TODAY
+    must count as locked, not just ones from an earlier date). Locks
+    CANCEL_LOCK_MINUTES before start (owner refinement, 18 Aug) and stays locked
+    once the appointment is underway or done. Used to gate Reschedule/Cancel
+    server-side — the UI hides the buttons too, but that alone is bypassable.
+    """
+    start_dt = _booking_start_dt(booking)
+    if start_dt is None:
+        return False  # can't parse -> don't lock on a guess
+    return _now_uk() >= start_dt - timedelta(minutes=CANCEL_LOCK_MINUTES)
+
+
+def _booking_lock_message(booking: dict, action: str) -> str | None:
+    """409 message if `booking` is locked for `action` ('cancelled'/'rescheduled'), else None.
+
+    Two cases, per the owner's refinement: still-to-come but inside the lock
+    window (starts soon) vs. already underway/finished — the team gets a
+    clearer reason either way.
+    """
+    start_dt = _booking_start_dt(booking)
+    if start_dt is None:
+        return None  # can't parse -> don't lock on a guess
+    now = _now_uk()
+    if now < start_dt - timedelta(minutes=CANCEL_LOCK_MINUTES):
+        return None
+    if now < start_dt:
+        return (f"This appointment starts in less than {CANCEL_LOCK_MINUTES} minutes "
+                f"and can't be {action} here.")
+    return f"This appointment has already started and can't be {action} here."
+
+
 def _ss_cancel_lead(lead: dict, booker_owner_id: str, appt_type: str = "heating") -> bool:
     """Revert a lead on cancellation: status→Cancelled, Booked→No, owner→booker.
 
@@ -587,8 +637,14 @@ def _ss_update_lead(lead_id: str, *, date_iso: str, start_time: str,
                     street: str = "", postcode: str = "",
                     appt_type: str = "heating", other_outcome: str = "",
                     enquiry_type: str = "", teams_meeting: bool = False,
-                    prev_appt: str = "", stamp_booked_ts: bool = True) -> bool:
-    """Write the appointment fields to a lead. Returns True on success.
+                    prev_appt: str = "") -> bool:
+    """Write the appointment fields to a lead for a genuine new booking. Returns True on success.
+
+    Always used for /api/book — per the 18 Aug ruling, booking a lead (even one that
+    already has a live appointment: a previous customer booking again) is a new sales
+    cycle and always stamps a fresh booked-at + applies the full status matrix.
+    Moving the date of an EXISTING appointment is a separate action — see
+    _ss_reschedule_lead / /api/reschedule — which never calls this function.
 
     rep_owner_id reassigns the lead to the field rep (omitting ownerID makes SharpSpring
     reassign to the API account owner, so we only send it when known). street/postcode
@@ -612,13 +668,10 @@ def _ss_update_lead(lead_id: str, *, date_iso: str, start_time: str,
         _SS_F_APPT_DT: new_appt,
         _SS_F_APPT_BOOKED: "Yes",
         _SS_F_APPT_TYPE: "Video Call" if teams_meeting else "Physical",
-    }
-    if stamp_booked_ts:
         # SharpSpring stores/displays this as UK local time, so write UK wall-clock
         # (auto-handles BST/GMT) — not UTC, which reads an hour behind in summer.
-        # NOT stamped on reschedules — moving an appointment is not a new booking,
-        # and the dashboards count booking events by this timestamp (22 Jul 2026).
-        obj[_SS_F_BOOKED_TS] = _now_uk().strftime("%Y-%m-%d %H:%M:%S")
+        _SS_F_BOOKED_TS: _now_uk().strftime("%Y-%m-%d %H:%M:%S"),
+    }
     # Re-booking: stash the old appointment time before overwriting it.
     if prev_appt and prev_appt != new_appt:
         obj[_SS_F_PREV_APPT] = prev_appt
@@ -643,6 +696,32 @@ def _ss_update_lead(lead_id: str, *, date_iso: str, start_time: str,
         obj["street"] = street
     if postcode:
         obj["zipcode"] = postcode
+    resp = _ss_call("updateLeads", {"objects": [obj]})
+    updates = (resp.get("result") or {}).get("updates", []) if resp else []
+    return bool(updates and updates[0].get("success"))
+
+
+def _ss_reschedule_lead(lead_id: str, *, date_iso: str, start_time: str,
+                        prev_appt: str = "", rep_owner_id: str = "") -> bool:
+    """Move a lead's appointment time (and, for phase-one "Edit", optionally its
+    owner) only. Returns True on success.
+
+    Per the 18 Aug ruling a reschedule is an EDIT of an existing appointment, not a
+    new booking: only the appointment time field moves (old time preserved in the
+    Previous Appointment field). Status, booked flag, type-of-appointment and the
+    booked-at timestamp are deliberately left untouched — see _ss_update_lead
+    (used only by the genuine-new-booking path) for the fields this does NOT write.
+
+    rep_owner_id ('' = leave unchanged) reassigns the lead's owner — used only when
+    the Edit flow moves the appointment to a different rep, same mechanism as a
+    genuine booking (_ss_update_lead's rep_owner_id) but scoped to just this field.
+    """
+    new_appt = f"{date_iso} {start_time}:00"
+    obj = {"id": str(lead_id), _SS_F_APPT_DT: new_appt}
+    if prev_appt and prev_appt != new_appt:
+        obj[_SS_F_PREV_APPT] = prev_appt
+    if rep_owner_id:
+        obj["ownerID"] = str(rep_owner_id)
     resp = _ss_call("updateLeads", {"objects": [obj]})
     updates = (resp.get("result") or {}).get("updates", []) if resp else []
     return bool(updates and updates[0].get("success"))
@@ -1211,23 +1290,19 @@ def api_book():
 
         # ── CRM write-back — runs only after the calendar booking succeeds, and
         #    never blocks it. Locked ordering: verify lead → update → note. ──
+        # Per the 18 Aug ruling: /api/book is ALWAYS a genuine new booking —
+        # even for a lead that already has a live appointment (a previous
+        # customer booking again is a new sales cycle: new event, full status
+        # matrix, full booking credit). Moving the date of an EXISTING
+        # appointment is no longer done through this endpoint — that's
+        # /api/reschedule, an in-place edit that never lands here.
         crm_status = "skipped"
-        is_rebook = False
         if lead_id and not skip_crm:
             try:
                 lead = _ss_get_lead(lead_id)
                 if lead is None:
                     crm_status = "not_found"
                 else:
-                    # Reschedule detection: the lead already has a live booking
-                    # (flag Yes + booked-at present). Moving an appointment is
-                    # not a new booking — keep the original booked-at stamp so
-                    # the dashboards don't count the same appointment twice.
-                    # A booking after a proper cancel (flag = No) counts fresh.
-                    is_rebook = (
-                        (lead.get(_SS_F_APPT_BOOKED) or "") == "Yes"
-                        and bool((lead.get(_SS_F_BOOKED_TS) or "").strip())
-                    )
                     # Reassign to the field rep if we know their owner id; otherwise
                     # preserve the lead's current owner (never let it default to the API account).
                     owner_id = _rep_owner_id(rep_name) or (lead.get("ownerID") or "")
@@ -1238,7 +1313,6 @@ def api_book():
                         appt_type=appt_type, other_outcome=other_outcome,
                         enquiry_type=enquiry_type, teams_meeting=teams,
                         prev_appt=(lead.get(_SS_F_APPT_DT) or ""),
-                        stamp_booked_ts=not is_rebook,
                     )
                     if notes or booked_for:
                         # note stays authored by whoever actually typed it
@@ -1247,7 +1321,7 @@ def api_book():
                             if booked_for else ""
                         )
                         _ss_create_note(lead_id, note_text.strip(), owner_id=actual_owner_id)
-                    crm_status = ("rescheduled" if is_rebook else "updated") if updated else "failed"
+                    crm_status = "updated" if updated else "failed"
             except Exception:
                 app.logger.exception("CRM write-back failed (booking still succeeded)")
                 crm_status = "failed"
@@ -1255,11 +1329,13 @@ def api_book():
         # ── Record the booking so it can be cancelled later from the diary. ──
         # Store lead_id only when the CRM was actually updated, so cancel reverts
         # CRM only for bookings that changed it; others cancel calendar-only.
-        # is_rebook marks reschedules so the telesales boards don't count the
-        # same appointment as booked again today.
+        # is_rebook is always False here now — reschedules (which used to set it)
+        # go through /api/reschedule instead, which updates this row in place
+        # rather than inserting a new one. Column kept for historical rows and
+        # because the wallboard/dashboard queries still COALESCE on it.
         _record_booking(
             event_id=event_id,
-            lead_id=(lead_id if crm_status in ("updated", "rescheduled") else ""),
+            lead_id=(lead_id if crm_status == "updated" else ""),
             booker_username=booker_username,
             booker_owner_id=booker_owner_id,
             booker_name=booker_name,
@@ -1272,7 +1348,7 @@ def api_book():
             appt_start=start_time,
             appt_end=end_time,
             appt_type=appt_type,
-            is_rebook=is_rebook,
+            is_rebook=False,
         )
 
         booked_by = f" — booked by {booker_name}" if booker_email else ""
@@ -1280,7 +1356,6 @@ def api_book():
             booked_by = f" — booked by {booker_name} (entered by {entered_by_name})"
         crm_tail = {
             "updated":     " · CRM updated",
-            "rescheduled": " · CRM updated (reschedule — original booking date kept)",
             "failed":      " · CRM update failed — update SharpSpring manually",
             "not_found":   " · lead not found in CRM — update SharpSpring manually",
             "skipped":     " · CRM NOT updated — no lead was linked",
@@ -1313,6 +1388,10 @@ def api_cancel():
     if not booking:
         return jsonify({"ok": False, "message": "This appointment can't be cancelled here "
                         "(it wasn't booked through this tool)."}), 404
+
+    lock_msg = _booking_lock_message(booking, "cancelled")
+    if lock_msg:
+        return jsonify({"ok": False, "message": lock_msg}), 409
 
     # 1. Remove the calendar event (the appointment itself). Critical — abort if it fails,
     #    so we never revert the CRM while the event still stands.
@@ -1357,6 +1436,210 @@ def api_cancel():
     }[crm_status]
     return jsonify({"ok": True, "crm_status": crm_status,
                     "message": f"Appointment cancelled.{tail}"})
+
+
+@app.route("/api/reschedule", methods=["POST"])
+@login_required
+def api_reschedule():
+    """Move (and, phase one of "Edit", optionally re-assign) a tool-booked
+    appointment — an in-place EDIT, never a new booking.
+
+    Per the 18 Aug ruling / 19 Aug "Edit" extension: same event_id (Graph PATCH,
+    not delete+create), same app.bookings row (UPDATE, no insert), CRM appointment
+    time (+ owner, only if the rep changed) field only (old time preserved in
+    Previous Appointment) — no status change, no re-stamped booked-at, no
+    booking-count credit. Phase one is time + rep only — no product/type editing
+    (pending a pipeline ruling).
+
+    Body: { event_id, date, start, end, rep (optional) }. `rep` omitted or equal
+    to the booking's current rep -> a same-rep time-only edit, unchanged from
+    before. `rep` different -> also swaps the Graph event's attendee (old rep's
+    email -> new rep's) and category (to the new rep's Outlook category), and the
+    CRM lead owner. The customer is never an attendee, on any path.
+    """
+    data = request.get_json(silent=True) or {}
+    event_id  = (data.get("event_id") or "").strip()
+    new_date  = (data.get("date") or "").strip()
+    new_start = (data.get("start") or "").strip()
+    new_end   = (data.get("end") or "").strip()
+    new_rep_in = (data.get("rep") or "").strip()
+    if not all([event_id, new_date, new_start, new_end]):
+        return jsonify({"ok": False, "message": "Missing required fields"}), 400
+
+    booking = _get_active_booking(event_id)
+    if not booking:
+        return jsonify({"ok": False, "message": "This appointment can't be rescheduled here "
+                        "(it wasn't booked through this tool)."}), 404
+
+    lock_msg = _booking_lock_message(booking, "rescheduled")
+    if lock_msg:
+        return jsonify({"ok": False, "message": lock_msg}), 409
+
+    old_rep_name = booking.get("rep_name") or ""
+    new_rep_name = new_rep_in or old_rep_name
+    rep_changed  = bool(new_rep_in) and new_rep_in != old_rep_name
+
+    new_rep_email = REP_EMAIL.get(new_rep_name)
+    if not new_rep_email:
+        return jsonify({"ok": False, "message": f"No email found for rep: {new_rep_name}"}), 400
+
+    old_date  = booking.get("appt_date") or ""
+    old_start = booking.get("appt_start") or ""
+    old_end   = booking.get("appt_end") or ""
+    if not rep_changed and (new_date, new_start, new_end) == (old_date, old_start, old_end):
+        return jsonify({"ok": False, "message": "That's already the current time."}), 400
+
+    # ── Slot lock + re-verify via Graph, against the CHOSEN rep's calendar (the
+    #    new rep's, if this is a rep swap) — a reschedule must respect
+    #    availability exactly like a new booking would. ──
+    lock_key = _lock_key(new_rep_email, new_date, new_start)
+    lock_val = secrets.token_hex(8)
+    if not _redis_acquire(lock_key, lock_val):
+        return jsonify({"ok": False, "message": "This slot is being booked right now by someone else. Please pick another time."}), 409
+    if not _slot_is_free(new_rep_email, new_date, new_start, new_end):
+        _redis_release(lock_key, lock_val)
+        return jsonify({"ok": False, "message": "This slot was just booked. Please pick another time."}), 409
+
+    try:
+        token = get_graph_token()
+
+        # 1. Move the calendar event in place — same event_id. Start/end always;
+        #    attendees + category only change when the rep changes (fetch the
+        #    live attendee list first so we swap out just the old rep's entry —
+        #    the booker, telesales inbox and any CCs are untouched, and the
+        #    customer — never an attendee to begin with — stays that way).
+        patch_body = {
+            "start": {"dateTime": f"{new_date}T{new_start}:00", "timeZone": "Europe/London"},
+            "end":   {"dateTime": f"{new_date}T{new_end}:00",   "timeZone": "Europe/London"},
+        }
+        if rep_changed:
+            old_rep_email = (REP_EMAIL.get(old_rep_name) or "").lower()
+            get_resp = requests.get(
+                f"https://graph.microsoft.com/v1.0/users/{CALENDAR_MAILBOX}/events/{event_id}"
+                "?$select=attendees",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=20,
+            )
+            if get_resp.ok:
+                attendees = get_resp.json().get("attendees") or []
+                kept = [a for a in attendees
+                        if (a.get("emailAddress", {}).get("address", "") or "").lower() != old_rep_email]
+                if not any((a.get("emailAddress", {}).get("address", "") or "").lower() == new_rep_email.lower()
+                           for a in kept):
+                    kept.append({"emailAddress": {"address": new_rep_email, "name": new_rep_name},
+                                 "type": "required"})
+                patch_body["attendees"] = kept
+            else:
+                # Nothing has been written yet — abort rather than proceed with a
+                # partial rep-swap (category/CRM moved but the old rep still an
+                # attendee, so the appointment would linger in their own diary).
+                app.logger.error("Graph attendee fetch failed %s ahead of rep-swap reschedule",
+                                  get_resp.status_code)
+                return jsonify({"message": "Couldn't read the appointment's attendees just now — "
+                                           "nothing was changed. Please try again."}), 502
+            new_category = _rep_outlook_category(new_rep_name)
+            patch_body["categories"] = [new_category] if new_category else []
+
+        patch_resp = requests.patch(
+            f"https://graph.microsoft.com/v1.0/users/{CALENDAR_MAILBOX}/events/{event_id}",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "Prefer": 'outlook.timezone="Europe/London"',
+            },
+            json=patch_body,
+            timeout=30,
+        )
+        if not patch_resp.ok:
+            err = patch_resp.json().get("error", {})
+            err_msg = err.get("message") or patch_resp.text[:300]
+            app.logger.error("Graph reschedule error %s: %s", patch_resp.status_code, err_msg)
+            return jsonify({"ok": False, "message": f"Calendar error ({patch_resp.status_code}): {err_msg}"}), 500
+
+        # 2. CRM — appointment time (+ owner, if the rep changed), best-effort,
+        #    never blocks the move (event already moved). Verify the lead still
+        #    exists first — see _ss_get_lead docstring: updateLeads/createNotes
+        #    'succeed' on deleted ids.
+        crm_status = "skipped"
+        lead_id = booking.get("lead_id") or ""
+        old_when = f"{old_date} {old_start}" if old_date and old_start else "an earlier time"
+        new_when = f"{new_date} {new_start}"
+        rescheduler_name = session.get("name", "Telesales")
+        if lead_id:
+            try:
+                lead = _ss_get_lead(lead_id)
+                if lead is None:
+                    crm_status = "not_found"
+                else:
+                    rep_owner_id = _rep_owner_id(new_rep_name) if rep_changed else ""
+                    ok = _ss_reschedule_lead(
+                        lead_id, date_iso=new_date, start_time=new_start,
+                        prev_appt=(lead.get(_SS_F_APPT_DT) or ""),
+                        rep_owner_id=rep_owner_id,
+                    )
+                    if ok:
+                        actor = _get_user(session.get("username", "")) or {}
+                        note_text = (
+                            f"Rescheduled by {rescheduler_name}: {old_rep_name} {old_when} "
+                            f"→ {new_rep_name} {new_when}."
+                            if rep_changed else
+                            f"Rescheduled by {rescheduler_name} from {old_when} to {new_when}."
+                        )
+                        _ss_create_note(lead_id, note_text, owner_id=(actor.get("sharpspring_owner_id") or ""))
+                    crm_status = "updated" if ok else "failed"
+            except Exception:
+                app.logger.exception("CRM reschedule failed (calendar event already moved)")
+                crm_status = "failed"
+
+        # 3. app.bookings — UPDATE the existing row in place. No new row, no
+        #    status/is_rebook/booked_at change — just the new time (+ rep, if it
+        #    changed) and an audit trail.
+        try:
+            set_clauses = ["appt_date = @d", "appt_start = @s", "appt_end = @e",
+                           "rescheduled_at = @rts", "rescheduled_by = @u"]
+            params = [
+                bigquery.ScalarQueryParameter("d", "STRING", new_date),
+                bigquery.ScalarQueryParameter("s", "STRING", new_start),
+                bigquery.ScalarQueryParameter("e", "STRING", new_end),
+                bigquery.ScalarQueryParameter("rts", "TIMESTAMP", datetime.now(timezone.utc).isoformat()),
+                bigquery.ScalarQueryParameter("u", "STRING", session.get("username", "")),
+                bigquery.ScalarQueryParameter("ev", "STRING", event_id),
+            ]
+            if rep_changed:
+                set_clauses += ["rep_name = @rn", "rep_owner_id = @ro"]
+                params += [
+                    bigquery.ScalarQueryParameter("rn", "STRING", new_rep_name),
+                    bigquery.ScalarQueryParameter("ro", "STRING", _rep_owner_id(new_rep_name)),
+                ]
+            _bq().query(
+                f"UPDATE {BQ_BOOKINGS} SET {', '.join(set_clauses)}"
+                f" WHERE event_id = @ev AND status = 'active'",
+                job_config=bigquery.QueryJobConfig(query_parameters=params),
+            ).result()
+        except Exception:
+            app.logger.exception("Failed to update booking row after reschedule (calendar + CRM already moved)")
+
+        with _avail_lock:
+            _avail_cache.clear()
+        with _diary_lock:
+            _diary_cache.clear()
+
+        tail = {
+            "updated":   " · CRM updated",
+            "failed":    " · CRM update failed — update SharpSpring manually",
+            "not_found": " · lead not found in CRM — update SharpSpring manually",
+            "skipped":   "",
+        }[crm_status]
+        rep_tail = f" · moved to {new_rep_name}" if rep_changed else ""
+        message = f"Rescheduled to {new_date} · {new_start}–{new_end}{rep_tail}{tail}"
+        return jsonify({"ok": True, "message": message, "crm_status": crm_status})
+
+    except Exception as ex:
+        app.logger.exception("Reschedule request failed")
+        return jsonify({"ok": False, "message": f"Reschedule failed: {ex}"}), 500
+
+    finally:
+        _redis_release(lock_key, lock_val)
 
 
 # ---------------------------------------------------------------------------

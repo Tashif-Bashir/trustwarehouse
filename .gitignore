@@ -53,3 +53,5 @@ commercial_app/reference/*
 scratch/
 .env.bak
 *.stackdump
+
+.vercel

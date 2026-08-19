@@ -714,13 +714,30 @@ def all_regions() -> list[str]:
 # Rep diary (per-rep appointment history + upcoming)
 # ---------------------------------------------------------------------------
 
+def _split_subject(subject: str) -> tuple[str, str]:
+    """Split a booking subject "POSTCODE - Customer Name" into (postcode, customer).
+
+    Booking always writes this exact format (see app.py api_book). Falls back to
+    ("", subject) for anything that doesn't match — banners, manually-created
+    calendar entries, etc.
+    """
+    if " - " in subject:
+        postcode, _, customer = subject.partition(" - ")
+        return postcode.strip(), customer.strip()
+    return "", subject.strip()
+
+
+CANCEL_LOCK_MINUTES = 15  # Reschedule/Cancel lock this many minutes before an appointment starts
+
+
 def build_rep_diary(events: list[dict]) -> dict:
     """Build a per-rep appointment list from a pre-fetched event set.
 
     Returns past + upcoming appointments grouped by rep, suitable for
-    the /reps diary page.
+    the /reps diary page (both the list view and the calendar view).
     """
     today = date.today()
+    now_uk = _now_london()  # wall-clock Europe/London — full datetime, not just the date
     all_reps = list(REP_REGION.keys()) + FALLBACK_REPS
 
     rep_appts: dict[str, list[dict]] = {r: [] for r in all_reps}
@@ -735,14 +752,24 @@ def build_rep_diary(events: list[dict]) -> dict:
         end_dt   = _parse_dt(event, "end")
         if start_dt is None:
             continue
+        subject = (event.get("subject") or "").strip()
+        postcode, customer = _split_subject(subject)
         rep_appts[rep].append({
             "date":     start_dt.date().isoformat(),
             "start":    start_dt.strftime("%H:%M"),
             "end":      end_dt.strftime("%H:%M") if end_dt else "",
-            "subject":  (event.get("subject") or "").strip(),
+            "subject":  subject,
+            "customer": customer,
+            "postcode": postcode,
             "event_id": event.get("id", ""),
             "is_past":  start_dt.date() < today,
             "is_today": start_dt.date() == today,
+            # Locked from CANCEL_LOCK_MINUTES before start onward (full datetime
+            # compare, Europe/London wall clock — an appointment in progress right
+            # now, or starting imminently, counts as locked). Gates Reschedule/
+            # Cancel in the UI; the /api/reschedule and /api/cancel routes
+            # re-check this server-side with their own CANCEL_LOCK_MINUTES.
+            "is_locked": now_uk >= start_dt - timedelta(minutes=CANCEL_LOCK_MINUTES),
         })
 
     result = []

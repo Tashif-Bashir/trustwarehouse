@@ -90,6 +90,58 @@
   animation-iteration-count: infinite;
 }
 
+/* Rep pipeline takeover — money waiting to be chased. Urgent, not festive:
+   a near-black base with a slow-breathing red glow behind the headline
+   number, in place of the confetti/sunrise treatments above. */
+.pipeline-takeover {
+  background: radial-gradient(1000px 600px at 50% 18%, #17181d 0%, #0a0a0b 70%, #070708 100%);
+}
+
+@keyframes pipeline-glow {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.08);
+  }
+}
+
+.pipeline-glow {
+  animation: pipeline-glow 4.5s ease-in-out infinite;
+}
+
+/* The pound figures pulse with the same fluctuating fade the overdue label
+   uses (owner clarification 19 Aug 2026: "the fluctuating motion that is
+   currently on how many are overdue — I want that on the numbers"). Same
+   1.6s cycle as .pulse-dot, dipping less deep so six-figure sums stay
+   readable from across the room. */
+@keyframes money-glow {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.money-glow {
+  animation: money-glow 1.6s ease-in-out infinite;
+}
+
+/* Both classes set the `animation` shorthand, so an element carrying both
+   would lose its fade-up entrance (and stay at fade-up's opacity: 0). Run
+   them in sequence instead: the pulse waits out the fade-up (0.7s delay) so
+   the entrance owns opacity first, then the pulse takes over from full. */
+.fade-up.money-glow {
+  animation:
+    fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards,
+    money-glow 1.6s ease-in-out 0.7s infinite;
+}
+
 /* Brief row highlight when an agent books an appointment. --agent is set
    inline per row so the flash matches the agent's own colour. */
 @keyframes row-flash {

@@ -7,12 +7,12 @@ import DoorsCelebration from '@/components/DoorsCelebration'
 import EodCelebration from '@/components/EodCelebration'
 import Header from '@/components/Header'
 import Leaderboard from '@/components/Leaderboard'
-import PipelineBoard from '@/components/PipelineBoard'
+import PipelineTakeover from '@/components/PipelineTakeover'
 import { BarRow, LastSaleBanner, StatBarList, StaticSalesKpis } from '@/components/SalesTiles'
 import SummaryCards from '@/components/SummaryCards'
 import {
-  BOARDS, CELEBRATION, DOORS_CELEBRATION, EOD_CELEBRATION, POLL_INTERVAL_MS, SALES_SOUND,
-  STALE_AFTER_MS,
+  BOARDS, CELEBRATION, DOORS_CELEBRATION, EOD_CELEBRATION, PIPELINE_TAKEOVER, POLL_INTERVAL_MS,
+  SALES_SOUND, STALE_AFTER_MS,
 } from '@/lib/config'
 import {
   FileSoundHandle, playFileSound, playSaleSound, primeSaleFile, tryAutoUnlock, unlockSound,
@@ -289,6 +289,56 @@ export default function Wallboard({ boardId }: { boardId: string }) {
     []
   )
 
+  // ── Rep pipeline takeover (SALES & OPS board only): unlike the once-per-
+  //    day celebrations above, this recurs all day the board is up — every
+  //    PIPELINE_TAKEOVER.everyMs of normal board time it shows full-screen
+  //    for .durationMs, then melts back, indefinitely. ?pipeline=1 forces one
+  //    immediate demo showing; the recurring cadence carries on after it
+  //    ends. Actual visibility is also gated at render time against
+  //    eodCelebrating/doorsCelebrating and an empty pipeline (celebrations
+  //    win; nothing to chase means nothing to show), so this timer only
+  //    needs to track "is it that point in the cycle" — not who else is on
+  //    screen. ──
+  const [pipelineShowing, setPipelineShowing] = useState(false)
+  const pipelineShowTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pipelineHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pipelineForceDone = useRef(false)
+
+  useEffect(() => {
+    if (!board.features.pipeline || !PIPELINE_TAKEOVER.enabled) return
+
+    function armNextShowing(delay: number) {
+      pipelineShowTimer.current = setTimeout(() => {
+        const weekday = new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Europe/London',
+          weekday: 'short',
+        }).format(new Date())
+        if (PIPELINE_TAKEOVER.weekdaysOnly && ['Sat', 'Sun'].includes(weekday)) {
+          armNextShowing(PIPELINE_TAKEOVER.everyMs)
+          return
+        }
+        setPipelineShowing(true)
+        pipelineHideTimer.current = setTimeout(() => {
+          setPipelineShowing(false)
+          armNextShowing(PIPELINE_TAKEOVER.everyMs)
+        }, PIPELINE_TAKEOVER.durationMs)
+      }, delay)
+    }
+
+    const forced = new URLSearchParams(window.location.search).has('pipeline')
+    if (forced && !pipelineForceDone.current) {
+      pipelineForceDone.current = true
+      armNextShowing(0)
+    } else {
+      armNextShowing(PIPELINE_TAKEOVER.everyMs)
+    }
+
+    return () => {
+      if (pipelineShowTimer.current) clearTimeout(pipelineShowTimer.current)
+      if (pipelineHideTimer.current) clearTimeout(pipelineHideTimer.current)
+    }
+  }, [board.features.pipeline])
+
   // ── Coins when a new sale lands. Keyed on the month's SALE COUNT so it
   //    fires once per sale, not once per revenue card, and never on the first
   //    paint (or the board would ring every time a screen reloads). ──
@@ -389,10 +439,6 @@ export default function Wallboard({ boardId }: { boardId: string }) {
 
       {board.features.leaderboard && agents.length > 0 && (
         <Leaderboard agents={agents} flashingIds={flashingIds} />
-      )}
-
-      {board.features.pipeline && metrics?.pipeline && (
-        <PipelineBoard pipeline={metrics.pipeline} />
       )}
 
       <section className="grid grid-cols-1 gap-10 md:grid-cols-3">
@@ -504,12 +550,6 @@ export default function Wallboard({ boardId }: { boardId: string }) {
               </div>
             </div>
           </div>
-
-          {/* The rep pipeline — money waiting to be chased (owner ruling:
-              lives on the sales & ops board, not telesales). */}
-          {board.features.pipeline && metrics?.pipeline && (
-            <PipelineBoard pipeline={metrics.pipeline} />
-          )}
         </div>
       ) : (
         callsSection
@@ -527,6 +567,13 @@ export default function Wallboard({ boardId }: { boardId: string }) {
           nowMs={nowMs}
         />
       )}
+      {/* Celebrations win: never show the pipeline takeover over EOD/DOORS,
+          and never show it with nothing to chase. */}
+      {pipelineShowing &&
+        !eodCelebrating &&
+        !doorsCelebrating &&
+        metrics?.pipeline &&
+        metrics.pipeline.count > 0 && <PipelineTakeover pipeline={metrics.pipeline} />}
     </main>
   )
 }

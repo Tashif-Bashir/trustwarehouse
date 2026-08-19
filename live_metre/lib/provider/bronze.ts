@@ -295,6 +295,16 @@ const PIPELINE_DEAD_STATUSES = [
   'Appointment Cancelled', 'Not Interested', 'Too Expensive', 'Not a Lead', 'Bought Elsewhere',
 ]
 
+// Appointment Status values that mean attended-and-still-winnable (owner
+// ruling 19 Aug 2026: "everything other than what implies sold ... this is
+// all waiting money"). Sold values (sold / sold on site / sold in office /
+// chc sold) drop off by not being listed; lost outcomes (not interested,
+// too expensive, bought elsewhere, gone cold) stay out to match the
+// dead-status exit above — they are lost, not waiting.
+const PIPELINE_CHASE_STATUSES = [
+  'appointment sat', 'follow up', 'follow up text', 'no contact', 'not ready yet',
+]
+
 // Europe/London calendar-day difference between two 'YYYY-MM-DD' strings —
 // noon UTC keeps it clear of any DST midnight edge, same trick as addDays.
 function daysBetween(fromDate: string, toDate: string): number {
@@ -307,6 +317,7 @@ const EMPTY_PIPELINE: PipelineMetrics = {
   count: 0,
   estTotal: 0,
   avgSaleValue: 0,
+  statuses: [],
   reps: [],
   unattributed: { count: 0, estTotal: 0 },
 }
@@ -325,9 +336,10 @@ async function queryPipeline(): Promise<PipelineMetrics | null> {
         SELECT
           id AS lead_id,
           CAST(DATE(appointment_time___date_5ae8ca2f532bc, 'Europe/London') AS STRING) AS appt_date,
-          owner_id
+          owner_id,
+          LOWER(TRIM(appointment_status_637f8d6fa1096)) AS chase_status
         FROM \`${PROJECT}.bronze.sharpspring_leads\`
-        WHERE appointment_status_637f8d6fa1096 = 'appointment sat'
+        WHERE LOWER(TRIM(appointment_status_637f8d6fa1096)) IN UNNEST(@chaseStatuses)
           AND status_633ae6f6ac6fe NOT IN UNNEST(@deadStatuses)
           AND appointment_time___date_5ae8ca2f532bc IS NOT NULL
           AND appointment_time___date_5ae8ca2f532bc <= CURRENT_TIMESTAMP()
@@ -337,10 +349,15 @@ async function queryPipeline(): Promise<PipelineMetrics | null> {
           AND TRIM(CONCAT(first_name, ' ', COALESCE(last_name, ''))) NOT LIKE 'Test %'
           AND LOWER(COALESCE(first_name, '')) != 'test'
       `,
-      params: { deadStatuses: PIPELINE_DEAD_STATUSES },
+      params: { deadStatuses: PIPELINE_DEAD_STATUSES, chaseStatuses: PIPELINE_CHASE_STATUSES },
       location: 'europe-west2',
     })
-    const leads = euRows as { lead_id: string; appt_date: string; owner_id: string | null }[]
+    const leads = euRows as {
+      lead_id: string
+      appt_date: string
+      owner_id: string | null
+      chase_status: string
+    }[]
 
     if (leads.length === 0) {
       pipelineCache = { value: EMPTY_PIPELINE, at: Date.now() }
@@ -427,10 +444,22 @@ async function queryPipeline(): Promise<PipelineMetrics | null> {
       }))
       .sort((a, b) => b.estTotal - a.estTotal || a.name.localeCompare(b.name))
 
+    // How the waiting money splits across the chase statuses — the takeover's
+    // headline shows these as buckets (owner ask 19 Aug 2026: "this much in
+    // follow up, this much in this category").
+    const byStatus = new Map<string, number>()
+    for (const lead of leads) {
+      byStatus.set(lead.chase_status, (byStatus.get(lead.chase_status) ?? 0) + 1)
+    }
+    const statuses = Array.from(byStatus.entries())
+      .map(([status, count]) => ({ status, count, estTotal: Math.round(count * avgSaleValue) }))
+      .sort((a, b) => b.estTotal - a.estTotal || a.status.localeCompare(b.status))
+
     const value: PipelineMetrics = {
       count: leads.length,
       estTotal: Math.round(leads.length * avgSaleValue),
       avgSaleValue,
+      statuses,
       reps,
       unattributed: {
         count: unattributedCount,

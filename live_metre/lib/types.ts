@@ -84,10 +84,17 @@ export interface PipelineRep {
   overdueCount: number // leads in this rep's pipeline past the 14-day chase window
 }
 
+export interface PipelineStatusBucket {
+  status: string // raw lowercase CRM Appointment Status value, e.g. 'follow up'
+  count: number
+  estTotal: number // count * avgSaleValue, same estimate basis as the rep totals
+}
+
 export interface PipelineMetrics {
   count: number
   estTotal: number
   avgSaleValue: number // 2026 average sale value used to build the estimate
+  statuses: PipelineStatusBucket[] // the waiting money split by chase status, est £ desc
   reps: PipelineRep[] // attributed reps only, est £ desc
   unattributed: { count: number; estTotal: number } // ladder couldn't place these
 }

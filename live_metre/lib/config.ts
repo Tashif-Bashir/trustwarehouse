@@ -207,5 +207,21 @@ export const STALE_AFTER_MS = 60_000
 // for a fresh BigQuery read on every 20s board poll (owner brief 19 Aug 2026).
 export const PIPELINE_REFRESH_MS = 5 * 60_000
 
+// Rep pipeline TAKEOVER (SALES & OPS board only, gated on features.pipeline):
+// unlike CELEBRATION/EOD_CELEBRATION/DOORS_CELEBRATION above, this is not a
+// once-per-day event — the board runs all day, so the takeover recurs on a
+// plain interval: everyMs of normal board time, then durationMs full-screen,
+// then back, indefinitely. Owner brief 19 Aug 2026: "make the sales people
+// feel how much money is sitting waiting to be chased." Never shows while
+// EOD/DOORS owns the screen (Wallboard checks both) or when there's no
+// pipeline to show. ?pipeline=1 forces one immediate demo showing; the
+// normal recurring cadence carries on once it ends.
+export const PIPELINE_TAKEOVER = {
+  enabled: true,
+  everyMs: 5 * 60_000, // normal board dwell between showings
+  durationMs: 60_000, // owner: "it should stay for one minute"
+  weekdaysOnly: false,
+}
+
 // The mock provider simulates dialling inside these UK working hours.
 export const WORKDAY = { startHour: 8, startMinute: 30, endHour: 17, endMinute: 30 }

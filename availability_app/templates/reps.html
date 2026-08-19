@@ -693,8 +693,15 @@ function RescheduleModal({ appt, repName, onClose, onDone }) {
 
   function slotsFor(rep) { return (rep && rep.days && rep.days[pickDate]) || []; }
 
+  // Highlight boundary is INCLUSIVE of bookingEnd (matches availability.html's
+  // inRange: `time <= (selEnd || selStart)`) so the slot the user clicks to set
+  // the end actually lights up as 'sel-end' — the occupied/conflict check below
+  // stays EXCLUSIVE (a slot AT bookingEnd isn't itself booked time). Collapsing
+  // these into one boundary was the bug: with a strict '<', the clicked end slot
+  // (s.time === selEnd === bookingEnd) always failed the guard and never
+  // rendered as selected, so range-picking looked like it did nothing.
   function slotClass(rn, s) {
-    if (selRep === rn && selStart && s.time >= selStart && s.time < bookingEnd) {
+    if (selRep === rn && selStart && s.time >= selStart && s.time <= bookingEnd) {
       return s.time === selStart ? 'sel-start' : (s.time === selEnd ? 'sel-end' : 'sel-range');
     }
     return s.status;

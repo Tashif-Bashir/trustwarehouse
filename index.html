@@ -1176,7 +1176,12 @@ function LeadSplitCard({ sources, totalLeads }) {
   const COLS          = PC;
   const paidTotal     = sources.filter(r => PAID.has(r.source)).reduce((s, r) => s + r.leads, 0);
   const organicTotal  = sources.filter(r => !PAID.has(r.source)).reduce((s, r) => s + r.leads, 0);
-  const callableTotal = sources.reduce((s, r) => s + (r.callable || 0), 0);
+  // Quality funnel (owner, 20 Aug 2026): junk = the team's CRM verdicts
+  // 'No Number' + 'Not a Lead'; workable = leads minus junk. Replaces the
+  // retired Callable stat (a filled phone field proves nothing).
+  const noNumberTotal = sources.reduce((s, r) => s + (r.no_number   || 0), 0);
+  const notLeadTotal  = sources.reduce((s, r) => s + (r.not_a_lead  || 0), 0);
+  const workableTotal = sources.reduce((s, r) => s + (r.workable != null ? r.workable : r.leads), 0);
 
   const size = 80, stroke = 13, r = (size - stroke) / 2, c = 2 * Math.PI * r;
   let offset = 0;
@@ -1226,11 +1231,13 @@ function LeadSplitCard({ sources, totalLeads }) {
             );
           })}
         </div>
-        <div style={{ display: 'flex', gap: 14, borderTop: '1px solid var(--line)', paddingTop: 9 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, borderTop: '1px solid var(--line)', paddingTop: 9 }}>
           {[
-            { label: 'Paid',     value: paidTotal,     color: '#FF6B7A' },
-            { label: 'Organic',  value: organicTotal,  color: '#94A3B8' },
-            { label: 'Callable', value: callableTotal, color: '#1FA77F' },
+            { label: 'Paid',       value: paidTotal,     color: '#FF6B7A' },
+            { label: 'Organic',    value: organicTotal,  color: '#94A3B8' },
+            { label: 'No number',  value: noNumberTotal, color: '#D97706' },
+            { label: 'Not a lead', value: notLeadTotal,  color: '#E05563' },
+            { label: 'Workable',   value: workableTotal, color: '#1FA77F' },
           ].map(({ label, value, color }) => (
             <div key={label}>
               <div style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>{label}</div>

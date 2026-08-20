@@ -79,9 +79,13 @@ def _sources(d0, d1):
             -- appointment_booked='Yes' never subtracts them; +9 phantom / 15 days)
             COUNT(DISTINCT CASE WHEN la.is_booked_appointment THEN la.lead_id END) as appts,
             COUNT(DISTINCT CASE WHEN la.is_sold=true THEN la.lead_id END) as sales,
-            -- callable = ANY of the three CRM phone fields (single-field check
-            -- missed mobile-only leads — 232 vs 264 in one week, 20 Aug 2026)
-            COUNT(DISTINCT CASE WHEN COALESCE(la.phone, sl.mobile, sl.phone_alt) IS NOT NULL THEN la.lead_id END) as callable
+            -- Quality funnel (owner ruling 20 Aug 2026): junk = the team's two
+            -- CRM verdicts — 'No Number' (number is fake/dead; a filled phone
+            -- field proves nothing, 39/39 "callable" day) and 'Not a Lead'.
+            -- Workable = leads minus junk; outcomes like Not Interested still
+            -- count as workable (real reachable people = what marketing paid for).
+            COUNT(DISTINCT CASE WHEN sl.domestic_appointment_status = 'No Number' THEN la.lead_id END) as no_number,
+            COUNT(DISTINCT CASE WHEN sl.domestic_appointment_status = 'Not a Lead' THEN la.lead_id END) as not_a_lead
         FROM `{PROJECT}.gold.gold_lead_activity` la
         JOIN `{PROJECT}.silver.silver_sharpspring_leads` sl ON la.lead_id = sl.lead_id
         WHERE la.created_date BETWEEN '{d0}' AND '{d1}'
@@ -698,7 +702,12 @@ def _load_all(d0s, d1s):
 
     platforms = [{'platform':str(r['platform']),'spend':float(r['spend']),'leads':int(r['leads']),'clicks':int(r['clicks']),'cpl':_safe(r['cpl']),'ctr':_safe(r['ctr'])} for _,r in pa.iterrows()]
     daily     = [{'date':str(r['date']),'platform':str(r['platform']),'spend':_safe(float(r['spend_gbp'])),'leads':int(r['leads']) if pd.notna(r['leads']) else 0} for _,r in df_attr.iterrows()]
-    sources   = [{'source':str(r['source']),'leads':int(r['leads']),'appts':int(r['appts']),'sales':int(r['sales']),'callable':int(r['callable']) if pd.notna(r.get('callable')) else 0} for _,r in df_src.iterrows()]
+    sources   = [{'source':str(r['source']),'leads':int(r['leads']),'appts':int(r['appts']),'sales':int(r['sales']),
+                  'no_number':int(r['no_number']) if pd.notna(r.get('no_number')) else 0,
+                  'not_a_lead':int(r['not_a_lead']) if pd.notna(r.get('not_a_lead')) else 0,
+                  'workable':int(r['leads']) - (int(r['no_number']) if pd.notna(r.get('no_number')) else 0)
+                                             - (int(r['not_a_lead']) if pd.notna(r.get('not_a_lead')) else 0)}
+                 for _,r in df_src.iterrows()]
     tot_all   = int(df_src['leads'].sum()) if not df_src.empty else 0
     spend_map = {str(r['region']): float(r['spend_gbp']) for _, r in df_reg_spend.iterrows()} if not df_reg_spend.empty else {}
     regions = []

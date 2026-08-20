@@ -79,7 +79,9 @@ def _sources(d0, d1):
             -- appointment_booked='Yes' never subtracts them; +9 phantom / 15 days)
             COUNT(DISTINCT CASE WHEN la.is_booked_appointment THEN la.lead_id END) as appts,
             COUNT(DISTINCT CASE WHEN la.is_sold=true THEN la.lead_id END) as sales,
-            COUNT(DISTINCT CASE WHEN la.phone IS NOT NULL THEN la.lead_id END) as callable
+            -- callable = ANY of the three CRM phone fields (single-field check
+            -- missed mobile-only leads — 232 vs 264 in one week, 20 Aug 2026)
+            COUNT(DISTINCT CASE WHEN COALESCE(la.phone, la.mobile, la.phone_alt) IS NOT NULL THEN la.lead_id END) as callable
         FROM `{PROJECT}.gold.gold_lead_activity` la
         JOIN `{PROJECT}.silver.silver_sharpspring_leads` sl ON la.lead_id = sl.lead_id
         WHERE la.created_date BETWEEN '{d0}' AND '{d1}'

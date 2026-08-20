@@ -75,7 +75,9 @@ def _sources(d0, d1):
                 ELSE 'Direct'
             END as source,
             COUNT(DISTINCT la.lead_id) as leads,
-            COUNT(DISTINCT CASE WHEN la.appointment_booked='Yes' THEN la.lead_id END) as appts,
+            -- is_booked_appointment excludes cancellations (audit 20 Aug 2026:
+            -- appointment_booked='Yes' never subtracts them; +9 phantom / 15 days)
+            COUNT(DISTINCT CASE WHEN la.is_booked_appointment THEN la.lead_id END) as appts,
             COUNT(DISTINCT CASE WHEN la.is_sold=true THEN la.lead_id END) as sales,
             COUNT(DISTINCT CASE WHEN la.phone IS NOT NULL THEN la.lead_id END) as callable
         FROM `{PROJECT}.gold.gold_lead_activity` la
@@ -92,11 +94,16 @@ def _source_cpa(d0, d1):
     try:
         return _q(f"""
             WITH source_appts AS (
-              SELECT lead_platform AS platform,
-                     COUNT(DISTINCT IF(lead_appointment_booked='Yes', lead_id, NULL)) AS appts
-              FROM `{PROJECT}.gold.gold_lead_calls`
-              WHERE call_date BETWEEN '{d0}' AND '{d1}'
-                AND lead_platform IS NOT NULL
+              -- Cohort basis: leads CREATED in the period, real (non-cancelled)
+              -- appointments only — aligns the CPA denominator with the spend
+              -- period and stops counting cancelled appointments (20 Aug 2026;
+              -- previously counted leads merely CALLED in the period via
+              -- gold_lead_calls, with the never-cancelled appointment flag).
+              SELECT platform,
+                     COUNT(DISTINCT IF(is_booked_appointment, lead_id, NULL)) AS appts
+              FROM `{PROJECT}.gold.gold_lead_activity`
+              WHERE created_date BETWEEN '{d0}' AND '{d1}'
+                AND platform IS NOT NULL
               GROUP BY platform
             ),
             source_spend AS (
@@ -252,7 +259,7 @@ def _speed_to_call(d0, d1):
                   WHEN mins_to_first_call <= 240                        THEN 4
                   ELSE 5
                 END AS sort_order,
-                appointment_booked = 'Yes' AS is_appt
+                is_booked_appointment AS is_appt
               FROM `{PROJECT}.gold.gold_lead_activity`
               WHERE created_date BETWEEN '{d0}' AND '{d1}'
             )

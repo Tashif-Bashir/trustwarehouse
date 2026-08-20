@@ -219,7 +219,10 @@ export const PIPELINE_REFRESH_MS = 5 * 60_000
 export const PIPELINE_TAKEOVER = {
   enabled: true,
   everyMs: 3 * 60_000, // normal board dwell between showings (owner 19 Aug: every 3 min)
-  durationMs: 90_000, // owner 19 Aug: "make it stay for little longer" (was 60s)
+  // Owner 20 Aug: "show on the screen for 3 mins ... repeat the whole thing"
+  // — the takeover now LOOPS its full sequence (headline+buckets → rep pages)
+  // for the whole duration.
+  durationMs: 3 * 60_000,
   weekdaysOnly: false,
 }
 

@@ -168,21 +168,11 @@ function RepCard({ item }: { item: Item }) {
 // while EOD/DOORS owns the screen.
 export default function PipelineTakeover({ pipeline }: { pipeline: PipelineMetrics }) {
   const [phase, setPhase] = useState<1 | 2>(1)
+  // The whole sequence LOOPS for the takeover's full duration (owner 20 Aug:
+  // "repeat the whole thing for 3 min") — each cycle remounts phase 1 via
+  // key={cycle}, restarting the count-up and the bucket eruptions.
+  const [cycle, setCycle] = useState(0)
   const [closing, setClosing] = useState(false)
-  const value = useCountFromZero(pipeline.estTotal, COUNT_UP_MS)
-
-  useEffect(() => {
-    const t = setTimeout(() => setPhase(2), PHASE1_MS)
-    return () => clearTimeout(t)
-  }, [])
-
-  useEffect(() => {
-    const t = setTimeout(
-      () => setClosing(true),
-      Math.max(0, PIPELINE_TAKEOVER.durationMs - EXIT_MS)
-    )
-    return () => clearTimeout(t)
-  }, [])
 
   const items: Item[] = useMemo(() => {
     const list: Item[] = pipeline.reps.map((r) => ({ ...r }))
@@ -208,6 +198,29 @@ export default function PipelineTakeover({ pipeline }: { pipeline: PipelineMetri
   }, [items])
 
   const [page, setPage] = useState(0)
+
+  // One full cycle = headline hold + every rep page once, then start over.
+  useEffect(() => {
+    setPhase(1)
+    setPage(0)
+    const phase2Ms = Math.max(1, pages.length) * PAGE_ROTATE_MS
+    const toPhase2 = setTimeout(() => setPhase(2), PHASE1_MS)
+    const nextCycle = setTimeout(() => setCycle((c) => c + 1), PHASE1_MS + phase2Ms)
+    return () => {
+      clearTimeout(toPhase2)
+      clearTimeout(nextCycle)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cycle, pages.length])
+
+  useEffect(() => {
+    const t = setTimeout(
+      () => setClosing(true),
+      Math.max(0, PIPELINE_TAKEOVER.durationMs - EXIT_MS)
+    )
+    return () => clearTimeout(t)
+  }, [])
+
   useEffect(() => {
     if (phase !== 2 || pages.length < 2) return
     const t = setInterval(() => setPage((p) => (p + 1) % pages.length), PAGE_ROTATE_MS)
@@ -221,7 +234,52 @@ export default function PipelineTakeover({ pipeline }: { pipeline: PipelineMetri
       }`}
     >
       {phase === 1 && (
-        <div className="relative flex flex-1 flex-col items-center justify-center gap-6 text-center">
+        <HeadlineScreen key={cycle} pipeline={pipeline} />
+      )}
+
+      {phase === 2 && (
+        <div key={`p2-${cycle}`} className="fade-up flex w-full max-w-6xl flex-1 flex-col gap-6 py-10">
+          <div className="flex items-baseline justify-between gap-6 border-b border-hairline pb-5">
+            <p className="text-2xl font-semibold uppercase tracking-[0.3em] text-red-400/80">
+              Pipeline &middot; waiting to be chased
+            </p>
+            <p className="money-glow font-display text-7xl font-bold tabular-nums text-neutral-50">
+              {gbp(pipeline.estTotal)}
+              <span className="ml-3 text-2xl font-normal text-neutral-500">
+                {pipeline.count} lead{pipeline.count === 1 ? '' : 's'}
+              </span>
+            </p>
+          </div>
+
+          <div key={page} className="fade-up flex flex-1 flex-col justify-center gap-4">
+            {pages[page].map((item) => (
+              <RepCard key={item.name} item={item} />
+            ))}
+          </div>
+
+          {pages.length > 1 && (
+            <div className="flex justify-center gap-2">
+              {pages.map((_, i) => (
+                <span
+                  key={i}
+                  className={`h-1.5 w-1.5 rounded-full ${i === page ? 'bg-neutral-300' : 'bg-neutral-700'}`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// The headline screen (giant count-up total + erupting status buckets),
+// extracted so each loop cycle remounts it fresh — the count-up and the
+// bucket eruptions replay every time it comes back around.
+function HeadlineScreen({ pipeline }: { pipeline: PipelineMetrics }) {
+  const value = useCountFromZero(pipeline.estTotal, COUNT_UP_MS)
+  return (
+    <div className="relative flex flex-1 flex-col items-center justify-center gap-6 text-center">
           <span
             className="pipeline-glow pointer-events-none absolute h-[60vh] w-[60vh] rounded-full bg-red-500/25 blur-[120px]"
             aria-hidden
@@ -253,41 +311,6 @@ export default function PipelineTakeover({ pipeline }: { pipeline: PipelineMetri
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {phase === 2 && (
-        <div className="fade-up flex w-full max-w-6xl flex-1 flex-col gap-6 py-10">
-          <div className="flex items-baseline justify-between gap-6 border-b border-hairline pb-5">
-            <p className="text-2xl font-semibold uppercase tracking-[0.3em] text-red-400/80">
-              Pipeline &middot; waiting to be chased
-            </p>
-            <p className="money-glow font-display text-7xl font-bold tabular-nums text-neutral-50">
-              {gbp(pipeline.estTotal)}
-              <span className="ml-3 text-2xl font-normal text-neutral-500">
-                {pipeline.count} lead{pipeline.count === 1 ? '' : 's'}
-              </span>
-            </p>
-          </div>
-
-          <div key={page} className="fade-up flex flex-1 flex-col justify-center gap-4">
-            {pages[page].map((item) => (
-              <RepCard key={item.name} item={item} />
-            ))}
-          </div>
-
-          {pages.length > 1 && (
-            <div className="flex justify-center gap-2">
-              {pages.map((_, i) => (
-                <span
-                  key={i}
-                  className={`h-1.5 w-1.5 rounded-full ${i === page ? 'bg-neutral-300' : 'bg-neutral-700'}`}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 }

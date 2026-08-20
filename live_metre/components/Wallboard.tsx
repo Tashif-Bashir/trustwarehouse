@@ -215,9 +215,12 @@ export default function Wallboard({ boardId }: { boardId: string }) {
     setEodCelebrating(true)
     // FAIL SOFT: a missing/undecodable clip plays nothing (no synth fallback,
     // unlike the sale ka-ching) — the takeover itself is never blocked on audio.
-    eodSound.current = playFileSound(EOD_CELEBRATION.sound.file, {
-      volume: EOD_CELEBRATION.sound.volume,
-    })
+    // file: null = music retired (owner 20 Aug 2026); the takeover runs silent.
+    if (EOD_CELEBRATION.sound.file) {
+      eodSound.current = playFileSound(EOD_CELEBRATION.sound.file, {
+        volume: EOD_CELEBRATION.sound.volume,
+      })
+    }
     eodTimer.current = setTimeout(() => {
       setEodCelebrating(false)
       // The clip outlasts the takeover, so fade it out here rather than let it
@@ -363,7 +366,9 @@ export default function Wallboard({ boardId }: { boardId: string }) {
         primeSaleFile(SALES_SOUND.file)
         // Pre-decode the end-of-day clip too, so it's ready to fire the moment
         // the 16:59 gate opens instead of racing a fetch at takeover time.
-        if (EOD_CELEBRATION.enabled) primeSaleFile(EOD_CELEBRATION.sound.file)
+        if (EOD_CELEBRATION.enabled && EOD_CELEBRATION.sound.file) {
+          primeSaleFile(EOD_CELEBRATION.sound.file)
+        }
       }
       // ?sound=1 fires the whole celebration — sound and card pop — once, so it
       // can be checked without waiting for a real sale.

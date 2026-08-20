@@ -163,10 +163,10 @@ export const EOD_CELEBRATION = {
   weekdaysOnly: true,
   durationMs: 45_000,
   sound: {
-    // Dropped in later by the brain — see public/sounds/README. Missing/
-    // undecodable file = the takeover runs silently (lib/sound.ts's
-    // playFileSound has no synthesised fallback, unlike the sale ka-ching).
-    file: '/sounds/endofday.mp3',
+    // MUSIC RETIRED (owner, 20 Aug 2026: "it is annoying") — the takeover
+    // runs silently; the per-sale ka-ching stays. To bring a song back,
+    // point this at an mp3 under public/sounds/ (was '/sounds/endofday.mp3').
+    file: null as string | null,
     volume: SALES_SOUND.volume,
   },
 }

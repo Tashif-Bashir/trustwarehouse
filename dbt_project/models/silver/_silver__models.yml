@@ -35,7 +35,9 @@ models:
   - name: silver_sharpspring_leads
     description: >
       One row per lead from SharpSpring bronze. Typed, cleaned, and enriched with
-      derived columns (customer_type, appointment_date, is_sold).
+      derived columns (customer_type, appointment_date, is_sold). Excludes internal
+      test leads (Zzz-prefixed names, "Test ..." names, bare "test") so every
+      downstream consumer inherits the filter.
     columns:
       - name: lead_id
         description: SharpSpring lead ID — primary key
@@ -56,6 +58,20 @@ models:
           - not_null
       - name: customer_type
         description: domestic or commercial, derived from self_described_type. Null if unknown.
+      - name: domestic_lead_status
+        description: >
+          SharpSpring pipeline stage field (Appointment, Follow Up, Not Interested, etc).
+          Fixed 20 Aug 2026 — was previously double-quoted so BigQuery returned the
+          literal column-identifier string for every row instead of the real value.
+      - name: lead_temperature
+        description: >
+          SharpSpring lead-warmth picklist. Fixed 20 Aug 2026 alongside domestic_lead_status
+          (same double-quoting bug).
+      - name: page_submitted
+        description: >
+          Raw "Page Submitted" URL field (page_submitted_5af30a9090796). Used as a fallback
+          for exact_marketing_url when that field is empty — mirrors the marketing
+          workspace's 18 Aug 2026 attribution fix.
 
   - name: silver_sharpspring_campaigns
     description: SharpSpring campaign definitions — one row per campaign.

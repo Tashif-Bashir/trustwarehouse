@@ -11,6 +11,7 @@ with leads as (
         updated_at,
         lead_status,
         domestic_lead_status,
+        domestic_appointment_status,
         appointment_booked,
         appointment_booked_at,
         appointment_made_by,
@@ -33,21 +34,25 @@ with leads as (
         campaign_id,
         gclid,
         marketing_url,
+        page_submitted,
 
         -- UK local date of creation
         DATE(SAFE_CAST(created_at AS TIMESTAMP), 'Europe/London') as created_date,
 
-        -- infer paid platform from UTM params / gclid when SharpSpring campaign_id is missing
+        -- infer paid platform from UTM params / gclid when SharpSpring campaign_id is missing.
+        -- Fall back to page_submitted when exact_marketing_url is empty — mirrors the
+        -- marketing workspace's 18 Aug 2026 fix (rescues UTM-tagged leads whose URL only
+        -- landed in the page_submitted field).
         case
             when (gclid is not null and gclid != '')                                             then 'Google'
-            when regexp_contains(lower(marketing_url), r'utm_source=google')
-             and regexp_contains(lower(marketing_url), r'utm_medium=(cpc|ppc|paid)')            then 'Google'
-            when regexp_contains(lower(marketing_url), r'gad_source=1')                         then 'Google'
-            when regexp_contains(lower(marketing_url), r'fbclid=')                              then 'Meta'
-            when regexp_contains(lower(marketing_url), r'utm_source=(facebook|instagram|meta|fb)')
-             and regexp_contains(lower(marketing_url), r'utm_medium=(cpc|paid|paidsocial)')     then 'Meta'
-            when regexp_contains(lower(marketing_url), r'utm_source=bing')
-             and regexp_contains(lower(marketing_url), r'utm_medium=(cpc|ppc|paid)')            then 'Bing'
+            when regexp_contains(lower(coalesce(nullif(marketing_url, ''), page_submitted)), r'utm_source=google')
+             and regexp_contains(lower(coalesce(nullif(marketing_url, ''), page_submitted)), r'utm_medium=(cpc|ppc|paid)')            then 'Google'
+            when regexp_contains(lower(coalesce(nullif(marketing_url, ''), page_submitted)), r'gad_source=1')                         then 'Google'
+            when regexp_contains(lower(coalesce(nullif(marketing_url, ''), page_submitted)), r'fbclid=')                              then 'Meta'
+            when regexp_contains(lower(coalesce(nullif(marketing_url, ''), page_submitted)), r'utm_source=(facebook|instagram|meta|fb)')
+             and regexp_contains(lower(coalesce(nullif(marketing_url, ''), page_submitted)), r'utm_medium=(cpc|paid|paidsocial)')     then 'Meta'
+            when regexp_contains(lower(coalesce(nullif(marketing_url, ''), page_submitted)), r'utm_source=bing')
+             and regexp_contains(lower(coalesce(nullif(marketing_url, ''), page_submitted)), r'utm_medium=(cpc|ppc|paid)')            then 'Bing'
         end                                                                                      as inferred_platform
 
     from {{ ref('silver_sharpspring_leads') }}
@@ -126,6 +131,7 @@ final as (
         l.created_date,
         l.lead_status,
         l.domestic_lead_status,
+        l.domestic_appointment_status,
         l.appointment_booked,
         l.appointment_booked_at,
         l.appointment_date,
@@ -135,6 +141,14 @@ final as (
         l.customer_type,
         l.pipeline_category,
         l.campaign_id,
+
+        -- Real appointment count: Domestic Lead Status is the only field that
+        -- ever holds "Appointment Cancelled", so this excludes cancellations
+        -- that appointment_booked = 'Yes' never captures (that flag is set at
+        -- booking time and never revised down).
+        coalesce(l.domestic_appointment_status in (
+            'Appointment', 'WhatsApp Appointment'
+        ), false)                                                                                as is_booked_appointment,
 
         -- Attribution: CRM mapping first, UTM/gclid fallback when campaign is unmapped.
         -- CRM mapping wins because the sales team trusts SharpSpring's manual assignment;

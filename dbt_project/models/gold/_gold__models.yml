@@ -29,7 +29,23 @@ models:
       - name: campaign_id
         description: SharpSpring campaign ID the lead was attributed to. Null for organic/untracked leads.
       - name: platform
-        description: Paid platform (Google, Meta, or Bing) resolved from campaign_id. Null for organic or unattributed leads.
+        description: >
+          Paid platform (Google, Meta, or Bing) resolved from campaign_id, falling back to
+          UTM/gclid inference over exact_marketing_url, then page_submitted when the
+          marketing URL field is empty (20 Aug 2026 — mirrors the marketing workspace's
+          18 Aug fix). Null for organic or unattributed leads.
+      - name: domestic_appointment_status
+        description: >
+          SharpSpring "Domestic Lead Status" pipeline value (Appointment, WhatsApp
+          Appointment, Appointment Cancelled, Follow Up, ...). The only field that ever
+          holds a cancellation. Added 20 Aug 2026.
+      - name: is_booked_appointment
+        description: >
+          True when domestic_appointment_status is 'Appointment' or 'WhatsApp Appointment'.
+          Use this for real appointment counts — unlike appointment_booked (set once at
+          booking time and never revised down), this excludes cancellations. Added 20 Aug 2026.
+        tests:
+          - not_null
       - name: is_sold
         description: True when appointment_status is one of the four sold values
         tests:

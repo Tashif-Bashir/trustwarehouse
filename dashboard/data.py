@@ -73,7 +73,10 @@ def _sources(d0, d1):
         SELECT
             COALESCE(platform, 'Organic')               as source,
             COUNT(DISTINCT lead_id)                     as leads,
-            COUNT(DISTINCT CASE WHEN appointment_booked = 'Yes' THEN lead_id END) as appts,
+            -- is_booked_appointment counts real (non-cancelled) appointments via
+            -- Domestic Lead Status; the old appointment_booked='Yes' never
+            -- subtracted cancellations (audit 20 Aug 2026: +9 phantom in 15 days).
+            COUNT(DISTINCT CASE WHEN is_booked_appointment THEN lead_id END) as appts,
             COUNT(DISTINCT CASE WHEN is_sold = true THEN lead_id END)             as sales
         FROM `{PROJECT}.gold.gold_lead_activity`
         WHERE created_date BETWEEN '{d0}' AND '{d1}'

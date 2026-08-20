@@ -73,8 +73,8 @@ cleaned as (
         nullif(trim(conversion_with_691207769e23f), '')                    as converted_by,
 
         -- pipeline
-        nullif(trim("domestic_lead_status___1___64256c8b9804a"), '')       as domestic_lead_status,
-        nullif(trim("domestic_lead_status___1___69b1915ca5bb7"), '')       as lead_temperature,
+        nullif(trim(`domestic_lead_status___1___64256c8b9804a`), '')       as domestic_lead_status,
+        nullif(trim(`domestic_lead_status___1___69b1915ca5bb7`), '')       as lead_temperature,
         nullif(trim(chc_lead_status_65c4eb8949156), '')                    as chc_lead_status,
         nullif(trim("pipeline_category___688730404401e"), '')              as pipeline_category,
         nullif(trim("pipeline_category___1___6887308047284"), '')          as enquiry_month,
@@ -145,6 +145,7 @@ cleaned as (
         nullif(trim(type_of_heating___6317101eeda5b), '')                  as heating_type,
         nullif(trim("lead_warmth___1___69ea236712886"), '')                as enquiry_type,
         nullif(trim(page_submitted_5af30a9090796), '')                     as form_page,
+        nullif(trim(page_submitted_5af30a9090796), '')                     as page_submitted,
         nullif(trim(appointment_made_by_65e1a90253305), '')                as appointment_made_by,
 
         -- Service classification — the SharpSpring "what service do you need" field.
@@ -172,6 +173,11 @@ cleaned as (
         )                                                                   as is_tracking_artifact
 
     from source
+    -- exclude internal test leads (Zzz-prefixed / "Test ..." / bare "test")
+    -- so no downstream consumer has to filter these out itself
+    where first_name not like 'Zzz%'
+      and trim(concat(first_name, ' ', coalesce(last_name, ''))) not like 'Test %'
+      and lower(coalesce(first_name, '')) != 'test'
 ),
 
 postcode_lookup as (

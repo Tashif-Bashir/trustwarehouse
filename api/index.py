@@ -81,7 +81,7 @@ def _sources(d0, d1):
             COUNT(DISTINCT CASE WHEN la.is_sold=true THEN la.lead_id END) as sales,
             -- callable = ANY of the three CRM phone fields (single-field check
             -- missed mobile-only leads — 232 vs 264 in one week, 20 Aug 2026)
-            COUNT(DISTINCT CASE WHEN COALESCE(la.phone, la.mobile, la.phone_alt) IS NOT NULL THEN la.lead_id END) as callable
+            COUNT(DISTINCT CASE WHEN COALESCE(la.phone, sl.mobile, sl.phone_alt) IS NOT NULL THEN la.lead_id END) as callable
         FROM `{PROJECT}.gold.gold_lead_activity` la
         JOIN `{PROJECT}.silver.silver_sharpspring_leads` sl ON la.lead_id = sl.lead_id
         WHERE la.created_date BETWEEN '{d0}' AND '{d1}'

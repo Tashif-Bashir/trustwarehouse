@@ -289,6 +289,10 @@ SELECT
   {norm_phone('mobile_phone_number')} AS mobile_normalised,
   NULLIF(TRIM(description), '') AS description
 FROM `{PROJECT}.bronze.sharpspring_leads`
+-- Leads deleted in the CRM stay in bronze forever (merge-only sync) but must
+-- not count anywhere downstream (owner ruling 20 Aug 2026) — the sweep in
+-- ingestion/sharpspring/deletions.py maintains the junk table.
+WHERE CAST(id AS STRING) NOT IN (SELECT id FROM `{PROJECT}.bronze.sharpspring_leads_deleted`)
 """
 
 LEAD_ATTRIBUTION = f"""
@@ -338,6 +342,8 @@ WITH src AS (
     phone_number AS phone,
     mobile_phone_number AS mobile_phone
   FROM `{PROJECT}.bronze.sharpspring_leads`
+  -- CRM-deleted leads excluded (owner ruling 20 Aug 2026, same as above)
+  WHERE CAST(id AS STRING) NOT IN (SELECT id FROM `{PROJECT}.bronze.sharpspring_leads_deleted`)
 ),
 parsed AS (
   SELECT

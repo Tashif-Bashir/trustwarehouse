@@ -9,6 +9,12 @@ from ingestion.sharpspring.client import SharpSpringClient
 
 load_dotenv()
 
+# Populated by leads_resource() as it yields — captures the full set of lead
+# ids the pipeline just loaded, so run_pipeline() can hand them straight to
+# the deletion sweep without re-paginating the API. Module-level because dlt
+# resources are plain generators; there is no other hook to capture yields.
+_captured_lead_ids: set[str] = set()
+
 
 def _client() -> SharpSpringClient:
     return SharpSpringClient()
@@ -23,7 +29,13 @@ def leads_resource():
     """Full paginated load of all leads, merged on id (upsert).
     SharpSpring getLeads where clause only accepts id/emailAddress — updateTimestamp
     filtering is not supported server-side, so we always fetch all records."""
-    yield from _client().get_all_leads()
+    global _captured_lead_ids
+    _captured_lead_ids = set()
+    for lead in _client().get_all_leads():
+        lead_id = lead.get("id")
+        if lead_id is not None:
+            _captured_lead_ids.add(str(lead_id))
+        yield lead
 
 
 @dlt.resource(name="sharpspring_campaigns", write_disposition="replace")
@@ -73,6 +85,11 @@ def run_pipeline() -> None:
 
     load_info = pipeline.run(sharpspring_source())
     print(load_info)
+
+    if not load_info.has_failed_jobs and _captured_lead_ids:
+        from ingestion.sharpspring.deletions import sweep
+
+        sweep(_captured_lead_ids)
 
 
 if __name__ == "__main__":

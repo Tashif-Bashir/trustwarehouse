@@ -348,6 +348,11 @@ async function queryPipeline(): Promise<PipelineMetrics | null> {
           AND first_name NOT LIKE 'Zzz%'
           AND TRIM(CONCAT(first_name, ' ', COALESCE(last_name, ''))) NOT LIKE 'Test %'
           AND LOWER(COALESCE(first_name, '')) != 'test'
+          -- Leads deleted in the CRM linger in bronze (merge-only sync); the
+          -- sweep-maintained junk table keeps them off the board (20 Aug 2026).
+          AND CAST(id AS STRING) NOT IN (
+            SELECT id FROM \`${PROJECT}.bronze.sharpspring_leads_deleted\`
+          )
       `,
       params: { deadStatuses: PIPELINE_DEAD_STATUSES, chaseStatuses: PIPELINE_CHASE_STATUSES },
       location: 'europe-west2',

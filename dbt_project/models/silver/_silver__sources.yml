@@ -6,6 +6,7 @@ sources:
     schema: bronze
     tables:
       - name: sharpspring_leads
+      - name: sharpspring_leads_deleted
       - name: sharpspring_campaigns
       - name: sharpspring_deal_stages
       - name: sharpspring_opportunities

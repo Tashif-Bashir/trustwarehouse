@@ -36,8 +36,10 @@ models:
     description: >
       One row per lead from SharpSpring bronze. Typed, cleaned, and enriched with
       derived columns (customer_type, appointment_date, is_sold). Excludes internal
-      test leads (Zzz-prefixed names, "Test ..." names, bare "test") so every
-      downstream consumer inherits the filter.
+      test leads (Zzz-prefixed names, "Test ..." names, bare "test") and leads
+      deleted from the CRM (anti-joined against bronze.sharpspring_leads_deleted,
+      owner ruling 20 Aug 2026 — deleted leads stop counting everywhere downstream)
+      so every downstream consumer inherits both filters.
     columns:
       - name: lead_id
         description: SharpSpring lead ID — primary key

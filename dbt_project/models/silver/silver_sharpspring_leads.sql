@@ -2,6 +2,12 @@ with source as (
     select * from {{ source('bronze', 'sharpspring_leads') }}
 ),
 
+-- Owner ruling 20 Aug 2026: leads deleted from the CRM must stop counting
+-- downstream everywhere — anti-join them out here so no consumer has to repeat it.
+deleted_leads as (
+    select id from {{ source('bronze', 'sharpspring_leads_deleted') }}
+),
+
 cleaned as (
     select
         -- identity
@@ -178,6 +184,8 @@ cleaned as (
     where first_name not like 'Zzz%'
       and trim(concat(first_name, ' ', coalesce(last_name, ''))) not like 'Test %'
       and lower(coalesce(first_name, '')) != 'test'
+      -- exclude leads deleted from the CRM (owner ruling 20 Aug 2026)
+      and id not in (select id from deleted_leads)
 ),
 
 postcode_lookup as (

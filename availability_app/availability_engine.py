@@ -12,7 +12,7 @@ import json
 import os
 import re
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, time as dtime
 from pathlib import Path
 from typing import Any
 
@@ -330,8 +330,19 @@ _FULL_DAY_OOO_RE = re.compile(
 )
 
 
-def _is_full_day_off(event: dict) -> bool:
-    return bool(_FULL_DAY_OOO_RE.search(event.get("subject") or ""))
+# A timed OOO that starts mid-morning or later is a HALF-day off, not a
+# sloppily-typed full day: "CHRIS K OOO 12:00-17:00" must keep the free
+# morning bookable (it blanked Chris Krammer's whole 27 Aug and forced a
+# manual booking, 20 Aug 2026). The whole-day flattening exists for events
+# like "KRIS DAY OFF 08:30-17:00" (left 17:00 bookable, 21 Jul 2026), so it
+# now applies only when the typed start is 09:30 or earlier.
+_FULL_DAY_CUTOFF = dtime(9, 30)
+
+
+def _is_full_day_off(event: dict, start: datetime | None = None) -> bool:
+    if not _FULL_DAY_OOO_RE.search(event.get("subject") or ""):
+        return False
+    return start is None or start.time() <= _FULL_DAY_CUTOFF
 
 
 def _is_time_off(event: dict) -> bool:
@@ -600,12 +611,20 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10, st
                     # all-day events and full-day wording block the whole
                     # day; partial wording (finish early etc.) blocks only
                     # the typed window
-                    if event.get("isAllDay") or _is_full_day_off(event):
+                    if event.get("isAllDay") or _is_full_day_off(event, s):
                         off_intervals.append((
                             datetime(d.year, d.month, d.day, 0, 0),
                             datetime(d.year, d.month, d.day, 23, 59),
                         ))
                     else:
+                        # A timed off-block reaching late afternoon means gone
+                        # for the day — run it to midnight so the final slot
+                        # can't be booked ("KRIS DAY OFF" 08:30-17:00 left
+                        # 17:00 bookable, 21 Jul 2026; same tail on the
+                        # 12:00-17:00 "CHRIS K OOO", 20 Aug 2026). Mid-day
+                        # blocks (training 10:00-12:00) keep their window.
+                        if e.time() >= dtime(16, 30):
+                            e = datetime(d.year, d.month, d.day, 23, 59)
                         off_intervals.append((s, e))
                 else:
                     booked_intervals.append((s, e))
@@ -616,9 +635,12 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10, st
                 slot_dt = datetime(d.year, d.month, d.day, h, m)
                 slot_end = slot_dt + timedelta(hours=1, minutes=30)  # min job duration
 
-                # check off
+                # check off — strict < on the job-window edge (same as the
+                # booked window_clear check below): a job ending exactly when
+                # the off block starts is not a clash, so a 12:00 OOO leaves
+                # the 10:30 slot bookable for a 90-min job.
                 is_off = any(
-                    s <= slot_dt < e or (s <= slot_end and slot_dt < e)
+                    s <= slot_dt < e or (s < slot_end and slot_dt < e)
                     for s, e in off_intervals
                 )
                 if is_off:

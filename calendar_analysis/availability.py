@@ -12,7 +12,7 @@ import json
 import os
 import re
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, time as dtime
 from pathlib import Path
 from typing import Any
 
@@ -321,8 +321,16 @@ _FULL_DAY_OOO_RE = re.compile(
 )
 
 
-def _is_full_day_off(event: dict) -> bool:
-    return bool(_FULL_DAY_OOO_RE.search(event.get("subject") or ""))
+# Mirror of availability_engine._is_full_day_off (keep in sync): timed OOO
+# starting after 09:30 = half-day off, respects its typed window ("CHRIS K
+# OOO 12:00-17:00" blanked the whole day, 20 Aug 2026).
+_FULL_DAY_CUTOFF = dtime(9, 30)
+
+
+def _is_full_day_off(event: dict, start: datetime | None = None) -> bool:
+    if not _FULL_DAY_OOO_RE.search(event.get("subject") or ""):
+        return False
+    return start is None or start.time() <= _FULL_DAY_CUTOFF
 
 
 def _is_time_off(event: dict) -> bool:
@@ -591,12 +599,16 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10, st
                     # all-day events and full-day wording block the whole
                     # day; partial wording (finish early etc.) blocks only
                     # the typed window
-                    if event.get("isAllDay") or _is_full_day_off(event):
+                    if event.get("isAllDay") or _is_full_day_off(event, s):
                         off_intervals.append((
                             datetime(d.year, d.month, d.day, 0, 0),
                             datetime(d.year, d.month, d.day, 23, 59),
                         ))
                     else:
+                        # Mirror of availability_engine: a timed off-block
+                        # reaching late afternoon means gone for the day.
+                        if e.time() >= dtime(16, 30):
+                            e = datetime(d.year, d.month, d.day, 23, 59)
                         off_intervals.append((s, e))
                 else:
                     booked_intervals.append((s, e))
@@ -608,8 +620,10 @@ def build_grid(events: list[dict], region: str | None = None, days: int = 10, st
                 slot_end = slot_dt + timedelta(hours=1, minutes=30)  # min job duration
 
                 # check off
+                # strict < on the job-window edge (mirror of availability_engine):
+                # a job ending exactly when the off block starts is not a clash.
                 is_off = any(
-                    s <= slot_dt < e or (s <= slot_end and slot_dt < e)
+                    s <= slot_dt < e or (s < slot_end and slot_dt < e)
                     for s, e in off_intervals
                 )
                 if is_off:

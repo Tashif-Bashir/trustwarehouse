@@ -629,6 +629,26 @@ def _ts_period_scorecards():
     """)
 
 
+def _hours_split(d0, d1):
+    """Leads created in office hours vs out of hours (owner ask 20 Aug 2026).
+    In-hours = Mon-Fri 08:30-17:29 Europe/London wall clock; everything else
+    (evenings, weekends) is out of hours."""
+    try:
+        return _q(f"""
+            SELECT
+              COUNTIF(
+                EXTRACT(DAYOFWEEK FROM DATETIME(created_at, 'Europe/London')) BETWEEN 2 AND 6
+                AND (EXTRACT(HOUR FROM DATETIME(created_at, 'Europe/London')) * 60
+                     + EXTRACT(MINUTE FROM DATETIME(created_at, 'Europe/London'))) BETWEEN 510 AND 1049
+              ) AS in_hours,
+              COUNT(*) AS total
+            FROM `{PROJECT}.gold.gold_lead_activity`
+            WHERE created_date BETWEEN '{d0}' AND '{d1}'
+        """)
+    except Exception:
+        return pd.DataFrame()
+
+
 def _load_all(d0s, d1s):
     p0s, p1s = _prev_period(d0s, d1s)
 
@@ -656,6 +676,7 @@ def _load_all(d0s, d1s):
         'speed':       (f'spd:{d0s}:{d1s}',    lambda: _speed_to_call(d0s, d1s)),
         'heatmap':     (f'hm:{d0s}:{d1s}',     lambda: _call_heatmap(d0s, d1s)),
         'duration':    (f'dur:{d0s}:{d1s}',    lambda: _duration_sweet_spot(d0s, d1s)),
+        'hours':       (f'hrs:{d0s}:{d1s}',    lambda: _hours_split(d0s, d1s)),
     }
 
     results = {}
@@ -756,7 +777,11 @@ def _load_all(d0s, d1s):
     prev_marketing_totals['water_leads'] = water_prev
 
     source_cpa = [{'platform':str(r['platform']),'spend':float(r['spend']),'appts':int(r['appts']),'cost_per_appt':float(r['cost_per_appt_gbp']) if pd.notna(r.get('cost_per_appt_gbp')) else None} for _, r in df_source_cpa.iterrows()] if not df_source_cpa.empty else []
-    marketing = {'totals':{'spend':tot_sp,'leads':tot_ld,'clicks':tot_cl,'cpl':round(tot_sp/tot_ld,2) if tot_ld else 0,'total_leads':tot_all,'water_leads':water_total},'prev_totals':prev_marketing_totals,'platforms':platforms,'daily':daily,'lead_sources':sources,'regions':regions,'ga4_sessions':ga4_sessions,'ga4_pages':ga4_pages,'water_split':water_split,'qc':qc,'source_cpa':source_cpa}
+    df_hours = results.get('hours')
+    hrs_in = int(df_hours['in_hours'].iloc[0]) if df_hours is not None and not df_hours.empty else 0
+    hrs_tot = int(df_hours['total'].iloc[0]) if df_hours is not None and not df_hours.empty else 0
+    marketing = {'totals':{'spend':tot_sp,'leads':tot_ld,'clicks':tot_cl,'cpl':round(tot_sp/tot_ld,2) if tot_ld else 0,'total_leads':tot_all,'water_leads':water_total,
+                           'in_hours':hrs_in,'out_of_hours':max(0, hrs_tot - hrs_in)},'prev_totals':prev_marketing_totals,'platforms':platforms,'daily':daily,'lead_sources':sources,'regions':regions,'ga4_sessions':ga4_sessions,'ga4_pages':ga4_pages,'water_split':water_split,'qc':qc,'source_cpa':source_cpa}
 
     agents = []
     if not df_ts.empty:

@@ -894,10 +894,13 @@ function Kpi({ label, value, sub, delta: d, icon, iconBg, iconColor, delay = 0, 
     );
   } else if (d) {
     footer = (
-      <div className={`kpi-delta ${d.good ? 'good' : 'bad'}`}>
-        {d.up ? Ic.arrowUp : Ic.arrowDown}
-        <span>{d.pct} {d.up ? 'higher' : 'lower'} than last period</span>
-      </div>
+      <React.Fragment>
+        <div className={`kpi-delta ${d.good ? 'good' : 'bad'}`}>
+          {d.up ? Ic.arrowUp : Ic.arrowDown}
+          <span>{d.pct} {d.up ? 'higher' : 'lower'} than last period</span>
+        </div>
+        {sub && <div className="kpi-sub" style={{ marginTop: 4 }}>{sub}</div>}
+      </React.Fragment>
     );
   } else if (sub) {
     footer = <div className="kpi-sub">{sub}</div>;
@@ -2159,7 +2162,8 @@ function MarketingView({ data }) {
     <>
       <div className="g5">
         <Kpi label="Total spend"  value={gbp(T.spend)}    icon={Ic.spend}   iconBg="var(--rose-soft)"   iconColor="var(--rose)"   delta={delta(T.spend, pt.spend, 'down')}       delay={0}/>
-        <Kpi label="Total leads"  value={fmt(totalLeads)} icon={Ic.leads}   iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(totalLeads, prevTotalLeads, 'up')} delay={60}/>
+        <Kpi label="Total leads"  value={fmt(totalLeads)} icon={Ic.leads}   iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(totalLeads, prevTotalLeads, 'up')} delay={60}
+          sub={T.in_hours != null ? `${fmt(T.in_hours)} in hours · ${fmt(T.out_of_hours)} out of hours` : undefined}/>
         <Kpi label="Paid CPL"     value={gbp(T.cpl)}      icon={Ic.target}  iconBg="var(--amber-soft)"  iconColor="#A87B0A"       delta={delta(T.cpl, pt.cpl, 'down')}           delay={120}/>
         <Kpi label="Clicks"       value={fmt(T.clicks)}   icon={Ic.chart}   iconBg="var(--sky-soft)"    iconColor="var(--sky)"    delay={180}/>
         <Kpi label="Water leads"  value={fmt(waterCount)} icon={Ic.droplet} iconBg="#E6F2FB"            iconColor="#1E7CC4"       delta={delta(waterCount, waterPrev, 'up')}

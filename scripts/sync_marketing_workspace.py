@@ -83,7 +83,7 @@ RAW_COPIES = [
 # the 10MB-per-query floor (11 of the 17 tables are tiny lookup/label tables
 # that each round up to 10MB). That is under the ~2GB/run threshold, so this
 # stays plain CREATE OR REPLACE copies — no row-count skip-guard needed here
-# (GSC_COPIES below already has one, for its much larger tables). Hourly for
+# (GSC_STITCHED below already has one, for its much larger tables). Hourly for
 # a month: ~0.46GB * 24 * 30 / 1024 = ~0.32TB * £4.7/TB ≈ £1.55/month. Re-check
 # this threshold if Airbyte lands a new large ad report table.
 
@@ -105,22 +105,141 @@ def discover_ad_tables() -> list[tuple[str, int, int]]:
     return [(r.table_id, r.row_count, r.size_bytes) for r in rows]
 
 
-# ── Search Console straight copies (renamed, same region) ───────────────────
-# Currently backed by the one-off 16-month API backfill in bronze; Google's
-# native `searchconsole` bulk export was enabled 10 Aug 2026 and once its
-# daily tables start landing these switch to a union/replace of backfill +
-# native rows. Both sources are europe-west2, same as the mart, so this is a
-# plain CREATE TABLE AS SELECT - not the cross-region dataframe path used for
-# app.sales (US). The mart drops the "_backfill" suffix; marketing shouldn't
-# care about provenance.
-# The big table is ~520MB and its source changes at most daily, so the hourly
-# run skips the copy when source and mart row counts already match — the
-# check reads __TABLES__ metadata, which BigQuery answers without scanning.
+# ── Search Console stitched tables (renamed, same region) ───────────────────
+# The one-off 16-month API backfill in bronze (gsc_search_analytics_backfill /
+# gsc_daily_totals_backfill) stopped by design once Google's NATIVE bulk
+# export (dataset `searchconsole`, europe-west2, tables
+# searchdata_url_impression / searchdata_site_impression) started landing
+# daily rows on 10 Aug 2026. Ananthu patched the one missing seam day
+# (2026-08-08) into the backfill via the API on 20 Aug 2026, so: backfill
+# covers <= GSC_STITCH_DATE, native covers > GSC_STITCH_DATE, no gap. These
+# two tables are now a UNION ALL of both sources onto the backfill's schema,
+# not a plain copy. Both sources are europe-west2, same as the mart, so this
+# is still plain CREATE TABLE AS SELECT - not the cross-region dataframe path
+# used for app.sales (US). The mart drops the "_backfill" suffix; marketing
+# shouldn't care about provenance.
+#
+# Native schema notes (checked via INFORMATION_SCHEMA 20 Aug 2026):
+#   - data_date -> date, url -> page (already full URLs, matches backfill)
+#   - device is already UPPERCASE ('MOBILE'/'DESKTOP'/'TABLET') and country
+#     already lowercase ISO3 ('gbr' etc.) in both sources - no casing fix
+#     needed, checked distinct values on both sides
+#   - search_type must be filtered to 'WEB': the API backfill defaults to
+#     web-only (no type param sent in ingestion/gsc/client.py), but the
+#     native export also carries IMAGE rows which would inflate
+#     clicks/impressions if left in
+#   - average position = SUM(sum_position)/SUM(impressions) + 1 for
+#     searchdata_url_impression, SUM(sum_top_position)/SUM(impressions) + 1
+#     for searchdata_site_impression (GSC convention: the export stores a
+#     0-indexed position sum, not an average - PARENT BRIEF CONFIRMED this
+#     is the right derivation). Validated 20 Aug 2026 by comparing the seam:
+#     site-level derived 08-09 (36 clicks / 6,573 impr / pos 22.4) sits
+#     smoothly between 08-08 backfill (31 / 6,247 / 22.3) and 08-10 native
+#     (55 / 6,849 / 21.4) - no discontinuity.
+#   - searchdata_url_impression is NOT unique per (date, query, url, device,
+#     country) - multiple rows can exist per key for different
+#     search-appearance flags (is_amp_top_stories etc., seen mostly on
+#     anonymized/NULL-query rows) - must GROUP BY and SUM before deriving
+#     ctr/position, or clicks/impressions silently overcount (4,037 raw rows
+#     vs 3,056 distinct keys on 08-09 alone)
+#   - is_anonymized_query=true rows carry query=NULL - kept in, matching real
+#     GSC behaviour; the old API backfill simply never had these rows, so
+#     NULL-query volume is new starting 2026-08-09 - noted here, not hidden
+#   - url_impression's aggregated impressions for 08-09 (7,700) do NOT equal
+#     site_impression's 08-09 total (6,573) even though clicks match exactly
+#     (36 = 36) - a known GSC bulk-export quirk (the two export tables
+#     aggregate differently internally), not a bug introduced here;
+#     gsc_search_analytics summed was never guaranteed to equal
+#     gsc_daily_totals even on the old API-backfill side
+#
+# The big table is ~520MB and sources change at most daily, so the hourly run
+# skips the rebuild when neither source has moved - see gsc_source_signature()
+# below. Because these tables are now derived (GROUP BY + UNION), destination
+# row count no longer equals source row count, so the skip-guard can't compare
+# row counts directly the way the plain-copy GA4 skip-guard pattern does; it
+# instead persists a signature (row_count + last_modified_time per source
+# table) in `{DST}._gsc_sync_state` and skips only when that signature is
+# unchanged. Still metadata-only (__TABLES__), zero-cost when skipping.
 
-GSC_COPIES = [
-    ("gsc_search_analytics", "gsc_search_analytics_backfill"),
-    ("gsc_daily_totals", "gsc_daily_totals_backfill"),
+GSC_STITCH_DATE = "2026-08-08"  # backfill <= this date; native > this date
+
+GSC_SOURCE_TABLES = [
+    ("bronze", "gsc_search_analytics_backfill"),
+    ("bronze", "gsc_daily_totals_backfill"),
+    ("searchconsole", "searchdata_url_impression"),
+    ("searchconsole", "searchdata_site_impression"),
 ]
+
+GSC_SEARCH_ANALYTICS_STITCHED = f"""
+SELECT date, query, page, device, country, clicks, impressions, ctr, position, _backfilled_at
+FROM (
+  SELECT
+    DATE(date) AS date, query, page, device, country, clicks, impressions,
+    ctr, position, _backfilled_at
+  FROM `{PROJECT}.bronze.gsc_search_analytics_backfill`
+  WHERE DATE(date) <= '{GSC_STITCH_DATE}'
+  UNION ALL
+  SELECT
+    data_date AS date,
+    query,
+    url AS page,
+    device,
+    country,
+    SUM(clicks) AS clicks,
+    SUM(impressions) AS impressions,
+    SAFE_DIVIDE(SUM(clicks), SUM(impressions)) AS ctr,
+    SAFE_DIVIDE(SUM(sum_position), SUM(impressions)) + 1 AS position,
+    CAST(NULL AS TIMESTAMP) AS _backfilled_at
+  FROM `{PROJECT}.searchconsole.searchdata_url_impression`
+  WHERE search_type = 'WEB' AND data_date > '{GSC_STITCH_DATE}'
+  GROUP BY data_date, query, page, device, country
+)
+"""
+
+GSC_DAILY_TOTALS_STITCHED = f"""
+SELECT date, clicks, impressions, ctr, position, _backfilled_at
+FROM (
+  SELECT DATE(date) AS date, clicks, impressions, ctr, position, _backfilled_at
+  FROM `{PROJECT}.bronze.gsc_daily_totals_backfill`
+  WHERE DATE(date) <= '{GSC_STITCH_DATE}'
+  UNION ALL
+  SELECT
+    data_date AS date,
+    SUM(clicks) AS clicks,
+    SUM(impressions) AS impressions,
+    SAFE_DIVIDE(SUM(clicks), SUM(impressions)) AS ctr,
+    SAFE_DIVIDE(SUM(sum_top_position), SUM(impressions)) + 1 AS position,
+    CAST(NULL AS TIMESTAMP) AS _backfilled_at
+  FROM `{PROJECT}.searchconsole.searchdata_site_impression`
+  WHERE search_type = 'WEB' AND data_date > '{GSC_STITCH_DATE}'
+  GROUP BY data_date
+)
+"""
+
+GSC_STITCHED = [
+    ("gsc_search_analytics", GSC_SEARCH_ANALYTICS_STITCHED),
+    ("gsc_daily_totals", GSC_DAILY_TOTALS_STITCHED),
+]
+
+
+def gsc_source_signature() -> str:
+    """Metadata-only fingerprint of every GSC source table (bronze backfill +
+    native searchconsole export), so the hourly run can tell whether either
+    side moved without scanning any table data.
+    """
+    rows = list(client.query(f"""
+        SELECT 'bronze' AS ds, table_id, row_count, last_modified_time
+        FROM `{PROJECT}.bronze.__TABLES__`
+        WHERE table_id IN ('gsc_search_analytics_backfill', 'gsc_daily_totals_backfill')
+        UNION ALL
+        SELECT 'searchconsole', table_id, row_count, last_modified_time
+        FROM `{PROJECT}.searchconsole.__TABLES__`
+        WHERE table_id IN ('searchdata_url_impression', 'searchdata_site_impression')
+    """).result())
+    return "|".join(
+        f"{r.ds}.{r.table_id}:{r.row_count}:{r.last_modified_time}"
+        for r in sorted(rows, key=lambda r: (r.ds, r.table_id))
+    )
 
 
 # ── derived tables, in dependency order ──────────────────────────────────────
@@ -167,7 +286,8 @@ SELECT
   mobile_phone_number AS mobile_phone,
   NULLIF(TRIM(alternative_phone_number_5af46947e2fc1), '') AS alternative_phone,
   {norm_phone('phone_number')} AS phone_normalised,
-  {norm_phone('mobile_phone_number')} AS mobile_normalised
+  {norm_phone('mobile_phone_number')} AS mobile_normalised,
+  NULLIF(TRIM(description), '') AS description
 FROM `{PROJECT}.bronze.sharpspring_leads`
 """
 
@@ -189,6 +309,19 @@ WITH src AS (
       WHEN NULLIF(TRIM(exact_marketing_url_64d0bebced518), '') IS NOT NULL THEN 'exact_marketing_url'
       WHEN NULLIF(TRIM(page_submitted_5af30a9090796), '') IS NOT NULL THEN 'page_submitted'
     END AS url_source,
+    -- Meta ad links carry an explicit ?ad_id=<numeric> param since ~18 Aug 2026
+    -- (see v_meta_lead_ad_match's ad_id_param method). Parsed here so the raw
+    -- lead_attribution table exposes it without every consumer re-deriving it.
+    REGEXP_EXTRACT(
+      COALESCE(
+        NULLIF(TRIM(exact_marketing_url_64d0bebced518), ''),
+        NULLIF(TRIM(page_submitted_5af30a9090796), '')
+      ), r'[?&]ad_id=([0-9]+)'
+    ) AS ad_id,
+    -- Lead-magnet / source label the lead came in against (e.g. "2022 Guide
+    -- Download", "Book Consultation", "responseIQ: googlecpc Widget ..."),
+    -- requested by Ananthu 20 Aug 2026, owner approved.
+    NULLIF(TRIM(description), '') AS description,
     NULLIF(NULLIF(LOWER(TRIM(exact_marketing_campaign_64d0b4a09e91b)), ''), '/url')
       AS crm_campaign_field,
     campaign_id,
@@ -283,6 +416,8 @@ SELECT
   {norm_phone('phone')} AS phone_normalised,
   url AS marketing_url,
   url_source,
+  ad_id,
+  description,
   landing_host,
   landing_path,
   crm_channel,
@@ -749,7 +884,7 @@ def assert_no_collisions(ad_tables: list[str]) -> None:
     """
     other_names = (
         set(RAW_COPIES)
-        | {dest for dest, _ in GSC_COPIES}
+        | {dest for dest, _ in GSC_STITCHED}
         | {name for name, _ in DERIVED}
         | {"sales"}
     )
@@ -757,7 +892,7 @@ def assert_no_collisions(ad_tables: list[str]) -> None:
     if collisions:
         raise SystemExit(
             f"COLLISION: discovered ad table name(s) {collisions} clash with "
-            "an existing RAW_COPIES/GSC_COPIES/DERIVED/cross-region table name. "
+            "an existing RAW_COPIES/GSC_STITCHED/DERIVED/cross-region table name. "
             "Aborting — mart name = bronze name only works if these namespaces "
             "never overlap."
         )
@@ -781,31 +916,39 @@ def main() -> None:
             failed.append((t, str(e).splitlines()[0][:90]))
             print(f"  FAIL {t:<45} {str(e).splitlines()[0][:55]}")
 
-    gsc_counts = {
-        (r.dataset, r.table_id): r.row_count
-        for r in client.query(f"""
-            SELECT 'bronze' AS dataset, table_id, row_count
-            FROM `{PROJECT}.bronze.__TABLES__` WHERE table_id LIKE 'gsc%'
-            UNION ALL
-            SELECT '{DST}', table_id, row_count
-            FROM `{PROJECT}.{DST}.__TABLES__` WHERE table_id LIKE 'gsc%'
-        """).result()
-    }
-    for dest, src in GSC_COPIES:
-        try:
-            src_n = gsc_counts.get(("bronze", src))
-            if src_n is not None and gsc_counts.get((DST, dest)) == src_n:
-                done.append((dest, src_n))
-                print(f"  skip {dest:<45} {src_n:>10,} (source unchanged)")
-                continue
-            # bronze keeps date as the API's raw string; the mart types it so
-            # consumers can write `WHERE date >= <date>` without casting
-            n = build(dest, f"SELECT * REPLACE (DATE(date) AS date) FROM `{PROJECT}.bronze.{src}`")
+    # GSC stitched tables: destination row counts no longer equal any single
+    # source's row count once the native side is GROUP BY'd (see
+    # gsc_source_signature() above), so the skip-guard compares a persisted
+    # metadata signature instead of row counts directly.
+    gsc_sig = gsc_source_signature()
+    try:
+        prev_rows = list(client.query(
+            f"SELECT signature FROM `{PROJECT}.{DST}._gsc_sync_state`"
+        ).result())
+        prev_sig = prev_rows[0].signature if prev_rows else None
+    except Exception:
+        prev_sig = None  # first run: table doesn't exist yet
+
+    if prev_sig == gsc_sig:
+        for dest, _ in GSC_STITCHED:
+            n = list(client.query(
+                f"SELECT COUNT(*) AS c FROM `{PROJECT}.{DST}.{dest}`"
+            ).result())[0].c
             done.append((dest, n))
-            print(f"  ok   {dest:<45} {n:>10,}")
-        except Exception as e:
-            failed.append((dest, str(e).splitlines()[0][:90]))
-            print(f"  FAIL {dest:<45} {str(e).splitlines()[0][:55]}")
+            print(f"  skip {dest:<45} {n:>10,} (source unchanged)")
+    else:
+        for dest, sql in GSC_STITCHED:
+            try:
+                n = build(dest, sql)
+                done.append((dest, n))
+                print(f"  ok   {dest:<45} {n:>10,}")
+            except Exception as e:
+                failed.append((dest, str(e).splitlines()[0][:90]))
+                print(f"  FAIL {dest:<45} {str(e).splitlines()[0][:55]}")
+        client.query(f"""
+            CREATE OR REPLACE TABLE `{PROJECT}.{DST}._gsc_sync_state` AS
+            SELECT '{gsc_sig}' AS signature, CURRENT_TIMESTAMP() AS synced_at
+        """).result()
 
     # ── GA4 straight copies (19 Aug 2026, marketing asked for "everything in
     # bronze"). Same-name copies of every bronze `ga4_api%` table, with the
@@ -865,7 +1008,7 @@ def main() -> None:
       FROM UNNEST([{rows}])
     """).result()
 
-    print(f"\n{len(done)}/{len(RAW_COPIES) + len(ad_tables) + len(GSC_COPIES) + len(DERIVED) + 1} tables, "
+    print(f"\n{len(done)}/{len(RAW_COPIES) + len(ad_tables) + len(GSC_STITCHED) + len(DERIVED) + 1} tables, "
           f"{sum(n for _, n in done):,} rows")
     if failed:
         print("FAILURES:")

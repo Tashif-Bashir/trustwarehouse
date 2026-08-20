@@ -398,11 +398,18 @@ async function queryPipeline(): Promise<PipelineMetrics | null> {
 
     const bookingRepByLead = new Map<string, string>()
     const repNameByOwnerId = new Map<string, string>()
+    // The current roster. A leaver keeps their booking rows (data is never
+    // deleted) but must stop appearing on the board (owner, 20 Aug 2026 —
+    // Samantha Doyle left): a booking rep not on the roster falls through
+    // the ladder like any other unattributable lead.
+    const rosterNames = new Set<string>()
     let avgSaleValue = 0
     for (const r of rows) {
       if (r.kind === 'booking' && r.v1) bookingRepByLead.set(String(r.k), r.v1)
-      else if (r.kind === 'rep' && r.v1) repNameByOwnerId.set(String(r.v1), r.k)
-      else if (r.kind === 'avg') avgSaleValue = Number(r.k) || 0
+      else if (r.kind === 'rep') {
+        rosterNames.add(r.k)
+        if (r.v1) repNameByOwnerId.set(String(r.v1), r.k)
+      } else if (r.kind === 'avg') avgSaleValue = Number(r.k) || 0
     }
 
     // ── attribution ladder: (a) booking rep_name wins, (b) else CRM owner_id
@@ -419,8 +426,9 @@ async function queryPipeline(): Promise<PipelineMetrics | null> {
 
     for (const lead of leads) {
       const daysSince = daysBetween(lead.appt_date, today)
+      const bookingRep = bookingRepByLead.get(String(lead.lead_id))
       const repName =
-        bookingRepByLead.get(String(lead.lead_id)) ??
+        (bookingRep && rosterNames.has(bookingRep) ? bookingRep : undefined) ??
         (lead.owner_id ? repNameByOwnerId.get(String(lead.owner_id)) : undefined)
 
       if (!repName) {

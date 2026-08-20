@@ -1231,19 +1231,26 @@ function LeadSplitCard({ sources, totalLeads }) {
             );
           })}
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, borderTop: '1px solid var(--line)', paddingTop: 9 }}>
-          {[
-            { label: 'Paid',       value: paidTotal,     color: '#FF6B7A' },
-            { label: 'Organic',    value: organicTotal,  color: '#94A3B8' },
-            { label: 'No number',  value: noNumberTotal, color: '#D97706' },
-            { label: 'Not a lead', value: notLeadTotal,  color: '#E05563' },
-            { label: 'Workable',   value: workableTotal, color: '#1FA77F' },
-          ].map(({ label, value, color }) => (
-            <div key={label}>
-              <div style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>{label}</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color }}>{fmt(value)}</div>
-            </div>
-          ))}
+        <div style={{ borderTop: '1px solid var(--line)', paddingTop: 9 }}>
+          <div style={{ display: 'flex', gap: 14, marginBottom: 8 }}>
+            {[
+              { label: 'Paid',    value: paidTotal,    color: '#FF6B7A' },
+              { label: 'Organic', value: organicTotal, color: '#94A3B8' },
+            ].map(({ label, value, color }) => (
+              <div key={label}>
+                <div style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>{label}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color }}>{fmt(value)}</div>
+              </div>
+            ))}
+          </div>
+          {/* The quality funnel shows its arithmetic so the subsets can never
+              read as additions (they did — "card counts more than 34"). */}
+          <div style={{ fontSize: 11.5, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+            <b style={{ color: '#171A2B' }}>{fmt(total)}</b> leads
+            {' − '}<b style={{ color: '#D97706' }}>{fmt(noNumberTotal)}</b> no number
+            {' − '}<b style={{ color: '#E05563' }}>{fmt(notLeadTotal)}</b> not a lead
+            {' = '}<b style={{ color: '#1FA77F', fontSize: 13 }}>{fmt(workableTotal)} workable</b>
+          </div>
         </div>
       </div>
     </div>

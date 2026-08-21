@@ -2164,16 +2164,20 @@ function MarketingView({ data }) {
         <Kpi label="Total spend"  value={gbp(T.spend)}    icon={Ic.spend}   iconBg="var(--rose-soft)"   iconColor="var(--rose)"   delta={delta(T.spend, pt.spend, 'down')}       delay={0}/>
         <Kpi label="Total leads"  value={fmt(totalLeads)} icon={Ic.leads}   iconBg="var(--violet-soft)" iconColor="var(--violet)" delta={delta(totalLeads, prevTotalLeads, 'up')} delay={60}
           sub={T.in_hours != null ? (
-            <div style={{ display: 'flex', gap: 18, marginTop: 3 }}>
-              {[
-                { label: 'In hours',     value: T.in_hours,     color: '#1FA77F' },
-                { label: 'Out of hours', value: T.out_of_hours, color: '#D97706' },
-              ].map(({ label, value, color }) => (
-                <div key={label}>
-                  <div style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>{label}</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color }}>{fmt(value)}</div>
-                </div>
-              ))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 3 }}>
+              <div style={{ display: 'flex', gap: 18 }}>
+                {[
+                  { label: 'Fresh',     value: T.fresh != null ? T.fresh : totalLeads, color: '#171A2B' },
+                  { label: 'Returning', value: T.returning || 0,                        color: 'var(--violet)' },
+                  { label: 'In hours',     value: T.in_hours,     color: '#1FA77F' },
+                  { label: 'Out of hours', value: T.out_of_hours, color: '#D97706' },
+                ].map(({ label, value, color }) => (
+                  <div key={label}>
+                    <div style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>{label}</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color }}>{fmt(value)}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : undefined}/>
         <Kpi label="Paid CPL"     value={gbp(T.cpl)}      icon={Ic.target}  iconBg="var(--amber-soft)"  iconColor="#A87B0A"       delta={delta(T.cpl, pt.cpl, 'down')}           delay={120}/>

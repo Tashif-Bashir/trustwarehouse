@@ -7,6 +7,7 @@ sources:
     tables:
       - name: sharpspring_leads
       - name: sharpspring_leads_deleted
+      - name: sharpspring_lead_reenquiries
       - name: sharpspring_campaigns
       - name: sharpspring_deal_stages
       - name: sharpspring_opportunities

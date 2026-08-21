@@ -369,3 +369,23 @@ models:
         description: Ex-VAT amount where known; null for sold_no_money (no money evidence yet)
       - name: detail
         description: Human-readable explanation of the exception
+
+  - name: gold_lead_reenquiries
+    description: >
+      Returning leads (owner design 21 Aug 2026): one row per existing lead
+      (>14 days old) per Europe/London day whose form-submission signals
+      changed at a sync — a form re-submission by a past enquirer. The return
+      visit is attributed from its NEW url (same inference as
+      gold_lead_activity). Counter starts at zero on switch-on day; earlier
+      history is unrecoverable (bronze keeps latest state only).
+    columns:
+      - name: lead_id
+        description: SharpSpring lead id
+        tests:
+          - not_null
+      - name: event_date
+        description: Europe/London day the re-enquiry was detected
+      - name: platform
+        description: Paid platform of the RETURN visit (Google/Meta/Bing), null if untagged
+      - name: in_hours
+        description: True when detected Mon-Fri 08:30-17:29 Europe/London

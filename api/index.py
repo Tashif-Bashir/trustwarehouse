@@ -649,6 +649,25 @@ def _hours_split(d0, d1):
         return pd.DataFrame()
 
 
+def _returning(d0, d1):
+    """Returning leads — existing leads (>14d) who re-submitted a form, from
+    gold_lead_reenquiries (owner design 21 Aug 2026: they count everywhere —
+    totals, platform attribution, CPL). Empty until the capture layer's first
+    detection; degrades to zero rows before that."""
+    try:
+        return _q(f"""
+            SELECT CAST(event_date AS STRING) AS date,
+                   COALESCE(platform, 'Organic') AS source,
+                   COUNT(DISTINCT lead_id) AS returning,
+                   COUNT(DISTINCT IF(in_hours, lead_id, NULL)) AS in_hours
+            FROM `{PROJECT}.gold.gold_lead_reenquiries`
+            WHERE event_date BETWEEN '{d0}' AND '{d1}'
+            GROUP BY 1, 2
+        """)
+    except Exception:
+        return pd.DataFrame()
+
+
 def _load_all(d0s, d1s):
     p0s, p1s = _prev_period(d0s, d1s)
 
@@ -677,6 +696,8 @@ def _load_all(d0s, d1s):
         'heatmap':     (f'hm:{d0s}:{d1s}',     lambda: _call_heatmap(d0s, d1s)),
         'duration':    (f'dur:{d0s}:{d1s}',    lambda: _duration_sweet_spot(d0s, d1s)),
         'hours':       (f'hrs:{d0s}:{d1s}',    lambda: _hours_split(d0s, d1s)),
+        'returning':   (f'ret:{d0s}:{d1s}',    lambda: _returning(d0s, d1s)),
+        'returning_prev': (f'ret:{p0s}:{p1s}', lambda: _returning(p0s, p1s)),
     }
 
     results = {}
@@ -709,7 +730,30 @@ def _load_all(d0s, d1s):
     df_heatmap       = results['heatmap']
     df_duration      = results['duration']
 
+    # ── Returning leads (owner ruling 21 Aug 2026: they count EVERYWHERE —
+    #    totals, platform leads, CPL, the sources card). Zero rows until the
+    #    sync's change-capture makes its first detection. ──
+    df_ret      = results.get('returning')
+    df_ret_prev = results.get('returning_prev')
+    ret_by_src: dict = {}
+    ret_daily:  dict = {}
+    ret_total = ret_in = 0
+    if df_ret is not None and not df_ret.empty:
+        for _, rr in df_ret.iterrows():
+            src_name = str(rr['source']); n = int(rr['returning'])
+            ret_by_src[src_name] = ret_by_src.get(src_name, 0) + n
+            ret_daily[(str(rr['date']), src_name)] = n
+            ret_total += n
+            ret_in += int(rr['in_hours']) if pd.notna(rr.get('in_hours')) else 0
+    ret_prev_total = 0
+    ret_prev_by_src: dict = {}
+    if df_ret_prev is not None and not df_ret_prev.empty:
+        for _, rr in df_ret_prev.iterrows():
+            ret_prev_by_src[str(rr['source'])] = ret_prev_by_src.get(str(rr['source']), 0) + int(rr['returning'])
+            ret_prev_total += int(rr['returning'])
+
     pa = df_attr.groupby("platform").agg(spend=("spend_gbp","sum"),clicks=("clicks","sum"),impr=("impressions","sum"),leads=("leads","sum")).reset_index()
+    pa["leads"] = pa.apply(lambda r: int(r["leads"]) + ret_by_src.get(str(r["platform"]), 0), axis=1)
     pa["cpl"] = (pa["spend"] / pa["leads"].replace(0, float("nan"))).round(2)
     pa["ctr"] = (pa["clicks"] / pa["impr"].replace(0, float("nan")) * 100).round(3)
     tot_sp = float(pa["spend"].sum()); tot_ld = int(pa["leads"].sum()); tot_cl = int(pa["clicks"].sum())
@@ -717,19 +761,38 @@ def _load_all(d0s, d1s):
     prev_marketing_totals = None
     if not df_attr_prev.empty:
         pp = df_attr_prev.groupby("platform").agg(spend=("spend_gbp","sum"),leads=("leads","sum")).reset_index()
+        pp["leads"] = pp.apply(lambda r: int(r["leads"]) + ret_prev_by_src.get(str(r["platform"]), 0), axis=1)
         p_sp = float(pp["spend"].sum()); p_ld = int(pp["leads"].sum())
-        p_all = int(df_src_prev['leads'].sum()) if not df_src_prev.empty else 0
+        p_all = (int(df_src_prev['leads'].sum()) if not df_src_prev.empty else 0) + ret_prev_total
         prev_marketing_totals = {"spend": p_sp, "leads": p_ld, "cpl": round(p_sp/p_ld,2) if p_ld else 0, "total_leads": p_all}
 
     platforms = [{'platform':str(r['platform']),'spend':float(r['spend']),'leads':int(r['leads']),'clicks':int(r['clicks']),'cpl':_safe(r['cpl']),'ctr':_safe(r['ctr'])} for _,r in pa.iterrows()]
-    daily     = [{'date':str(r['date']),'platform':str(r['platform']),'spend':_safe(float(r['spend_gbp'])),'leads':int(r['leads']) if pd.notna(r['leads']) else 0} for _,r in df_attr.iterrows()]
-    sources   = [{'source':str(r['source']),'leads':int(r['leads']),'appts':int(r['appts']),'sales':int(r['sales']),
+    daily     = [{'date':str(r['date']),'platform':str(r['platform']),
+                  'spend':_safe(float(r['spend_gbp'])),
+                  'leads':(int(r['leads']) if pd.notna(r['leads']) else 0)
+                          + ret_daily.pop((str(r['date']), str(r['platform'])), 0)}
+                 for _,r in df_attr.iterrows()]
+    # returning on days/platforms with no spend row still chart (leads-only rows)
+    for (rd, rs), rn in ret_daily.items():
+        if rs in ('Google', 'Meta', 'Bing'):
+            daily.append({'date': rd, 'platform': rs, 'spend': 0.0, 'leads': rn})
+    sources   = [{'source':str(r['source']),
+                  'leads':int(r['leads']) + ret_by_src.get(str(r['source']), 0),
+                  'returning':ret_by_src.get(str(r['source']), 0),
+                  'appts':int(r['appts']),'sales':int(r['sales']),
                   'no_number':int(r['no_number']) if pd.notna(r.get('no_number')) else 0,
                   'not_a_lead':int(r['not_a_lead']) if pd.notna(r.get('not_a_lead')) else 0,
-                  'workable':int(r['leads']) - (int(r['no_number']) if pd.notna(r.get('no_number')) else 0)
-                                             - (int(r['not_a_lead']) if pd.notna(r.get('not_a_lead')) else 0)}
+                  # a re-enquiry is live interest — returning always counts workable
+                  'workable':int(r['leads']) + ret_by_src.get(str(r['source']), 0)
+                             - (int(r['no_number']) if pd.notna(r.get('no_number')) else 0)
+                             - (int(r['not_a_lead']) if pd.notna(r.get('not_a_lead')) else 0)}
                  for _,r in df_src.iterrows()]
-    tot_all   = int(df_src['leads'].sum()) if not df_src.empty else 0
+    src_names = {s['source'] for s in sources}
+    for rs, rn in ret_by_src.items():
+        if rs not in src_names:
+            sources.append({'source': rs, 'leads': rn, 'returning': rn, 'appts': 0, 'sales': 0,
+                            'no_number': 0, 'not_a_lead': 0, 'workable': rn})
+    tot_all   = (int(df_src['leads'].sum()) if not df_src.empty else 0) + ret_total
     spend_map = {str(r['region']): float(r['spend_gbp']) for _, r in df_reg_spend.iterrows()} if not df_reg_spend.empty else {}
     regions = []
     seen = set()
@@ -781,7 +844,8 @@ def _load_all(d0s, d1s):
     hrs_in = int(df_hours['in_hours'].iloc[0]) if df_hours is not None and not df_hours.empty else 0
     hrs_tot = int(df_hours['total'].iloc[0]) if df_hours is not None and not df_hours.empty else 0
     marketing = {'totals':{'spend':tot_sp,'leads':tot_ld,'clicks':tot_cl,'cpl':round(tot_sp/tot_ld,2) if tot_ld else 0,'total_leads':tot_all,'water_leads':water_total,
-                           'in_hours':hrs_in,'out_of_hours':max(0, hrs_tot - hrs_in)},'prev_totals':prev_marketing_totals,'platforms':platforms,'daily':daily,'lead_sources':sources,'regions':regions,'ga4_sessions':ga4_sessions,'ga4_pages':ga4_pages,'water_split':water_split,'qc':qc,'source_cpa':source_cpa}
+                           'fresh':tot_all - ret_total,'returning':ret_total,
+                           'in_hours':hrs_in + ret_in,'out_of_hours':max(0, hrs_tot - hrs_in) + max(0, ret_total - ret_in)},'prev_totals':prev_marketing_totals,'platforms':platforms,'daily':daily,'lead_sources':sources,'regions':regions,'ga4_sessions':ga4_sessions,'ga4_pages':ga4_pages,'water_split':water_split,'qc':qc,'source_cpa':source_cpa}
 
     agents = []
     if not df_ts.empty:

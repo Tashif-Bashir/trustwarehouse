@@ -55,3 +55,6 @@ scratch/
 *.stackdump
 
 .vercel
+
+# Commercial analysis docs — CRM customer data + market intel, NEVER commit (owner 21 Aug 2026)
+commercial_app/analysis/

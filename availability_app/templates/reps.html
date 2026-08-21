@@ -910,7 +910,7 @@ function Timeline({ rep, filterRange, onClearFilter, onCancel, onReschedule,
           {past.length > 0 && (
             <>
               <div className="tl-section-label">Past</div>
-              {past.map(a => <ApptRow key={`${a.date}-${a.start}`} appt={a} onCancel={onCancel} onReschedule={onReschedule} />)}
+              {past.map(a => <ApptRow key={a.event_id || `${a.date}-${a.start}`} appt={a} onCancel={onCancel} onReschedule={onReschedule} />)}
             </>
           )}
 
@@ -920,14 +920,14 @@ function Timeline({ rep, filterRange, onClearFilter, onCancel, onReschedule,
 
           {showTodayDivider && (
             todays.length > 0
-              ? todays.map(a => <ApptRow key={`${a.date}-${a.start}`} appt={a} onCancel={onCancel} onReschedule={onReschedule} />)
+              ? todays.map(a => <ApptRow key={a.event_id || `${a.date}-${a.start}`} appt={a} onCancel={onCancel} onReschedule={onReschedule} />)
               : <div className="tl-empty" style={{padding:'8px 0',fontSize:12}}>No appointments today</div>
           )}
 
           {future.length > 0 && (
             <>
               <div className="tl-section-label" style={{paddingTop:14}}>Upcoming</div>
-              {future.map(a => <ApptRow key={`${a.date}-${a.start}`} appt={a} onCancel={onCancel} onReschedule={onReschedule} />)}
+              {future.map(a => <ApptRow key={a.event_id || `${a.date}-${a.start}`} appt={a} onCancel={onCancel} onReschedule={onReschedule} />)}
             </>
           )}
         </div>

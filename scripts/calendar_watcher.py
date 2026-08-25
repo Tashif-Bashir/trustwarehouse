@@ -145,6 +145,16 @@ def event_times(event: dict) -> tuple[str, str, str]:
     return s[:10], s[11:16], e[11:16]
 
 
+def clean_ts(s: str) -> str:
+    """Graph returns 7-digit fractional seconds ('...53.1696563Z') — BigQuery
+    TIMESTAMP params only accept up to microseconds."""
+    m = re.match(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:?\d{2})?$", s or "")
+    if not m:
+        return s
+    frac = (m.group(2) or "")[:6]
+    return m.group(1) + (f".{frac}" if frac else "") + (m.group(3) or "Z")
+
+
 def event_text(event: dict) -> str:
     """Searchable text of an event: subject + body + location, with the
     Microsoft Teams boilerplate cut off — Teams meeting IDs look exactly like
@@ -444,7 +454,7 @@ def handle_new(event: dict, rep: str, rep_owners: dict[str, str]) -> None:
         rep_name=rep, rep_owner_id=rep_owners.get(rep, ""),
         customer=customer, postcode=(pc.group().upper() if pc else ""),
         appt_date=date_iso, appt_start=start, appt_end=end,
-        booked_at=(event.get("createdDateTime") or _now_uk().isoformat()),
+        booked_at=clean_ts(event.get("createdDateTime") or "") or datetime.now(timezone.utc).isoformat(),
         status="active", appt_type="heating", is_rebook=False,
         entered_by="watcher", link_status=link_status, crm_status=crm_status)
     _log(f"NEW manual: {customer} · {rep} · {date_iso} {start} · "

@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="google-site-verification" content="7PeCuC5LSW6NNok4mmSGDYVnGKlYtLlcFVjUtfQT5Rw" />
+<title>Link Bookings — Trust</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#F2F3F7;--panel:#FFFFFF;--ink:#171A2B;--ink2:#3B3F55;
+    --muted:#9AA0B4;--muted2:#C7CADA;--line:#EDEEF3;--line2:#E5E7EF;
+    --indigo:#5B6CFF;--indigo-soft:#EEF0FF;
+    --violet:#8B5CF6;--violet-soft:#F2EDFF;
+    --mint:#3DD0A4;--mint-soft:#E2F8EF;
+    --rose:#FF6B7A;--rose-soft:#FFE9EC;
+    --amber:#F5B544;--amber-soft:#FFF4DC;
+    --shadow-sm:0 1px 3px rgba(20,23,40,.05);
+    --shadow-md:0 8px 24px rgba(20,23,40,.08);
+  }
+  html,body{background:var(--bg);color:var(--ink);font-family:'DM Sans',system-ui,sans-serif;font-size:14px;-webkit-font-smoothing:antialiased}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  input{font-family:inherit}
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-thumb{background:var(--line2);border-radius:6px}
+
+  .layout{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
+  .sidebar{background:var(--panel);border-right:1px solid var(--line);padding:22px 0;display:flex;flex-direction:column}
+  .logo{display:flex;align-items:center;gap:10px;padding:4px 18px 24px}
+  .logo-mark{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#5B6CFF,#8B5CF6);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;box-shadow:0 5px 12px rgba(91,108,255,.3);flex-shrink:0}
+  .logo-name{font-weight:700;font-size:15px;letter-spacing:-.2px}
+  .logo-sub{font-size:11px;color:var(--muted);font-weight:500}
+  .nav-section{font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);padding:6px 18px;font-weight:600;margin-top:8px}
+  .nav-link{display:flex;align-items:center;gap:10px;padding:10px 18px;border-radius:10px;margin:1px 8px;font-size:13.5px;font-weight:500;color:var(--ink2);transition:all .15s;text-decoration:none}
+  .nav-link:hover{background:var(--bg);color:var(--ink)}
+  .nav-link.active{background:linear-gradient(135deg,#5B6CFF,#8B5CF6);color:#fff;box-shadow:0 6px 18px rgba(91,108,255,.28)}
+  .nav-link.active svg{color:#fff!important}
+  .nav-link svg{width:16px;height:16px;flex-shrink:0;color:var(--muted)}
+  .sidebar-footer{margin-top:auto;padding:16px 18px;border-top:1px solid var(--line)}
+  .user-row{display:flex;align-items:center;gap:10px;font-size:13px}
+  .user-avatar{width:30px;height:30px;border-radius:8px;background:var(--indigo-soft);color:var(--indigo);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0}
+  .user-photo{width:30px;height:30px;border-radius:8px;object-fit:cover;flex-shrink:0}
+  .user-name{font-weight:600;color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .user-role{font-size:11px;color:var(--muted)}
+  .logout-btn{font-size:12px;color:var(--muted);font-weight:500;text-decoration:none;padding:4px 8px;border-radius:6px;margin-left:auto;flex-shrink:0}
+  .logout-btn:hover{background:var(--rose-soft);color:var(--rose)}
+
+  .main{padding:18px 24px 40px;min-width:0;overflow:hidden;display:flex;flex-direction:column}
+  .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:16px;flex-wrap:wrap}
+  .page-title{font-size:22px;font-weight:700;letter-spacing:-.4px}
+  .page-sub{font-size:12.5px;color:var(--muted);margin-top:3px}
+  .btn{display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
+  .btn-ghost{background:var(--panel);color:var(--ink2);box-shadow:var(--shadow-sm)}
+  .btn-ghost:hover{box-shadow:var(--shadow-md);color:var(--ink)}
+  .btn-sm{padding:6px 11px;font-size:12px;border-radius:8px}
+  .btn-primary{background:linear-gradient(135deg,#5B6CFF,#8B5CF6);color:#fff;box-shadow:0 5px 14px rgba(91,108,255,.28)}
+  .btn-primary:hover{opacity:.93}
+  .btn-primary:disabled{opacity:.5;cursor:default}
+
+  .tl-empty{text-align:center;color:var(--muted);padding:60px 0;font-size:14px;background:var(--panel);border-radius:14px;box-shadow:var(--shadow-sm)}
+
+  /* Booking cards */
+  .link-list{display:flex;flex-direction:column;gap:12px}
+  .link-card{background:var(--panel);border-radius:14px;box-shadow:var(--shadow-sm);padding:16px 20px}
+  .link-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .link-meta{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  .link-date{font-size:13px;font-weight:700;color:var(--ink)}
+  .link-time{font-size:12.5px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
+  .link-rep{font-size:13px;font-weight:600;color:var(--indigo)}
+  .link-cust{font-size:13.5px;color:var(--ink2)}
+  .link-pc{font-size:12.5px;color:var(--muted)}
+  .link-source{font-size:11px;color:var(--muted);font-weight:600}
+  .badge{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;text-transform:uppercase;letter-spacing:.4px}
+  .badge-needs-link{background:var(--indigo-soft);color:var(--indigo)}
+  .badge-conflict{background:var(--amber-soft);color:#92400e}
+
+  .search-row{display:flex;gap:8px;margin-top:12px}
+  .search-input{flex:1;min-width:0;padding:8px 12px;border-radius:9px;border:1.5px solid var(--line);font-family:inherit;font-size:13px;color:var(--ink);outline:none}
+  .search-input:focus{border-color:var(--indigo)}
+
+  .match-list{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+  .match-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border-radius:10px;background:var(--bg);flex-wrap:wrap}
+  .match-info{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .match-name{font-size:13px;font-weight:600;color:var(--ink)}
+  .match-sub{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .match-status{font-size:10.5px;font-weight:700;color:var(--indigo);text-transform:uppercase;letter-spacing:.3px}
+  .search-empty{font-size:12.5px;color:var(--muted);margin-top:8px}
+  .row-message{font-size:12.5px;margin-top:8px;padding:8px 10px;border-radius:8px}
+  .row-message.ok{background:var(--mint-soft);color:#1a7a5a}
+  .row-message.err{background:var(--rose-soft);color:var(--rose)}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;font-size:13px;font-weight:500;padding:12px 18px;border-radius:10px;box-shadow:var(--shadow-md);z-index:400;cursor:pointer;max-width:90%;animation:fadeIn .15s ease-out}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const ROLE = {{ role | tojson }};
+const USERNAME = {{ username | tojson }};
+const USER_EMAIL = {{ user_email | tojson }};
+const PHOTO_URL = {{ photo_url | tojson }};
+const BOOKINGS = {{ bookings | tojson }};
+</script>
+{% raw %}
+<script type="text/babel" data-presets="env,react">
+const { useState } = React;
+
+const Ic = {
+  list: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M7 5h10M7 10h10M7 15h10M3 5h.01M3 10h.01M3 15h.01"/></svg>,
+  calendar: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="14" height="14" rx="3"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>,
+  user: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="10" cy="7" r="3.5"/><path d="M3 17c0-3.3 3.1-6 7-6s7 2.7 7 6"/></svg>,
+  team: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="6.5" cy="7" r="2.5"/><path d="M1 16c0-2.8 2.4-5 5.5-5"/><circle cx="13.5" cy="6" r="2.5"/><path d="M9 16c0-2.8 2.4-5 5.5-5s5.5 2.2 5.5 5"/></svg>,
+  link: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M8.5 11.5a3 3 0 0 0 4.3.3l2-2a3 3 0 0 0-4.3-4.3l-1.1 1.1"/><path d="M11.5 8.5a3 3 0 0 0-4.3-.3l-2 2a3 3 0 0 0 4.3 4.3l1.1-1.1"/></svg>,
+  search: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="9" cy="9" r="6"/><path d="M17 17l-4-4"/></svg>,
+};
+
+const initials = (USERNAME || 'U').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
+function fmtIso(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function entryLabel(entered_by) {
+  return entered_by === 'watcher' ? 'Outlook calendar' : (entered_by || 'this tool');
+}
+
+/* ── Sidebar — same layout as the other tool pages ── */
+function Sidebar() {
+  return (
+    <aside className="sidebar">
+      <div className="logo">
+        <div className="logo-mark">T</div>
+        <div>
+          <div className="logo-name">Trust</div>
+          <div className="logo-sub">Availability</div>
+        </div>
+      </div>
+      <div className="nav-section">Tools</div>
+      <a href="/" className="nav-link">{Ic.calendar}<span>Who's Free</span></a>
+      <a href="/reps" className="nav-link">{Ic.list}<span>Rep Diary</span></a>
+      <a href="/links" className="nav-link active">{Ic.link}<span>Link bookings</span></a>
+      {ROLE === 'admin' && <>
+        <div className="nav-section">Admin</div>
+        <a href="/admin/users" className="nav-link">{Ic.user}<span>Manage Users</span></a>
+        <a href="/admin/reps" className="nav-link">{Ic.team}<span>Manage Reps</span></a>
+      </>}
+      <a href="/profile" className="nav-link">{Ic.user}<span>Profile</span></a>
+      <div className="sidebar-footer">
+        <div className="user-row">
+          {PHOTO_URL
+            ? <img src={PHOTO_URL} className="user-photo" alt={USERNAME} />
+            : <div className="user-avatar">{initials}</div>
+          }
+          <div>
+            <div className="user-name">{USERNAME}</div>
+            <div className="user-role">{ROLE}</div>
+          </div>
+          <a href="/logout" className="logout-btn">Sign out</a>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+/* ── One booking awaiting a link ── */
+function LinkCard({ booking, onLinked }) {
+  const [term, setTerm]       = useState('');
+  const [matches, setMatches] = useState(null);
+  const [searching, setSearching] = useState(false);
+  const [linkingId, setLinkingId] = useState(null);
+  const [msg, setMsg] = useState(null);
+
+  function doSearch() {
+    const q = term.trim();
+    if (!q) return;
+    setSearching(true); setMsg(null);
+    fetch('/api/search_leads', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: q }),
+    })
+      .then(r => r.json())
+      .then(d => setMatches(d.leads || []))
+      .catch(() => setMatches([]))
+      .finally(() => setSearching(false));
+  }
+
+  async function link(leadId, confirm) {
+    setLinkingId(leadId); setMsg(null);
+    try {
+      const resp = await fetch('/api/link_booking', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_id: booking.event_id, lead_id: leadId, confirm: !!confirm }),
+      });
+      const data = await resp.json();
+      if (resp.status === 409 && data.needs_confirm) {
+        if (window.confirm(data.message)) {
+          await link(leadId, true);
+        }
+        return;
+      }
+      if (data.ok) {
+        onLinked(booking.event_id, data.message);
+      } else {
+        setMsg({ ok: false, text: data.message || 'Linking failed.' });
+      }
+    } catch (e) {
+      setMsg({ ok: false, text: String(e) });
+    } finally {
+      setLinkingId(null);
+    }
+  }
+
+  return (
+    <div className="link-card">
+      <div className="link-card-head">
+        <div className="link-meta">
+          <span className="link-date">{fmtIso(booking.appt_date)}</span>
+          <span className="link-time">{booking.appt_start}{booking.appt_end ? `–${booking.appt_end}` : ''}</span>
+          <span className="link-rep">{booking.rep_name}</span>
+          <span className="link-cust">{booking.customer || '(no customer name)'}</span>
+          {booking.postcode && <span className="link-pc">{booking.postcode}</span>}
+        </div>
+        <div style={{display:'flex', alignItems:'center', gap:10}}>
+          <span className="link-source">{entryLabel(booking.entered_by)}</span>
+          <span className={`badge ${booking.link_status === 'conflict' ? 'badge-conflict' : 'badge-needs-link'}`}
+            title={booking.link_status === 'conflict' ? 'A matching lead was found but it already has another upcoming appointment' : 'No lead linked yet'}>
+            {booking.link_status === 'conflict' ? 'lead has another upcoming appointment' : 'needs link'}
+          </span>
+        </div>
+      </div>
+
+      <div className="search-row">
+        <input
+          className="search-input"
+          placeholder="Search by customer name…"
+          value={term}
+          onChange={e => setTerm(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && doSearch()}
+        />
+        <button className="btn btn-ghost btn-sm" onClick={doSearch} disabled={searching}>
+          {Ic.search}{searching ? 'Searching…' : 'Search'}
+        </button>
+      </div>
+
+      {matches && matches.length === 0 && (
+        <div className="search-empty">No leads found for "{term}".</div>
+      )}
+
+      {matches && matches.length > 0 && (
+        <div className="match-list">
+          {matches.map(m => (
+            <div className="match-row" key={m.id}>
+              <div className="match-info">
+                <div className="match-name">{m.name || '(no name)'}</div>
+                <div className="match-sub">{[m.phone, m.postcode].filter(Boolean).join(' · ')}</div>
+              </div>
+              <div style={{display:'flex', alignItems:'center', gap:10}}>
+                {m.status && <span className="match-status">{m.status}</span>}
+                <button className="btn btn-primary btn-sm" onClick={() => link(m.id)} disabled={linkingId === m.id}>
+                  {linkingId === m.id ? 'Linking…' : 'Link'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {msg && <div className={`row-message ${msg.ok ? 'ok' : 'err'}`}>{msg.text}</div>}
+    </div>
+  );
+}
+
+function App() {
+  const [bookings, setBookings] = useState(BOOKINGS || []);
+  const [toast, setToast] = useState(null);
+
+  function handleLinked(eventId, message) {
+    setBookings(bs => bs.filter(b => b.event_id !== eventId));
+    setToast(message);
+    setTimeout(() => setToast(null), 4000);
+  }
+
+  return (
+    <div className="layout">
+      <Sidebar />
+      <main className="main">
+        <div className="page-header">
+          <div>
+            <div className="page-title">Link bookings</div>
+            <div className="page-sub">Appointments booked outside this tool (mostly Outlook, via the calendar watcher) that still need a CRM lead attached.</div>
+          </div>
+        </div>
+
+        {bookings.length === 0
+          ? <div className="tl-empty">Nothing waiting to be linked — all active bookings have a lead.</div>
+          : <div className="link-list">
+              {bookings.map(b => <LinkCard key={b.event_id} booking={b} onLinked={handleLinked} />)}
+            </div>
+        }
+      </main>
+      {toast && <div className="toast" onClick={() => setToast(null)}>{toast}</div>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+{% endraw %}
+</body>
+</html>

@@ -1,0 +1,12 @@
+[Unit]
+Description=Calendar watcher — reconcile manual Outlook bookings into app.bookings + CRM
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/trustwarehouse
+EnvironmentFile=/home/ubuntu/trustwarehouse/.env
+ExecStart=/home/ubuntu/.local/bin/uv run python scripts/calendar_watcher.py
+StandardOutput=journal
+StandardError=journal

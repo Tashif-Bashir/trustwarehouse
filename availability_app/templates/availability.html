@@ -278,6 +278,7 @@ const Ic = {
   locate: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="10" cy="9" r="3"/><path d="M10 2v2M10 15v3M17 9h2M1 9h2M15.6 4.4l-1.4 1.4M5.8 14.2l-1.4 1.4M15.6 13.6l-1.4-1.4M5.8 5.8L4.4 4.4"/></svg>,
   team: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="6.5" cy="7" r="2.5"/><path d="M1 16c0-2.8 2.4-5 5.5-5"/><circle cx="13.5" cy="6" r="2.5"/><path d="M9 16c0-2.8 2.4-5 5.5-5s5.5 2.2 5.5 5"/></svg>,
   list: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M7 5h10M7 10h10M7 15h10M3 5h.01M3 10h.01M3 15h.01"/></svg>,
+  link: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M8.5 11.5a3 3 0 0 0 4.3.3l2-2a3 3 0 0 0-4.3-4.3l-1.1 1.1"/><path d="M11.5 8.5a3 3 0 0 0-4.3-.3l-2 2a3 3 0 0 0 4.3 4.3l1.1-1.1"/></svg>,
 };
 
 const TODAY_ISO = new Date().toISOString().slice(0, 10);
@@ -330,6 +331,10 @@ function Sidebar() {
       <a href="/reps" className="nav-link">
         {Ic.list}
         <span>Rep Diary</span>
+      </a>
+      <a href="/links" className="nav-link">
+        {Ic.link}
+        <span>Link bookings</span>
       </a>
       {ROLE === 'admin' && (
         <>

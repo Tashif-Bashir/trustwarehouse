@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the calendar watcher every 5 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitInactiveSec=5min
+AccuracySec=30s
+Unit=calendar-watcher.service
+
+[Install]
+WantedBy=timers.target

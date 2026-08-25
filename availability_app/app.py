@@ -295,10 +295,10 @@ def _record_booking(**kv) -> None:
             f"INSERT INTO {BQ_BOOKINGS}"
             f" (event_id, lead_id, booker_username, booker_owner_id, booker_name,"
             f"  rep_name, rep_owner_id, customer, postcode, appt_date, appt_start, appt_end,"
-            f"  appt_type, booked_at, status, is_rebook, entered_by)"
+            f"  appt_type, booked_at, status, is_rebook, entered_by, link_status, crm_status)"
             f" VALUES (@event_id, @lead_id, @booker_username, @booker_owner_id, @booker_name,"
             f"  @rep_name, @rep_owner_id, @customer, @postcode, @appt_date, @appt_start, @appt_end,"
-            f"  @appt_type, @booked_ts, 'active', @is_rebook, @entered_by)",
+            f"  @appt_type, @booked_ts, 'active', @is_rebook, @entered_by, @link_status, @crm_status)",
             job_config=bigquery.QueryJobConfig(query_parameters=_bq_params(
                 booked_ts=datetime.now(timezone.utc).isoformat(),
                 is_rebook=bool(kv.pop("is_rebook", False)),
@@ -332,6 +332,23 @@ def _annotate_cancellable(diary: dict) -> None:
     for rep in diary.get("reps", []):
         for a in rep.get("appointments", []):
             a["cancellable"] = a.get("event_id", "") in active
+
+
+def _get_link_bookings() -> list[dict]:
+    """Active bookings still needing a CRM link (needs_link/conflict) for the /links page.
+
+    Mostly the calendar watcher's manual-Outlook bookings, which arrive without a
+    lead attached — 'conflict' means a lead WAS matched but it already has a
+    different future appointment, so the watcher left it for a human to resolve.
+    """
+    rows = list(_bq().query(
+        f"SELECT event_id, rep_name, customer, postcode, appt_date, appt_start,"
+        f" appt_end, entered_by, link_status"
+        f" FROM {BQ_BOOKINGS}"
+        f" WHERE status = 'active' AND link_status IN ('needs_link', 'conflict')"
+        f" ORDER BY appt_date, appt_start"
+    ).result())
+    return [dict(r) for r in rows]
 
 
 def _get_active_booking(event_id: str) -> dict | None:
@@ -1327,15 +1344,21 @@ def api_book():
                 crm_status = "failed"
 
         # ── Record the booking so it can be cancelled later from the diary. ──
-        # Store lead_id only when the CRM was actually updated, so cancel reverts
-        # CRM only for bookings that changed it; others cancel calendar-only.
+        # lead_id is kept whenever a lead was selected — even if the CRM write
+        # failed — so a failed write can be self-healed later via /links without
+        # losing which lead this booking was for, and so the row is an honest
+        # audit trail either way. crm_status carries whether the CRM actually
+        # holds this appointment; /api/cancel decides whether to revert the CRM
+        # from crm_status now, not from lead_id presence.
         # is_rebook is always False here now — reschedules (which used to set it)
         # go through /api/reschedule instead, which updates this row in place
         # rather than inserting a new one. Column kept for historical rows and
         # because the wallboard/dashboard queries still COALESCE on it.
         _record_booking(
             event_id=event_id,
-            lead_id=(lead_id if crm_status == "updated" else ""),
+            lead_id=lead_id or "",
+            crm_status=crm_status,
+            link_status=("app" if lead_id else "needs_link"),
             booker_username=booker_username,
             booker_owner_id=booker_owner_id,
             booker_name=booker_name,
@@ -1399,9 +1422,14 @@ def api_cancel():
         return jsonify({"ok": False, "message": "Couldn't remove the calendar event — please try again."}), 502
 
     # 2. Revert the CRM (best-effort — the appointment is already gone from the calendar).
+    # Only revert when a lead is linked AND the booking's crm_status says the CRM
+    # actually holds this appointment. None/'' covers legacy rows, backfilled before
+    # crm_status existed — those always had the CRM updated whenever lead_id was set.
+    # A lead_id kept from a FAILED CRM write (self-healing/audit, see /api/book) must
+    # NOT be reverted here — there's nothing on the lead to revert.
     crm_status = "skipped"
     lead_id = booking.get("lead_id") or ""
-    if lead_id:
+    if lead_id and booking.get("crm_status") in (None, "", "updated"):
         try:
             lead = _ss_get_lead(lead_id)
             if lead is None:
@@ -1436,6 +1464,105 @@ def api_cancel():
     }[crm_status]
     return jsonify({"ok": True, "crm_status": crm_status,
                     "message": f"Appointment cancelled.{tail}"})
+
+
+@app.route("/api/link_booking", methods=["POST"])
+@login_required
+def api_link_booking():
+    """Link a lead to a booking that arrived without one (needs_link/conflict —
+    typically the calendar watcher's manual-Outlook bookings).
+
+    Writes the CRM appointment exactly like a fresh booking (see _ss_update_lead),
+    then updates the bookings row in place: lead_id, link_status='manual',
+    crm_status from the write outcome. Never raises out of the CRM write path —
+    mirrors /api/book's try/except style.
+    """
+    data = request.get_json(silent=True) or {}
+    event_id = (data.get("event_id") or "").strip()
+    lead_id  = (data.get("lead_id") or "").strip()
+    confirm  = bool(data.get("confirm", False))
+    if not event_id or not lead_id:
+        return jsonify({"ok": False, "message": "Missing event_id or lead_id"}), 400
+
+    booking = _get_active_booking(event_id)
+    if not booking:
+        return jsonify({"ok": False, "message": "Booking not found "
+                        "(it may already be linked or cancelled)."}), 404
+
+    lead = _ss_get_lead(lead_id)
+    if lead is None:
+        return jsonify({"ok": False, "message": "Lead not found in CRM"}), 404
+
+    appt_date  = booking.get("appt_date") or ""
+    appt_start = booking.get("appt_start") or ""
+    this_appt  = f"{appt_date} {appt_start}:00"
+
+    # Conflict guard: the lead already has a DIFFERENT future appointment in the
+    # CRM — ask the UI to confirm before overwriting it.
+    existing_appt = lead.get(_SS_F_APPT_DT) or ""
+    if existing_appt and existing_appt != this_appt and not confirm:
+        try:
+            existing_dt = datetime.strptime(existing_appt, "%Y-%m-%d %H:%M:%S")
+        except (ValueError, TypeError):
+            existing_dt = None
+        if existing_dt and existing_dt > _now_uk():
+            return jsonify({
+                "ok": False, "needs_confirm": True,
+                "message": f"This lead already has an appointment on "
+                           f"{existing_dt.strftime('%d %b %Y %H:%M')} — link anyway?",
+            }), 409
+
+    rep_name = booking.get("rep_name") or ""
+    linker = _get_user(session.get("username", "")) or {}
+    made_by = linker.get("sharpspring_name") or ""
+    if made_by not in MADE_BY_OPTIONS:
+        made_by = ""
+
+    crm_status = "skipped"
+    try:
+        owner_id = _rep_owner_id(rep_name) or (lead.get("ownerID") or "")
+        updated = _ss_update_lead(
+            lead_id, date_iso=appt_date, start_time=appt_start,
+            rep_owner_id=owner_id, made_by_name=made_by,
+            postcode=(booking.get("postcode") or ""),
+            appt_type=(booking.get("appt_type") or "heating"),
+            prev_appt=existing_appt,
+        )
+        if updated:
+            _ss_create_note(
+                lead_id,
+                f"Manual calendar booking {appt_date} {appt_start} with {rep_name} "
+                f"linked to this lead by {session.get('name', 'Telesales')} via the booking tool.",
+                owner_id=(linker.get("sharpspring_owner_id") or ""),
+            )
+        crm_status = "updated" if updated else "failed"
+    except Exception:
+        app.logger.exception("CRM link write-back failed")
+        crm_status = "failed"
+
+    try:
+        _bq().query(
+            f"UPDATE {BQ_BOOKINGS} SET lead_id = @lead_id, link_status = 'manual',"
+            f" crm_status = @crm_status WHERE event_id = @e AND status = 'active'",
+            job_config=bigquery.QueryJobConfig(query_parameters=_bq_params(
+                lead_id=lead_id, crm_status=crm_status, e=event_id,
+            )),
+        ).result()
+    except Exception:
+        app.logger.exception("Failed to update booking row after linking (CRM write already attempted)")
+
+    with _avail_lock:
+        _avail_cache.clear()
+    with _diary_lock:
+        _diary_cache.clear()
+
+    tail = {
+        "updated": " CRM updated.",
+        "failed":  " CRM update failed — update SharpSpring manually.",
+        "skipped": "",
+    }[crm_status]
+    return jsonify({"ok": True, "crm_status": crm_status,
+                    "message": f"Lead linked.{tail}"})
 
 
 @app.route("/api/reschedule", methods=["POST"])
@@ -1686,6 +1813,24 @@ def api_diary_refresh():
     with _diary_lock:
         _diary_cache.clear()
     return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Routes — link bookings (calendar-watcher bookings awaiting a CRM lead)
+# ---------------------------------------------------------------------------
+
+@app.route("/links")
+@login_required
+def links():
+    return render_template(
+        "links.html",
+        username=session.get("name"),
+        login_username=session.get("username", ""),
+        role=session.get("role"),
+        user_email=session.get("email", ""),
+        photo_url=session.get("photo_url", ""),
+        bookings=_get_link_bookings(),
+    )
 
 
 # ---------------------------------------------------------------------------

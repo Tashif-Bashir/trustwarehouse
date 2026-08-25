@@ -309,6 +309,15 @@ def match_lead(subject: str, text: str) -> tuple[dict | None, str]:
 # CRM writes (mirror of availability_app/app.py _ss_update_lead, heating path)
 # ---------------------------------------------------------------------------
 
+def _created_uk(created: str | None) -> str:
+    """Graph createdDateTime (UTC) -> UK-wallclock string; '' if unparseable."""
+    try:
+        dt = datetime.fromisoformat(clean_ts(created or "").replace("Z", "+00:00"))
+        return dt.astimezone(UK).strftime("%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return ""
+
+
 def _parse_appt(val: str) -> datetime | None:
     try:
         return datetime.strptime(val, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UK)
@@ -317,7 +326,11 @@ def _parse_appt(val: str) -> datetime | None:
 
 
 def crm_book(lead: dict, *, date_iso: str, start: str, rep_owner_id: str,
-             rep_name: str, prev_appt: str) -> bool:
+             rep_name: str, prev_appt: str, booked_ts: str = "") -> bool:
+    """booked_ts: UK-wallclock 'YYYY-MM-DD HH:MM:SS' of when the booking was
+    MADE (the Outlook event's creation time). The metre counts bookings by this
+    field — stamping now() here made backfilled old bookings count as booked
+    today (25 Aug incident: the metre jumped by 7)."""
     new_appt = f"{date_iso} {start}:00"
     obj = {
         "id": lead["id"],
@@ -325,7 +338,7 @@ def crm_book(lead: dict, *, date_iso: str, start: str, rep_owner_id: str,
         SS_F_APPT_DT: new_appt,
         SS_F_APPT_BOOKED: "Yes",
         SS_F_APPT_TYPE: "Physical",
-        SS_F_BOOKED_TS: _now_uk().strftime("%Y-%m-%d %H:%M:%S"),
+        SS_F_BOOKED_TS: booked_ts or _now_uk().strftime("%Y-%m-%d %H:%M:%S"),
         SS_F_STATUS: "Appointment",
         "ownerID": rep_owner_id or (lead.get("owner_id") or ""),
     }
@@ -372,7 +385,7 @@ def get_lead(lead_id: str) -> dict | None:
 def load_bookings() -> dict[str, dict]:
     rows = _bq().query(
         "SELECT event_id, lead_id, status, appt_date, appt_start, appt_end,"
-        "       rep_name, link_status, crm_status, customer, postcode"
+        "       rep_name, link_status, crm_status, customer, postcode, booked_at"
         f" FROM {BOOKINGS}").result()
     return {r["event_id"]: dict(r) for r in rows if r["event_id"]}
 
@@ -445,7 +458,8 @@ def handle_new(event: dict, rep: str, rep_owners: dict[str, str]) -> None:
                 ok = crm_book(live | {"id": lead_id, "owner_id": live.get("ownerID") or ""},
                               date_iso=date_iso, start=start,
                               rep_owner_id=rep_owners.get(rep, ""), rep_name=rep,
-                              prev_appt=existing)
+                              prev_appt=existing,
+                              booked_ts=_created_uk(event.get("createdDateTime")))
                 link_status, crm_status = "auto", ("updated" if ok else "failed")
 
     insert_booking(
@@ -519,10 +533,13 @@ def retry_unlinked(bookings: dict[str, dict], rep_owners: dict[str, str],
             continue
         crm = "skipped"
         if future:
+            row_booked = row.get("booked_at")
             ok = crm_book(live | {"id": lead["id"], "owner_id": live.get("ownerID") or ""},
                           date_iso=row["appt_date"], start=row["appt_start"],
                           rep_owner_id=rep_owners.get(row["rep_name"], ""),
-                          rep_name=row["rep_name"], prev_appt=existing)
+                          rep_name=row["rep_name"], prev_appt=existing,
+                          booked_ts=(row_booked.astimezone(UK).strftime("%Y-%m-%d %H:%M:%S")
+                                     if row_booked else ""))
             crm = "updated" if ok else "failed"
         update_booking(row["event_id"], {"lead_id": lead["id"],
                                          "link_status": "auto", "crm_status": crm})

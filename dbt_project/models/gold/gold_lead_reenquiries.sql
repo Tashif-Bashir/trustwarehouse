@@ -17,6 +17,14 @@ with events as (
 
     from {{ source('bronze', 'sharpspring_lead_reenquiries') }} r
 
+    -- Only count events where a FORM signal changed. Description-only changes
+    -- are excluded: ResponseIQ call-tracking appends to description on phone
+    -- calls ("responseIQ: ... Calltracking/Widget"), and CRM merges append
+    -- "Merged Description" blocks — neither is a form re-submission (owner
+    -- definition: forms only; evidenced 24 Aug 2026 when 8 of 13 events were
+    -- call/merge noise). Bronze keeps every event, so this stays reversible.
+    where regexp_contains(r.changed_fields, r'page_submitted|marketing_url')
+
 ),
 
 leads as (

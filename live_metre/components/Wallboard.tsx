@@ -306,6 +306,11 @@ export default function Wallboard({ boardId }: { boardId: string }) {
   const pipelineShowTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pipelineHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pipelineForceDone = useRef(false)
+  // A live sale outranks the pipeline chase: when the till rings we drop the
+  // takeover at once (and hold it off briefly) so the ka-ching and the numbers
+  // land together instead of the sale hiding behind the overlay until the
+  // takeover's timer ran out. The cycle re-arms itself as normal afterwards.
+  const pipelineSaleHoldUntil = useRef(0)
 
   useEffect(() => {
     if (!board.features.pipeline || !PIPELINE_TAKEOVER.enabled) return
@@ -410,6 +415,9 @@ export default function Wallboard({ boardId }: { boardId: string }) {
     if (prev !== null && count > prev) {
       // the visual celebration runs whether or not audio was ever unlocked
       setSalePulse((p) => p + 1)
+      // sale beats pipeline: clear any takeover on screen right now
+      pipelineSaleHoldUntil.current = Date.now() + 50_000
+      setPipelineShowing(false)
     }
     if (!SALES_SOUND.enabled) {
       prevSaleCount.current = count
@@ -573,10 +581,11 @@ export default function Wallboard({ boardId }: { boardId: string }) {
         />
       )}
       {/* Celebrations win: never show the pipeline takeover over EOD/DOORS,
-          and never show it with nothing to chase. */}
+          over a just-landed sale, or with nothing to chase. */}
       {pipelineShowing &&
         !eodCelebrating &&
         !doorsCelebrating &&
+        Date.now() >= pipelineSaleHoldUntil.current &&
         metrics?.pipeline &&
         metrics.pipeline.count > 0 && <PipelineTakeover pipeline={metrics.pipeline} />}
     </main>

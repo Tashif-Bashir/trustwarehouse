@@ -492,6 +492,12 @@ async function queryPipeline(): Promise<PipelineMetrics | null> {
 async function querySales(): Promise<SalesMetrics | null> {
   const amt =
     "COALESCE(heating_amount, 0) + COALESCE(water_amount, 0) + COALESCE(chc_amount, 0)"
+  // Revenue-to-target basis (owner ruling 28 Aug 2026): a flat £1,334 comes off
+  // every sale containing water — matching the managers' scorecard, which nets
+  // the cylinder cost out of target progress. Applies to revenue totals and
+  // per-rep credit; the last-sale banner and biggest-sale figure stay at face
+  // value because they describe the sale itself, not progress to target.
+  const amtNet = `${amt} - IF(COALESCE(water_amount, 0) > 0, 1334, 0)`
   const base = `
     FROM \`${PROJECT}.app.sales\`
     WHERE status = 'active' AND customer_name NOT LIKE 'Zzz Testlead%'
@@ -503,7 +509,7 @@ async function querySales(): Promise<SalesMetrics | null> {
       client().query({
         query: `
           SELECT CAST(sale_date AS STRING) AS day,
-                 COUNT(*) AS n, SUM(${amt}) AS total, MAX(${amt}) AS mx,
+                 COUNT(*) AS n, SUM(${amtNet}) AS total, MAX(${amt}) AS mx,
                  -- a sale can carry heating AND water, so these are counts of
                  -- sales CONTAINING each product and may sum to more than n
                  COUNTIF(COALESCE(heating_amount, 0) > 0) AS heat_n,
@@ -517,7 +523,7 @@ async function querySales(): Promise<SalesMetrics | null> {
       client().query({
         query: `
           SELECT name, SUM(n) AS count, SUM(t) AS total FROM (
-            SELECT sold_by AS name, COUNT(*) AS n, SUM(${amt}) AS t
+            SELECT sold_by AS name, COUNT(*) AS n, SUM(${amtNet}) AS t
             ${base}
               AND sold_by IS NOT NULL
               AND sale_date >= DATE_TRUNC(CURRENT_DATE('Europe/London'), MONTH)
@@ -526,7 +532,7 @@ async function querySales(): Promise<SalesMetrics | null> {
             -- An office sale credits TWO people: Dec/Josh (sold_by) above, and
             -- the field rep (rep) here, both at full value. Company revenue on
             -- the cards counts the sale once; only per-person credit doubles.
-            SELECT rep, COUNT(*), SUM(${amt})
+            SELECT rep, COUNT(*), SUM(${amtNet})
             ${base}
               AND sale_type = 'office' AND rep IS NOT NULL
               AND sale_date >= DATE_TRUNC(CURRENT_DATE('Europe/London'), MONTH)
@@ -571,19 +577,19 @@ async function querySales(): Promise<SalesMetrics | null> {
         query: `
           SELECT 'month' AS grain,
                  CAST(DATE_TRUNC(sale_date, MONTH) AS STRING) AS period,
-                 SUM(${amt}) AS total
+                 SUM(${amtNet}) AS total
           ${base}
             AND sale_date >= DATE_SUB(DATE_TRUNC(CURRENT_DATE('Europe/London'), MONTH), INTERVAL 5 MONTH)
           GROUP BY period
           UNION ALL
           SELECT 'week',
                  CAST(DATE_TRUNC(sale_date, WEEK(MONDAY)) AS STRING),
-                 SUM(${amt})
+                 SUM(${amtNet})
           ${base}
             AND sale_date >= DATE_SUB(DATE_TRUNC(CURRENT_DATE('Europe/London'), WEEK(MONDAY)), INTERVAL 5 WEEK)
           GROUP BY 2
           UNION ALL
-          SELECT 'rep', sold_by, SUM(${amt})
+          SELECT 'rep', sold_by, SUM(${amtNet})
           ${base}
             AND sale_date >= DATE_TRUNC(CURRENT_DATE('Europe/London'), WEEK(MONDAY))
             AND sold_by IS NOT NULL

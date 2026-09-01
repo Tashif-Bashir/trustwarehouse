@@ -25,6 +25,8 @@ export const TEAM_AGENTS: AgentConfig[] = [
   { id: 'gemma', name: 'Gemma', color: '#1baf7a', role: 'Operations' },
   { id: 'dec', name: 'Dec', color: '#eb6834', role: 'Internal Sales' },
   { id: 'josh', name: 'Josh', color: '#e87ba4', role: 'Internal Sales' },
+  // moved from telesales to internal sales, 1 Sep 2026 (keeps his purple)
+  { id: 'peter', name: 'Peter', color: '#8b5cf6', role: 'Internal Sales' },
 ]
 
 // Exact Ascend caller names for the sales & ops board (verified in call
@@ -34,6 +36,7 @@ export const TEAM_ASCEND_NAMES: Record<string, string[]> = {
   gemma: ['Gemma Taylor', 'Gemma'],
   dec: ['Dec', 'Declan'],
   josh: ['Josh Baron', 'Josh'],
+  peter: ['Peter'],
 }
 
 export interface BoardSpec {

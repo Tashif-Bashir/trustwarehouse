@@ -703,7 +703,7 @@ async function querySales(): Promise<SalesMetrics | null> {
         : null
     const allSellers = sellerRows as { name: string; count: number; total: number }[]
     const sellerColor = new Map(TEAM_AGENTS.map((a) => [a.name, a.color]))
-    const sellers = ['Dec', 'Josh'].map((name) => {
+    const sellers = ['Dec', 'Josh', 'Peter'].map((name) => {
       const row = allSellers.find((r) => r.name === name)
       return {
         name,

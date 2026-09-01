@@ -184,7 +184,7 @@ F_APPT_STATUS = "appointment_status_637f8d6fa1096"        # Appointment Status H
 F_APPT_STATUS_WATER = "appointment_status__1__6a0f083987d2c"  # Appointment Status WATER
 F_SOLD_BY = "product_bought__1__6969069edaaef"            # "Sold by" picklist (Dec/Josh)
 
-OFFICE_SELLERS = ("Dec", "Josh")   # matches the CRM "Sold by" picklist values
+OFFICE_SELLERS = ("Dec", "Josh", "Peter")   # matches the CRM "Sold by" picklist values
 
 # Sale types. 'on_site' and 'sold' are the SAME sale by the same field rep and
 # count toward the same target — the only difference is when it closed: on the

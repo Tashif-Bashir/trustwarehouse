@@ -584,7 +584,7 @@ APPT_TYPES     = ("heating", "water", "both")
 OTHER_OUTCOMES = ("", "Follow Up", "Not Interested")
 # Agents you can book on behalf of (the telesales team) — must have
 # sharpspring_name + owner id set in app.users.
-BOOK_FOR_USERNAMES = ("lily", "sue", "alicja", "alisha", "peter")
+BOOK_FOR_USERNAMES = ("lily", "sue", "alicja", "alisha")  # peter moved to internal sales 1 Sep 2026
 ENQUIRY_TYPES  = ("", "Heating", "Water", "Heating and Water")  # '' = don't write
 
 

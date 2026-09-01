@@ -48,6 +48,21 @@ BQ_PROJECT = os.environ.get("BIGQUERY_PROJECT", "trustwarehouse")
 BQ_DATASET = "bronze"
 BQ_LOCATION = "europe-west2"
 
+# BigQuery backend: the python client where available (the VM's uv project —
+# no bq CLI is installed there), else the bq CLI (the local dev fallback).
+try:
+    from google.cloud import bigquery as _gbq
+except ImportError:
+    _gbq = None
+_GBQ_CLIENT = None
+
+
+def _client():
+    global _GBQ_CLIENT
+    if _GBQ_CLIENT is None:
+        _GBQ_CLIENT = _gbq.Client(project=BQ_PROJECT, location=BQ_LOCATION)
+    return _GBQ_CLIENT
+
 TENANT = os.environ["MS_TENANT_ID"]
 CLIENT_ID = os.environ["BING_ADS_CLIENT_ID"]
 DEV_TOKEN = os.environ["BING_ADS_DEVELOPER_TOKEN"]
@@ -424,6 +439,9 @@ def mirror_columns(airbyte_table: str) -> list[str]:
     """Real column names (order preserved) from an Airbyte bronze table, minus
     Airbyte's _airbyte_* metadata columns. This is how every bing_direct_*
     table's shape is derived — never hand-typed."""
+    if _gbq:
+        t = _client().get_table(f"{BQ_PROJECT}.{BQ_DATASET}.{airbyte_table}")
+        return [f.name for f in t.schema if not f.name.startswith("_airbyte_")]
     r = _run_bq(["show", "--schema", "--format=json", f"{BQ_PROJECT}:{BQ_DATASET}.{airbyte_table}"])
     if r.returncode != 0:
         raise RuntimeError(f"bq show schema failed for {airbyte_table}: {r.stderr}")
@@ -432,6 +450,13 @@ def mirror_columns(airbyte_table: str) -> list[str]:
 
 
 def ensure_table(table: str, columns: list[str]) -> None:
+    if _gbq:
+        ref = f"{BQ_PROJECT}.{BQ_DATASET}.{table}"
+        schema = [_gbq.SchemaField(c, "STRING") for c in columns] + [
+            _gbq.SchemaField("_synced_at", "TIMESTAMP")
+        ]
+        _client().create_table(_gbq.Table(ref, schema=schema), exists_ok=True)
+        return
     full = f"{BQ_PROJECT}:{BQ_DATASET}.{table}"
     r = _run_bq(["show", full])
     if r.returncode == 0:
@@ -452,16 +477,23 @@ def bq_load_ndjson(table: str, rows: list[dict], columns: list[str], replace: bo
     if not rows:
         if replace:
             # still truncate to an empty table on a zero-row snapshot
-            _run_bq(
-                [
-                    "query",
-                    "--use_legacy_sql=false",
-                    "--location",
-                    BQ_LOCATION,
-                    f"TRUNCATE TABLE `{BQ_PROJECT}.{BQ_DATASET}.{table}`",
-                ]
-            )
+            truncate_q = f"TRUNCATE TABLE `{BQ_PROJECT}.{BQ_DATASET}.{table}`"
+            if _gbq:
+                _client().query(truncate_q).result()
+            else:
+                _run_bq(["query", "--use_legacy_sql=false", "--location", BQ_LOCATION, truncate_q])
         return 0
+    if _gbq:
+        ref = f"{BQ_PROJECT}.{BQ_DATASET}.{table}"
+        job_config = _gbq.LoadJobConfig(
+            source_format="NEWLINE_DELIMITED_JSON",
+            schema=[_gbq.SchemaField(c, "STRING") for c in columns]
+            + [_gbq.SchemaField("_synced_at", "TIMESTAMP")],
+            write_disposition="WRITE_TRUNCATE" if replace else "WRITE_APPEND",
+        )
+        payload = ("\n".join(json.dumps(r) for r in rows) + "\n").encode()
+        _client().load_table_from_file(io.BytesIO(payload), ref, job_config=job_config).result()
+        return len(rows)
     schema = ",".join(f"{c}:STRING" for c in columns) + ",_synced_at:TIMESTAMP"
     with tempfile.NamedTemporaryFile(mode="w", suffix=".ndjson", delete=False, encoding="utf-8") as f:
         for row in rows:
@@ -499,12 +531,17 @@ def bq_delete_window(table: str, date_col: str, start_date: str, end_date_exclus
         f"DELETE FROM `{BQ_PROJECT}.{BQ_DATASET}.{table}` "
         f"WHERE {date_col} >= '{start_date}' AND {date_col} < '{end_date_exclusive}'"
     )
+    if _gbq:
+        _client().query(q).result()
+        return
     r = _run_bq(["query", "--use_legacy_sql=false", "--location", BQ_LOCATION, "--nouse_cache", q])
     if r.returncode != 0:
         raise RuntimeError(f"bq delete window failed for {table}: {r.stderr}")
 
 
 def bq_query_rows(query: str) -> list[dict]:
+    if _gbq:
+        return [dict(row) for row in _client().query(query).result()]
     r = _run_bq(["query", "--use_legacy_sql=false", "--location", BQ_LOCATION, "--format=json", "--nouse_cache", query])
     if r.returncode != 0:
         raise RuntimeError(f"bq query failed: {r.stderr}\nQUERY: {query}")

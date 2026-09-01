@@ -1,0 +1,17 @@
+[Unit]
+Description=Bing Ads (Microsoft Advertising) direct API -> BigQuery bronze sync (8 times per day)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/trustwarehouse
+EnvironmentFile=/home/ubuntu/trustwarehouse/.env
+ExecStart=/home/ubuntu/.local/bin/uv run python scripts/bing_ads_sync.py --streams all --days 30
+TimeoutStartSec=900
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

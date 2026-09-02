@@ -723,7 +723,8 @@ async function querySales(): Promise<SalesMetrics | null> {
     // the roster guarantees the panel is never empty and that a new rep appears
     // at £0 from day one; the sellers side means historical/ex-rep names in the
     // ledger still show their revenue instead of being silently dropped.
-    const soldThisMonth = allSellers.filter((r) => r.name !== 'Dec' && r.name !== 'Josh')
+    const CLOSERS = new Set(['Dec', 'Josh', 'Peter']) // internal sales — they have their own tiles
+    const soldThisMonth = allSellers.filter((r) => !CLOSERS.has(r.name))
     const roster = (rosterRows as { name: string }[]).map((r) => r.name)
     const repNames = Array.from(new Set([...soldThisMonth.map((r) => r.name), ...roster]))
     const reps = repNames

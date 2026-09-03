@@ -87,7 +87,7 @@ RAW_COPIES = [
 # a month: ~0.46GB * 24 * 30 / 1024 = ~0.32TB * £4.7/TB ≈ £1.55/month. Re-check
 # this threshold if Airbyte lands a new large ad report table.
 
-AD_PLATFORM_PREFIXES = ["google_ads%", "meta_api%", "bing_ads%"]
+AD_PLATFORM_PREFIXES = ["google_ads%", "meta_api%", "bing_ads%", "bing_direct%"]
 
 
 def discover_ad_tables() -> list[tuple[str, int, int]]:
@@ -461,8 +461,12 @@ UNION ALL
 SELECT DATE(date), 'Meta', ROUND(SUM(spend_gbp), 2), SUM(clicks), SUM(impressions)
 FROM `{PROJECT}.bronze.meta_api_campaign_daily` GROUP BY 1
 UNION ALL
-SELECT SAFE_CAST(TimePeriod AS DATE), 'Bing', ROUND(SUM(Spend), 2), SUM(Clicks), SUM(Impressions)
-FROM `{PROJECT}.bronze.bing_adsaccount_performance_report_daily` GROUP BY 1
+-- Bing from the DIRECT API sync (3 Sep 2026, replaced Airbyte): delete-then-
+-- insert loads mean no duplicate-sync rows, which also fixes the long-standing
+-- double-count this arm had when it summed raw Airbyte bronze.
+SELECT SAFE_CAST(TimePeriod AS DATE), 'Bing', ROUND(SUM(SAFE_CAST(Spend AS FLOAT64)), 2),
+       SUM(SAFE_CAST(Clicks AS INT64)), SUM(SAFE_CAST(Impressions AS INT64))
+FROM `{PROJECT}.bronze.bing_direct_account_performance_report_daily` GROUP BY 1
 """
 
 CALLS_PER_DAY = f"""

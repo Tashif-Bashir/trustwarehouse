@@ -21,6 +21,7 @@ sources:
       - name: meta_api_geographic_daily
       - name: bing_adscampaign_performance_report_daily
       - name: bing_adsaccount_performance_report_daily
+      - name: bing_direct_account_performance_report_daily
       - name: unleashed_sales_orders
       - name: unleashed_sales_orders__sales_order_lines
       - name: unleashed_customers

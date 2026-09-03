@@ -17,13 +17,28 @@ with events as (
 
     from {{ source('bronze', 'sharpspring_lead_reenquiries') }} r
 
-    -- Only count events where a FORM signal changed. Description-only changes
-    -- are excluded: ResponseIQ call-tracking appends to description on phone
-    -- calls ("responseIQ: ... Calltracking/Widget"), and CRM merges append
-    -- "Merged Description" blocks — neither is a form re-submission (owner
-    -- definition: forms only; evidenced 24 Aug 2026 when 8 of 13 events were
-    -- call/merge noise). Bronze keeps every event, so this stays reversible.
-    where regexp_contains(r.changed_fields, r'page_submitted|marketing_url')
+    -- Only count events where page_submitted changed — an actual form
+    -- re-submission (owner definition: forms only). marketing_url-only
+    -- changes are EXCLUDED (tightened 3 Sep 2026): SharpSpring back-fills
+    -- its last-touched-URL tracking field without any form submission
+    -- (email-click cookieing, late association) — 2 Sep evidence: 5 booked
+    -- leads flagged as "returning" whose Life of the Lead showed no
+    -- submission, all marketing_url-only. Description-only changes remain
+    -- excluded (ResponseIQ call-tracking + CRM merge noise, 24 Aug).
+    -- Bronze keeps every event, so this stays reversible.
+    where regexp_contains(r.changed_fields, r'page_submitted')
+
+),
+
+-- ResponseIQ callback-widget leads are excluded COMPLETELY (marketing team
+-- ruling, 3 Sep 2026): the widget generates operational calls all day and
+-- rewrites tracking fields, so these skew returning-lead counts. Signature:
+-- "responseIQ" in the lead's description (bronze — silver doesn't carry it).
+riq_leads as (
+
+    select cast(id as string) as lead_id
+    from {{ source('bronze', 'sharpspring_leads') }}
+    where regexp_contains(lower(coalesce(description, '')), r'responseiq')
 
 ),
 
@@ -73,3 +88,4 @@ select
 
 from events e
 left join leads l using (lead_id)
+where cast(e.lead_id as string) not in (select lead_id from riq_leads)

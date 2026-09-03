@@ -221,6 +221,15 @@
   .appb-when{color:var(--muted);font-weight:600;flex-shrink:0;font-variant-numeric:tabular-nums}
   .appb-what{color:var(--ink);line-height:1.45;min-width:0}
   .appb-meta{color:var(--muted)}
+
+  /* needs_owner side-pop toast — a calendar-watcher booking needs a booker claimed */
+  .no-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:14px;background:var(--ink);color:#fff;font-size:13px;font-weight:500;padding:12px 14px 12px 18px;border-radius:12px;box-shadow:var(--shadow-lg);z-index:400;max-width:92%;animation:fadeIn .15s ease-out}
+  .no-toast-text{line-height:1.35}
+  .no-toast-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+  .no-toast-go{background:linear-gradient(135deg,#5B6CFF,#8B5CF6);color:#fff;padding:7px 13px;border-radius:8px;font-size:12.5px;font-weight:600;white-space:nowrap}
+  .no-toast-dismiss{color:rgba(255,255,255,.6);font-size:18px;line-height:1;padding:2px 4px}
+  .no-toast-dismiss:hover{color:#fff}
+
   /* Confirm modal */
   .confirm-overlay{position:fixed;inset:0;background:rgba(20,23,40,.45);display:flex;align-items:center;justify-content:center;z-index:200;animation:fadeIn .15s ease-out}
   @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -973,6 +982,40 @@ function App() {
     return () => clearInterval(id);
   }, []);
 
+  // needs_owner side-pop: calendar-watcher bookings with a lead + CRM
+  // appointment already written but no booker resolved. Poll every ~60s;
+  // dismissal is per-browser-session (sessionStorage) and reappears for any
+  // row not already dismissed this session.
+  const [needsOwner, setNeedsOwner] = useState(null);
+  const [showNeedsOwnerToast, setShowNeedsOwnerToast] = useState(false);
+  useEffect(() => {
+    function loadNeedsOwner() {
+      fetch('/api/needs_owner')
+        .then(r => r.json())
+        .then(d => {
+          setNeedsOwner(d);
+          let dismissed = [];
+          try { dismissed = JSON.parse(sessionStorage.getItem('trust_needs_owner_dismissed') || '[]'); }
+          catch (e) { dismissed = []; }
+          const fresh = (d.bookings || []).some(b => !dismissed.includes(b.event_id));
+          setShowNeedsOwnerToast(fresh);
+        })
+        .catch(() => {});
+    }
+    loadNeedsOwner();
+    const id = setInterval(loadNeedsOwner, 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  function dismissNeedsOwnerToast() {
+    const ids = (needsOwner?.bookings || []).map(b => b.event_id);
+    let dismissed = [];
+    try { dismissed = JSON.parse(sessionStorage.getItem('trust_needs_owner_dismissed') || '[]'); }
+    catch (e) { dismissed = []; }
+    sessionStorage.setItem('trust_needs_owner_dismissed', JSON.stringify([...new Set([...dismissed, ...ids])]));
+    setShowNeedsOwnerToast(false);
+  }
+
   // close the bookings panel on outside click
   useEffect(() => {
     if (!showBookings) return;
@@ -1357,6 +1400,20 @@ function App() {
         )}
 
       </main>
+
+      {showNeedsOwnerToast && needsOwner && needsOwner.count > 0 && (
+        <div className="no-toast">
+          <span className="no-toast-text">
+            {needsOwner.count === 1
+              ? `Calendar booking for ${needsOwner.bookings[0]?.customer || 'a customer'} needs assigning`
+              : `${needsOwner.count} calendar bookings need assigning`}
+          </span>
+          <div className="no-toast-actions">
+            <a href="/links" className="no-toast-go">Go to /links</a>
+            <button className="no-toast-dismiss" onClick={dismissNeedsOwnerToast} aria-label="Dismiss">×</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

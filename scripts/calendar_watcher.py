@@ -10,11 +10,19 @@ This watcher (VM systemd timer, every 5 min) closes the gap:
      - a UK phone number in the event text -> exact phone match (certain)
      - otherwise a name in the subject matching exactly ONE lead created in
        the last 60 days -> auto-link
+     - otherwise a (name + postcode) match with NO age limit -> auto-link
+       (old-lead linking; name-only stays 60-day-guarded, postcode corroborates)
      - anything ambiguous -> link_status='needs_link' for the /links page
    On a confident match the CRM is written exactly like an app booking
    (status matrix, appointment fields, owner -> rep, audit note) — UNLESS the
    lead already has a DIFFERENT future appointment (the two-visits case):
    then the CRM is left alone and the row is flagged link_status='conflict'.
+   Booker attribution: the lead's PRE-BOOKING ownerID is checked against the
+   three-person ruling (resolve_booker) — a valid owner stamps booker_name/
+   booker_owner_id AND the CRM "Appointment Booked By" picklist; an invalid
+   one (Peter Heaton, Alisha Moore, blank, unknown) leaves booker_name
+   'Manual (calendar)' and flags link_status='needs_owner' for the /links
+   page's one-click claim buttons.
 2. EDITS: an event whose date/time no longer matches its bookings row is
    healed (row updated; CRM appointment time moved if the CRM holds it).
 3. DELETIONS: an active future booking whose event has vanished from the
@@ -24,10 +32,17 @@ This watcher (VM systemd timer, every 5 min) closes the gap:
    (the matching lead may only just have enquired). `--sweep` additionally
    re-tries ALL historical unlinked rows once (past appointments get the
    lead linked for counting, but no CRM write — the visit already happened).
+5. SELF-HEAL: watcher rows booked in the last 7 days get their linked lead's
+   LIVE CRM "Appointment Booked By" stamp re-checked each run — a human
+   correction (or a claim made straight in the CRM) always overrides the
+   owner-derived guess, and clears needs_owner -> 'auto'. Never touches rows
+   entered_by != 'watcher'.
 
 Owner-agreed behaviour (25 Aug 2026): overwrite past appointments, flag
 conflicting future ones; auto-link on unique recent name match; unmatched
 rows surface on the booking app's /links page for any telesales user.
+Booker attribution + needs_owner + old-lead (name+postcode) linking added
+3 Sep 2026 per the owner's approved design.
 """
 
 from __future__ import annotations
@@ -66,9 +81,70 @@ SS_F_APPT_BOOKED = "appointment_booked_5ae8cb01a35c6"
 SS_F_BOOKED_TS = "date_time_appointment_booked_687fabb701341"
 SS_F_APPT_TYPE = "type_of_appointment_606ee2f254f4d"
 SS_F_PREV_APPT = "previous_appointment_time___date_6a1d969b9f800"
+SS_F_MADE_BY = "appointment_made_by_65e1a90253305"  # "Appointment Booked By" picklist
 
 PHONE_RE = re.compile(r"(?:\+?44[\s\-]?|0)(?:\d[\s\-]?){9,10}")
 POSTCODE_RE = re.compile(r"\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b", re.I)
+PARENS_RE = re.compile(r"\([^)]*\)")
+
+# Owner ruling (3 Sep 2026): a lead's PRE-BOOKING ownerID maps to a booker only
+# for these three telesales people — Peter Heaton moved to sales, Alisha Moore
+# is out; neither is valid, and any other/blank/unknown owner is not valid
+# either. Values: (booker_name for app.bookings, CRM "Appointment Booked By"
+# picklist value — note 'Susan England' differs from the app.bookings name).
+VALID_BOOKER_OWNERS: dict[str, tuple[str, str]] = {
+    "349724672": ("Sue England", "Susan England"),
+    "351874048": ("Lily Harpham", "Lily Harpham"),
+    "368143360": ("Alicja Aleksiuk", "Alicja Aleksiuk"),
+}
+# Reverse lookup for the self-heal pass: CRM made-by picklist value -> the
+# app.bookings booker identity it implies.
+MADE_BY_TO_BOOKER: dict[str, tuple[str, str]] = {
+    made_by: (booker_name, owner_id)
+    for owner_id, (booker_name, made_by) in VALID_BOOKER_OWNERS.items()
+}
+
+
+def _strip_parens(s: str) -> str:
+    """Drop parenthetical asides ('(ring first)') before name/customer extraction.
+
+    Deliberately NOT applied to event_text()'s output — a phone number or
+    postcode occasionally sits inside the parenthetical ("(ring 07911 222333
+    first)") and anchor detection must still see it.
+    """
+    return re.sub(r"\s+", " ", PARENS_RE.sub(" ", s or "")).strip()
+
+
+def resolve_booker(owner_id: str | None) -> tuple[str, str, str] | None:
+    """Map a lead's PRE-BOOKING ownerID to (booker_name, booker_owner_id, crm_made_by).
+
+    None for anything not in VALID_BOOKER_OWNERS — Peter Heaton, Alisha Moore,
+    blank, or an unrecognised id all count as "not valid" per the owner ruling.
+    """
+    entry = VALID_BOOKER_OWNERS.get(str(owner_id or "").strip())
+    if not entry:
+        return None
+    booker_name, made_by = entry
+    return booker_name, str(owner_id).strip(), made_by
+
+
+def self_heal_decision(row_booker_name: str, crm_made_by: str) -> tuple[str, str] | None:
+    """Given a bookings row's current booker_name and the lead's LIVE CRM made-by
+    stamp, return (new_booker_name, new_booker_owner_id) if the row should be
+    healed to match, else None.
+
+    The CRM stamp (a human's action, possibly made after the watcher's owner
+    guess) always wins over the owner-derived guess. No-op if the CRM value
+    isn't one of the three valid names, or already matches the row.
+    """
+    mapped = MADE_BY_TO_BOOKER.get(crm_made_by or "")
+    if not mapped:
+        return None
+    new_name, new_owner_id = mapped
+    if row_booker_name == new_name:
+        return None
+    return new_name, new_owner_id
+
 
 _bq_client = None
 _ss_client = None
@@ -238,10 +314,25 @@ def _fresh_leads_today() -> list[dict]:
         offset += 500
 
 
-def match_lead(subject: str, text: str) -> tuple[dict | None, str]:
+def _norm_postcode(pc: str) -> str:
+    return re.sub(r"\s+", "", (pc or "").upper())
+
+
+def _pick_unique(candidates: dict[str, dict]) -> dict | None:
+    """A confident match requires exactly one candidate — ambiguous ties go to
+    the /links page, not a guess."""
+    return next(iter(candidates.values())) if len(candidates) == 1 else None
+
+
+def match_lead(subject: str, text: str, postcode: str = "") -> tuple[dict | None, str]:
     """Confident-match ladder. Returns (lead-ish dict with id/name/owner, how).
 
-    how: 'phone' | 'name' | '' (no confident match).
+    how: 'phone' | 'name' | 'name+postcode' | '' (no confident match).
+
+    Rung 3 (name+postcode, added for old-lead linking) has NO age limit —
+    unlike the name-only rung, which stays 60-day-guarded because a common
+    name with no postcode corroboration is too likely to collide across an
+    unbounded lead history.
     """
     from google.cloud import bigquery
 
@@ -300,8 +391,39 @@ def match_lead(subject: str, text: str) -> tuple[dict | None, str]:
                     "id": str(lead["id"]),
                     "name": f"{lead.get('firstName') or ''} {lead.get('lastName') or ''}".strip(),
                     "owner_id": lead.get("ownerID") or ""}
-    if len(candidates) == 1:
-        return next(iter(candidates.values())), "name"
+    picked = _pick_unique(candidates)
+    if picked:
+        return picked, "name"
+
+    # Rung 3: unique (name + postcode) match, no age limit — old-lead linking.
+    pc_norm = _norm_postcode(postcode)
+    if pc_norm:
+        pc_candidates: dict[str, dict] = {}
+        for seg in _name_segments(subject):
+            toks = seg.lower().split()
+            conds, params = [], []
+            for i, tok in enumerate(toks):
+                conds.append(
+                    f"LOWER(CONCAT(COALESCE(first_name,''),' ',COALESCE(last_name,''))) LIKE @t{i}")
+                params.append(bigquery.ScalarQueryParameter(f"t{i}", "STRING", f"%{tok}%"))
+            conds.append("REPLACE(UPPER(COALESCE(zipcode,'')),' ','') = @pc")
+            params.append(bigquery.ScalarQueryParameter("pc", "STRING", pc_norm))
+            rows = list(_bq().query(
+                "SELECT id, first_name, last_name, owner_id FROM `bronze.sharpspring_leads`"
+                f" WHERE {' AND '.join(conds)}"
+                "   AND id NOT IN (SELECT id FROM `bronze.sharpspring_leads_deleted`)"
+                " QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY update_timestamp DESC) = 1"
+                " LIMIT 5",
+                job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
+            for r in rows:
+                pc_candidates[str(r["id"])] = {
+                    "id": str(r["id"]),
+                    "name": f"{r['first_name'] or ''} {r['last_name'] or ''}".strip(),
+                    "owner_id": r["owner_id"] or ""}
+        picked = _pick_unique(pc_candidates)
+        if picked:
+            return picked, "name+postcode"
+
     return None, ""
 
 
@@ -326,11 +448,15 @@ def _parse_appt(val: str) -> datetime | None:
 
 
 def crm_book(lead: dict, *, date_iso: str, start: str, rep_owner_id: str,
-             rep_name: str, prev_appt: str, booked_ts: str = "") -> bool:
+             rep_name: str, prev_appt: str, booked_ts: str = "", made_by: str = "") -> bool:
     """booked_ts: UK-wallclock 'YYYY-MM-DD HH:MM:SS' of when the booking was
     MADE (the Outlook event's creation time). The metre counts bookings by this
     field — stamping now() here made backfilled old bookings count as booked
-    today (25 Aug incident: the metre jumped by 7)."""
+    today (25 Aug incident: the metre jumped by 7).
+
+    made_by: CRM "Appointment Booked By" picklist value — only ever passed
+    when the lead's pre-booking owner resolved to one of the three valid
+    telesales people (see resolve_booker); never written when unresolved."""
     new_appt = f"{date_iso} {start}:00"
     obj = {
         "id": lead["id"],
@@ -346,6 +472,8 @@ def crm_book(lead: dict, *, date_iso: str, start: str, rep_owner_id: str,
         del obj["ownerID"]  # never let SharpSpring default it to the API account
     if prev_appt and prev_appt != new_appt:
         obj[SS_F_PREV_APPT] = prev_appt
+    if made_by:
+        obj[SS_F_MADE_BY] = made_by
     resp = _ss()._call("updateLeads", {"objects": [obj]})
     updates = (resp.get("updates") if isinstance(resp, dict) else resp) or []
     ok = bool(updates and updates[0].get("success"))
@@ -378,6 +506,34 @@ def get_lead(lead_id: str) -> dict | None:
     return leads[0] if leads else None
 
 
+def _book_with_attribution(live: dict, lead_id: str, *, date_iso: str, start: str,
+                           rep: str, rep_owners: dict[str, str], prev_appt: str,
+                           booked_ts: str) -> tuple[str, str, str, str]:
+    """Write the CRM appointment (crm_book) and resolve booker attribution from
+    the lead's PRE-BOOKING owner (fetched into `live` before this call — never
+    the post-write owner, which crm_book is about to reassign to the rep).
+
+    Returns (crm_status, link_status, booker_name, booker_owner_id).
+    link_status is 'auto' when the owner resolved to one of the three valid
+    telesales people; otherwise 'needs_owner' — queued on the /links page for
+    a human to claim — and booker_name stays 'Manual (calendar)'.
+    """
+    resolved = resolve_booker(live.get("ownerID") or "")
+    made_by = resolved[2] if resolved else ""
+    ok = crm_book(live | {"id": lead_id, "owner_id": live.get("ownerID") or ""},
+                  date_iso=date_iso, start=start,
+                  rep_owner_id=rep_owners.get(rep, ""), rep_name=rep,
+                  prev_appt=prev_appt, booked_ts=booked_ts, made_by=made_by)
+    crm_status = "updated" if ok else "failed"
+    if resolved:
+        booker_name, booker_owner_id, _made_by = resolved
+        link_status = "auto"
+    else:
+        booker_name, booker_owner_id = "Manual (calendar)", ""
+        link_status = "needs_owner"
+    return crm_status, link_status, booker_name, booker_owner_id
+
+
 # ---------------------------------------------------------------------------
 # Bookings table
 # ---------------------------------------------------------------------------
@@ -385,7 +541,8 @@ def get_lead(lead_id: str) -> dict | None:
 def load_bookings() -> dict[str, dict]:
     rows = _bq().query(
         "SELECT event_id, lead_id, status, appt_date, appt_start, appt_end,"
-        "       rep_name, link_status, crm_status, customer, postcode, booked_at"
+        "       rep_name, link_status, crm_status, customer, postcode, booked_at,"
+        "       booker_name, booker_owner_id, entered_by"
         f" FROM {BOOKINGS}").result()
     return {r["event_id"]: dict(r) for r in rows if r["event_id"]}
 
@@ -423,20 +580,22 @@ def update_booking(event_id: str, sets: dict) -> None:
 
 def handle_new(event: dict, rep: str, rep_owners: dict[str, str]) -> None:
     date_iso, start, end = event_times(event)
-    subject = event.get("subject") or ""
+    raw_subject = event.get("subject") or ""
+    subject = _strip_parens(raw_subject)  # keep parentheticals out of name/customer extraction
     text = event_text(event)
     pc = POSTCODE_RE.search(text)
-    lead, how = match_lead(subject, text)
+    lead, how = match_lead(subject, text, postcode=(pc.group() if pc else ""))
 
     # Anchor rule (from the 25 Aug dry run): rep categories are reused for
     # internal events — Trust Quiz, "Ask The Inventor", half-day blocks. Only
     # treat the event as a customer appointment if something ties it to a
     # customer: a postcode, a phone number, or an actual CRM lead match.
     if not pc and not PHONE_RE.search(text) and not lead:
-        _log(f"skip (no customer anchor): {subject!r} · {rep} · {date_iso} {start}")
+        _log(f"skip (no customer anchor): {raw_subject!r} · {rep} · {date_iso} {start}")
         return
 
     link_status, crm_status = "needs_link", "skipped"
+    booker_name, booker_owner_id = "Manual (calendar)", ""
     # customer fallback: the LAST name-looking chunk of the subject — manual
     # subjects tend to put the name after a dash ("Getting information - X Y")
     lead_id, customer = "", (
@@ -455,16 +614,14 @@ def handle_new(event: dict, rep: str, rep_owners: dict[str, str]) -> None:
                 # in the CRM — never overwrite, flag for a human
                 link_status, crm_status = "conflict", "conflict"
             else:
-                ok = crm_book(live | {"id": lead_id, "owner_id": live.get("ownerID") or ""},
-                              date_iso=date_iso, start=start,
-                              rep_owner_id=rep_owners.get(rep, ""), rep_name=rep,
-                              prev_appt=existing,
-                              booked_ts=_created_uk(event.get("createdDateTime")))
-                link_status, crm_status = "auto", ("updated" if ok else "failed")
+                crm_status, link_status, booker_name, booker_owner_id = _book_with_attribution(
+                    live, lead_id, date_iso=date_iso, start=start, rep=rep,
+                    rep_owners=rep_owners, prev_appt=existing,
+                    booked_ts=_created_uk(event.get("createdDateTime")))
 
     insert_booking(
         event_id=event["id"], lead_id=lead_id,
-        booker_username="watcher", booker_owner_id="", booker_name="Manual (calendar)",
+        booker_username="watcher", booker_owner_id=booker_owner_id, booker_name=booker_name,
         rep_name=rep, rep_owner_id=rep_owners.get(rep, ""),
         customer=customer, postcode=(pc.group().upper() if pc else ""),
         appt_date=date_iso, appt_start=start, appt_end=end,
@@ -472,7 +629,7 @@ def handle_new(event: dict, rep: str, rep_owners: dict[str, str]) -> None:
         status="active", appt_type="heating", is_rebook=False,
         entered_by="watcher", link_status=link_status, crm_status=crm_status)
     _log(f"NEW manual: {customer} · {rep} · {date_iso} {start} · "
-         f"link={link_status}({how or '-'}) crm={crm_status}")
+         f"link={link_status}({how or '-'}) crm={crm_status} booker={booker_name}")
 
 
 def handle_drift(event: dict, row: dict) -> None:
@@ -516,7 +673,7 @@ def retry_unlinked(bookings: dict[str, dict], rep_owners: dict[str, str],
         if not future and not include_past:
             continue
         text = f"{row['customer']} | {row['postcode']}"
-        lead, how = match_lead(row["customer"] or "", text)
+        lead, how = match_lead(row["customer"] or "", text, postcode=row.get("postcode") or "")
         if not lead:
             continue
         live = get_lead(lead["id"])
@@ -532,18 +689,53 @@ def retry_unlinked(bookings: dict[str, dict], rep_owners: dict[str, str],
             _log(f"RETRY -> conflict: {row['customer']} vs lead {lead['id']}")
             continue
         crm = "skipped"
+        sets = {"lead_id": lead["id"], "link_status": "auto", "crm_status": crm}
+        booker_name = row.get("booker_name") or "Manual (calendar)"  # unchanged unless resolved below
         if future:
             row_booked = row.get("booked_at")
-            ok = crm_book(live | {"id": lead["id"], "owner_id": live.get("ownerID") or ""},
-                          date_iso=row["appt_date"], start=row["appt_start"],
-                          rep_owner_id=rep_owners.get(row["rep_name"], ""),
-                          rep_name=row["rep_name"], prev_appt=existing,
-                          booked_ts=(row_booked.astimezone(UK).strftime("%Y-%m-%d %H:%M:%S")
-                                     if row_booked else ""))
-            crm = "updated" if ok else "failed"
-        update_booking(row["event_id"], {"lead_id": lead["id"],
-                                         "link_status": "auto", "crm_status": crm})
-        _log(f"LINKED ({how}): {row['customer']} -> lead {lead['id']} crm={crm}")
+            crm, link_status, booker_name, booker_owner_id = _book_with_attribution(
+                live, lead["id"], date_iso=row["appt_date"], start=row["appt_start"],
+                rep=row["rep_name"], rep_owners=rep_owners, prev_appt=existing,
+                booked_ts=(row_booked.astimezone(UK).strftime("%Y-%m-%d %H:%M:%S")
+                           if row_booked else ""))
+            sets.update(link_status=link_status, crm_status=crm,
+                        booker_name=booker_name, booker_owner_id=booker_owner_id)
+        update_booking(row["event_id"], sets)
+        _log(f"LINKED ({how}): {row['customer']} -> lead {lead['id']} crm={crm} booker={booker_name}")
+
+
+def self_heal(bookings: dict[str, dict]) -> None:
+    """Each run: for watcher rows booked in the last 7 days, re-check the linked
+    lead's LIVE CRM "Appointment Booked By" stamp — a human may have corrected
+    it, or set it after the owner-derived guess came up empty. The CRM stamp
+    always wins (see self_heal_decision); NEVER touches non-watcher rows.
+    """
+    cutoff = _now_uk() - timedelta(days=7)
+    for row in bookings.values():
+        if row.get("entered_by") != "watcher" or not row.get("lead_id"):
+            continue
+        booked_at = row.get("booked_at")
+        if not booked_at:
+            continue
+        try:
+            booked_uk = booked_at.astimezone(UK)
+        except (TypeError, ValueError):
+            continue
+        if booked_uk < cutoff:
+            continue
+        live = get_lead(row["lead_id"])
+        if live is None:
+            continue
+        decision = self_heal_decision(row.get("booker_name") or "Manual (calendar)",
+                                      live.get(SS_F_MADE_BY) or "")
+        if decision is None:
+            continue
+        new_name, new_owner_id = decision
+        sets = {"booker_name": new_name, "booker_owner_id": new_owner_id}
+        if row.get("link_status") == "needs_owner":
+            sets["link_status"] = "auto"
+        update_booking(row["event_id"], sets)
+        _log(f"SELF-HEAL: {row['customer']} booker -> {new_name} (CRM stamp)")
 
 
 def main() -> None:
@@ -573,10 +765,11 @@ def main() -> None:
     if args.dry_run:
         for e, r in new:
             d, s, _ = event_times(e)
-            subject = e.get("subject") or ""
+            subject = _strip_parens(e.get("subject") or "")
             text = event_text(e)
-            lead, how = match_lead(subject, text)
-            anchored = bool(POSTCODE_RE.search(text) or PHONE_RE.search(text) or lead)
+            pc = POSTCODE_RE.search(text)
+            lead, how = match_lead(subject, text, postcode=(pc.group() if pc else ""))
+            anchored = bool(pc or PHONE_RE.search(text) or lead)
             verdict = ("ADD linked=" + (f"{lead['id']} ({how})" if lead else "needs_link")
                        if anchored else "SKIP (no customer anchor)")
             _log(f"  {verdict}: {subject!r} · {r} · {d} {s}")
@@ -589,6 +782,7 @@ def main() -> None:
             handle_drift(e, bookings[e["id"]])
     handle_deletions(bookings, seen)
     retry_unlinked(bookings, rep_owners, include_past=args.sweep)
+    self_heal(bookings)
 
 
 if __name__ == "__main__":

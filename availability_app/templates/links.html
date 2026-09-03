@@ -79,6 +79,15 @@
   .badge{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;text-transform:uppercase;letter-spacing:.4px}
   .badge-needs-link{background:var(--indigo-soft);color:var(--indigo)}
   .badge-conflict{background:var(--amber-soft);color:#92400e}
+  .badge-needs-owner{background:var(--mint-soft);color:#1a7a5a}
+
+  /* needs_owner cards: appointment IS in the CRM, just needs a booker claimed —
+     visually distinct (mint left border) from the needs-a-lead cards above */
+  .link-card.needs-owner{border-left:4px solid var(--mint)}
+  .claim-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .claim-btn{padding:8px 14px;border-radius:9px;font-size:12.5px;font-weight:600;background:var(--mint-soft);color:#1a7a5a;box-shadow:var(--shadow-sm)}
+  .claim-btn:hover{box-shadow:var(--shadow-md)}
+  .claim-btn:disabled{opacity:.5;cursor:default}
 
   .search-row{display:flex;gap:8px;margin-top:12px}
   .search-input{flex:1;min-width:0;padding:8px 12px;border-radius:9px;border:1.5px solid var(--line);font-family:inherit;font-size:13px;color:var(--ink);outline:none}
@@ -279,11 +288,80 @@ function LinkCard({ booking, onLinked }) {
   );
 }
 
+/* ── One booking with a lead + CRM appointment already written, just needs
+   a booker claimed (the watcher couldn't resolve the owner) ── */
+const CLAIM_OPTIONS = [
+  { key: 'sue', label: 'Sue' },
+  { key: 'lily', label: 'Lily' },
+  { key: 'alicja', label: 'Alicja' },
+];
+
+function ClaimCard({ booking, onClaimed }) {
+  const [claiming, setClaiming] = useState(null);
+  const [msg, setMsg] = useState(null);
+
+  async function claim(key) {
+    setClaiming(key); setMsg(null);
+    try {
+      const resp = await fetch('/api/claim_booking', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_id: booking.event_id, booker: key }),
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        onClaimed(booking.event_id, data.message);
+      } else {
+        setMsg({ ok: false, text: data.message || 'Claim failed.' });
+      }
+    } catch (e) {
+      setMsg({ ok: false, text: String(e) });
+    } finally {
+      setClaiming(null);
+    }
+  }
+
+  return (
+    <div className="link-card needs-owner">
+      <div className="link-card-head">
+        <div className="link-meta">
+          <span className="link-date">{fmtIso(booking.appt_date)}</span>
+          <span className="link-time">{booking.appt_start}{booking.appt_end ? `–${booking.appt_end}` : ''}</span>
+          <span className="link-rep">{booking.rep_name}</span>
+          <span className="link-cust">{booking.customer || '(no customer name)'}</span>
+          {booking.postcode && <span className="link-pc">{booking.postcode}</span>}
+        </div>
+        <div style={{display:'flex', alignItems:'center', gap:10}}>
+          <span className="link-source">{entryLabel(booking.entered_by)}</span>
+          <span className="badge badge-needs-owner" title="Lead is linked and the CRM appointment is booked — just needs a booker claimed">
+            needs assigning
+          </span>
+        </div>
+      </div>
+
+      <div className="claim-row">
+        {CLAIM_OPTIONS.map(o => (
+          <button key={o.key} className="btn claim-btn" onClick={() => claim(o.key)} disabled={!!claiming}>
+            {claiming === o.key ? 'Assigning…' : `This was ${o.label}`}
+          </button>
+        ))}
+      </div>
+
+      {msg && <div className={`row-message ${msg.ok ? 'ok' : 'err'}`}>{msg.text}</div>}
+    </div>
+  );
+}
+
 function App() {
   const [bookings, setBookings] = useState(BOOKINGS || []);
   const [toast, setToast] = useState(null);
 
   function handleLinked(eventId, message) {
+    setBookings(bs => bs.filter(b => b.event_id !== eventId));
+    setToast(message);
+    setTimeout(() => setToast(null), 4000);
+  }
+
+  function handleClaimed(eventId, message) {
     setBookings(bs => bs.filter(b => b.event_id !== eventId));
     setToast(message);
     setTimeout(() => setToast(null), 4000);
@@ -296,14 +374,17 @@ function App() {
         <div className="page-header">
           <div>
             <div className="page-title">Link bookings</div>
-            <div className="page-sub">Appointments booked outside this tool (mostly Outlook, via the calendar watcher) that still need a CRM lead attached.</div>
+            <div className="page-sub">Appointments booked outside this tool (mostly Outlook, via the calendar watcher) that still need a CRM lead — or a booker — attached.</div>
           </div>
         </div>
 
         {bookings.length === 0
-          ? <div className="tl-empty">Nothing waiting to be linked — all active bookings have a lead.</div>
+          ? <div className="tl-empty">Nothing waiting — all active bookings have a lead and a booker.</div>
           : <div className="link-list">
-              {bookings.map(b => <LinkCard key={b.event_id} booking={b} onLinked={handleLinked} />)}
+              {bookings.map(b => b.link_status === 'needs_owner'
+                ? <ClaimCard key={b.event_id} booking={b} onClaimed={handleClaimed} />
+                : <LinkCard key={b.event_id} booking={b} onLinked={handleLinked} />
+              )}
             </div>
         }
       </main>

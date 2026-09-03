@@ -335,20 +335,46 @@ def _annotate_cancellable(diary: dict) -> None:
 
 
 def _get_link_bookings() -> list[dict]:
-    """Active bookings still needing a CRM link (needs_link/conflict) for the /links page.
+    """Active bookings still needing attention on the /links page.
 
-    Mostly the calendar watcher's manual-Outlook bookings, which arrive without a
-    lead attached — 'conflict' means a lead WAS matched but it already has a
-    different future appointment, so the watcher left it for a human to resolve.
+    Mostly the calendar watcher's manual-Outlook bookings:
+      - needs_link/conflict: no CRM lead attached yet ('conflict' = a lead WAS
+        matched but already has a different future appointment — left for a
+        human to resolve).
+      - needs_owner: a lead IS linked and the CRM appointment IS written, but
+        the watcher couldn't resolve who booked it from the lead's owner (not
+        one of the three telesales people) — the claim buttons fix that.
     """
     rows = list(_bq().query(
         f"SELECT event_id, rep_name, customer, postcode, appt_date, appt_start,"
-        f" appt_end, entered_by, link_status"
+        f" appt_end, entered_by, link_status, lead_id"
         f" FROM {BQ_BOOKINGS}"
-        f" WHERE status = 'active' AND link_status IN ('needs_link', 'conflict')"
+        f" WHERE status = 'active' AND link_status IN ('needs_link', 'conflict', 'needs_owner')"
         f" ORDER BY appt_date, appt_start"
     ).result())
     return [dict(r) for r in rows]
+
+
+# Owner ruling (3 Sep 2026) — same three telesales people as
+# calendar_watcher.VALID_BOOKER_OWNERS, for the /links "needs assigning" claim
+# buttons. (booker_name for app.bookings, booker_owner_id, CRM "Appointment
+# Booked By" picklist value.)
+CLAIM_BOOKERS: dict[str, tuple[str, str, str]] = {
+    "sue":    ("Sue England", "349724672", "Susan England"),
+    "lily":   ("Lily Harpham", "351874048", "Lily Harpham"),
+    "alicja": ("Alicja Aleksiuk", "368143360", "Alicja Aleksiuk"),
+}
+
+
+def _ss_set_made_by(lead_id: str, made_by_name: str) -> bool:
+    """Write ONLY the CRM "Appointment Booked By" picklist. Used by the /links
+    claim buttons — the appointment fields are already on the lead (the
+    calendar watcher wrote them); claiming just fixes who's credited."""
+    if made_by_name not in MADE_BY_OPTIONS:
+        return False
+    resp = _ss_call("updateLeads", {"objects": [{"id": str(lead_id), _SS_F_MADE_BY: made_by_name}]})
+    updates = (resp.get("result") or {}).get("updates", []) if resp else []
+    return bool(updates and updates[0].get("success"))
 
 
 def _get_active_booking(event_id: str) -> dict | None:
@@ -1563,6 +1589,73 @@ def api_link_booking():
     }[crm_status]
     return jsonify({"ok": True, "crm_status": crm_status,
                     "message": f"Lead linked.{tail}"})
+
+
+@app.route("/api/claim_booking", methods=["POST"])
+@login_required
+def api_claim_booking():
+    """Claim a calendar-watcher booking flagged link_status='needs_owner'.
+
+    The appointment is already booked in the CRM (the watcher wrote it) — the
+    watcher just couldn't tell who booked it because the lead's pre-booking
+    owner wasn't one of the three telesales people (see
+    calendar_watcher.VALID_BOOKER_OWNERS). Claiming sets the bookings row's
+    booker + writes the CRM "Appointment Booked By" picklist; any logged-in
+    telesales user can claim on behalf of Sue/Lily/Alicja.
+    """
+    data = request.get_json(silent=True) or {}
+    event_id = (data.get("event_id") or "").strip()
+    booker_key = (data.get("booker") or "").strip().lower()
+    if not event_id or booker_key not in CLAIM_BOOKERS:
+        return jsonify({"ok": False, "message": "Missing event_id or invalid booker"}), 400
+
+    booking = _get_active_booking(event_id)
+    if not booking or booking.get("link_status") != "needs_owner":
+        return jsonify({"ok": False, "message": "Booking not found or already assigned."}), 404
+
+    booker_name, booker_owner_id, made_by = CLAIM_BOOKERS[booker_key]
+    lead_id = booking.get("lead_id") or ""
+
+    crm_status = "skipped"
+    if lead_id:
+        try:
+            crm_status = "updated" if _ss_set_made_by(lead_id, made_by) else "failed"
+        except Exception:
+            app.logger.exception("Claim CRM write failed")
+            crm_status = "failed"
+
+    try:
+        _bq().query(
+            f"UPDATE {BQ_BOOKINGS} SET booker_name = @bn, booker_owner_id = @boid,"
+            f" link_status = 'auto' WHERE event_id = @e AND status = 'active'",
+            job_config=bigquery.QueryJobConfig(query_parameters=_bq_params(
+                bn=booker_name, boid=booker_owner_id, e=event_id,
+            )),
+        ).result()
+    except Exception:
+        app.logger.exception("Failed to update booking row after claim")
+
+    tail = {
+        "updated": " CRM updated.",
+        "failed":  " CRM update failed — update SharpSpring manually.",
+        "skipped": "",
+    }[crm_status]
+    return jsonify({"ok": True, "crm_status": crm_status,
+                    "message": f"Assigned to {booker_name}.{tail}"})
+
+
+@app.route("/api/needs_owner")
+@login_required
+def api_needs_owner():
+    """Lightweight poll for the main page's side-pop toast (all logged-in
+    telesales) — active bookings flagged link_status='needs_owner'."""
+    rows = list(_bq().query(
+        f"SELECT event_id, customer FROM {BQ_BOOKINGS}"
+        f" WHERE status = 'active' AND link_status = 'needs_owner'"
+        f" ORDER BY appt_date, appt_start"
+    ).result())
+    bookings = [dict(r) for r in rows]
+    return jsonify({"count": len(bookings), "bookings": bookings[:10]})
 
 
 @app.route("/api/reschedule", methods=["POST"])

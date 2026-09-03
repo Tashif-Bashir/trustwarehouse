@@ -330,9 +330,11 @@ def _ad_creatives_resource():
         client = MetaClient()
         # No effective_status filter — all ads regardless of status (Meta
         # excludes DELETED from this edge by default, confirmed live).
-        # page_limit=100: the default 500-row page 500s here once
-        # object_story_spec/asset_feed_spec are requested (confirmed live).
-        for row in client.ads(fields=_AD_CREATIVE_FIELDS, filtering=None, page_limit=100):
+        # page_limit=50: the default 500-row page 500s here once
+        # object_story_spec/asset_feed_spec are requested (confirmed live);
+        # 100 also started 500ing intermittently from 1 Sep 2026 and solidly
+        # on 3 Sep ("Please reduce the amount of data").
+        for row in client.ads(fields=_AD_CREATIVE_FIELDS, filtering=None, page_limit=50):
             yield _row_ad_creative(row)
 
     return ad_creatives
@@ -491,14 +493,33 @@ def run_pipeline(
         destination=dlt.destinations.bigquery(location="europe-west2"),
         dataset_name="bronze",
     )
+    # Spend resources commit in their own run: a single dlt package aborts
+    # entirely if ANY resource raises, and the dimension edges (/ads with
+    # creative specs) 500 intermittently on Meta's side — on 3 Sep 2026 that
+    # took campaign_daily down with it and the dashboard lost the day's Meta
+    # spend. Money data first, dimensions best-effort after.
     load_info = pipeline.run(
         [
             _campaign_daily_resource(since, until)(),
             _geographic_daily_resource(since, until)(),
             _ad_daily_resource(ad_since, until)(),
-            _ad_creatives_resource()(),
-            _campaigns_resource()(),
-            _adsets_resource()(),
         ]
     )
     print(load_info)
+
+    try:
+        load_info = pipeline.run(
+            [
+                _campaigns_resource()(),
+                _adsets_resource()(),
+            ]
+        )
+        print(load_info)
+    except Exception as e:  # noqa: BLE001 - stale dimensions beat a dead sync
+        print(f"WARNING: campaigns/adsets refresh failed, previous state kept: {e}")
+
+    try:
+        load_info = pipeline.run([_ad_creatives_resource()()])
+        print(load_info)
+    except Exception as e:  # noqa: BLE001 - stale dimensions beat a dead sync
+        print(f"WARNING: ad_creatives refresh failed, previous state kept: {e}")

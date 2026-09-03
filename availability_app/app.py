@@ -202,7 +202,9 @@ MADE_BY_OPTIONS = [
     "Gemma Taylor", "Susan England", "Alicja Aleksiuk", "Lily Harpham",
     "Reilly Andrew", "Josh Baron", "Kim Ellis", "Victoria Ramsden",
     "Alice Hardegon", "Declan Franks", "Other", "Amelia Konczewska",
-    "Alisha Moore", "Ashleigh Nankervis", "Peter Heaton",
+    "Alisha Moore", "Ashleigh Nankervis",
+    # "Peter Heaton" removed 3 Sep 2026 — internal sales since 1 Sep, no
+    # longer books appointments (still a live option in the CRM picklist).
 ]
 
 

@@ -476,7 +476,7 @@ def crm_book(lead: dict, *, date_iso: str, start: str, rep_owner_id: str,
     if prev_appt and prev_appt != new_appt:
         obj[SS_F_PREV_APPT] = prev_appt
     if made_by:
-        obj[SS_F_MADE_BY] = made_by
+        obj[SS_F_MADE_BY] = made_by_exact(made_by)
     resp = _ss()._call("updateLeads", {"objects": [obj]})
     updates = (resp.get("updates") if isinstance(resp, dict) else resp) or []
     ok = bool(updates and updates[0].get("success"))
@@ -501,6 +501,36 @@ def crm_move(lead_id: str, *, date_iso: str, start: str, prev_appt: str) -> bool
     resp = _ss()._call("updateLeads", {"objects": [obj]})
     updates = (resp.get("updates") if isinstance(resp, dict) else resp) or []
     return bool(updates and updates[0].get("success"))
+
+
+_made_by_cache: dict = {"map": {}}
+
+
+def made_by_exact(name: str) -> str:
+    """Exact stored picklist value for a Booked-By name (whitespace-tolerant).
+
+    The CRM keeps options byte-for-byte and the UI hides trailing spaces
+    ('Jess Wadkin ' on 3 Sep 2026); a write that differs by whitespace shows
+    'Saved value not in list'. One getFields per run; falls back to the name.
+    """
+    n = (name or "").strip()
+    if not n:
+        return ""
+    if not _made_by_cache["map"]:
+        try:
+            resp = _ss()._call("getFields", {"where": {"systemName": SS_F_MADE_BY}})
+            fields = resp.get("field", []) if isinstance(resp, dict) else []
+            opts = (fields[0].get("options") or []) if fields else []
+            m = {}
+            for o in opts:
+                v = o.get("value") if isinstance(o, dict) else o
+                if isinstance(v, str) and v.strip():
+                    m[v.strip()] = v
+            if m:
+                _made_by_cache["map"] = m
+        except Exception:  # noqa: BLE001 - lookup is best-effort
+            pass
+    return _made_by_cache["map"].get(n, n)
 
 
 def get_lead(lead_id: str) -> dict | None:
@@ -730,7 +760,7 @@ def self_heal(bookings: dict[str, dict]) -> None:
         if live is None:
             continue
         decision = self_heal_decision(row.get("booker_name") or "Manual (calendar)",
-                                      live.get(SS_F_MADE_BY) or "")
+                                      (live.get(SS_F_MADE_BY) or "").strip())
         if decision is None:
             continue
         new_name, new_owner_id = decision

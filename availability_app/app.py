@@ -208,6 +208,40 @@ MADE_BY_OPTIONS = [
     # longer books appointments (still a live option in the CRM picklist).
 ]
 
+_made_by_cache: dict = {"at": 0.0, "map": {}}
+
+
+def _made_by_valid(name: str) -> bool:
+    """Whitespace-tolerant membership test against MADE_BY_OPTIONS."""
+    return (name or "").strip() in MADE_BY_OPTIONS
+
+
+def _made_by_exact(name: str) -> str:
+    """Resolve a Booked-By name to the EXACT value stored in the CRM picklist.
+
+    SharpSpring keeps picklist options byte-for-byte and the UI can't show
+    trailing whitespace ('Jess Wadkin ' arrived that way on 3 Sep 2026). A
+    write that differs by a space shows 'Saved value not in list' on the lead,
+    so writers must send the stored value, not the human one. Live lookup via
+    getFields, cached ~1h; falls back to the trimmed name if the API is down.
+    """
+    import time
+    n = (name or "").strip()
+    if not n:
+        return ""
+    if not _made_by_cache["map"] or time.time() - _made_by_cache["at"] > 3600:
+        resp = _ss_call("getFields", {"where": {"systemName": _SS_F_MADE_BY}})
+        fields = (resp.get("result") or {}).get("field", []) if resp else []
+        opts = (fields[0].get("options") or []) if fields else []
+        m: dict[str, str] = {}
+        for o in opts:
+            v = o.get("value") if isinstance(o, dict) else o
+            if isinstance(v, str) and v.strip():
+                m[v.strip()] = v
+        if m:
+            _made_by_cache.update(at=time.time(), map=m)
+    return _made_by_cache["map"].get(n, n)
+
 
 def _get_all_reps() -> list[dict]:
     rows = list(_bq().query(
@@ -375,9 +409,9 @@ def _ss_set_made_by(lead_id: str, made_by_name: str) -> bool:
     """Write ONLY the CRM "Appointment Booked By" picklist. Used by the /links
     claim buttons — the appointment fields are already on the lead (the
     calendar watcher wrote them); claiming just fixes who's credited."""
-    if made_by_name not in MADE_BY_OPTIONS:
+    if not _made_by_valid(made_by_name):
         return False
-    resp = _ss_call("updateLeads", {"objects": [{"id": str(lead_id), _SS_F_MADE_BY: made_by_name}]})
+    resp = _ss_call("updateLeads", {"objects": [{"id": str(lead_id), _SS_F_MADE_BY: _made_by_exact(made_by_name)}]})
     updates = (resp.get("result") or {}).get("updates", []) if resp else []
     return bool(updates and updates[0].get("success"))
 
@@ -741,7 +775,7 @@ def _ss_update_lead(lead_id: str, *, date_iso: str, start_time: str,
     if rep_owner_id:
         obj["ownerID"] = str(rep_owner_id)
     if made_by_name:
-        obj[_SS_F_MADE_BY] = made_by_name
+        obj[_SS_F_MADE_BY] = _made_by_exact(made_by_name)
     if street:
         obj["street"] = street
     if postcode:
@@ -1548,7 +1582,7 @@ def api_link_booking():
     rep_name = booking.get("rep_name") or ""
     linker = _get_user(session.get("username", "")) or {}
     made_by = linker.get("sharpspring_name") or ""
-    if made_by not in MADE_BY_OPTIONS:
+    if not _made_by_valid(made_by):
         made_by = ""
 
     crm_status = "skipped"
@@ -1981,7 +2015,7 @@ def admin_set_user_sharpspring():
     ss_name  = (request.form.get("sharpspring_name") or "").strip()
     if not username:
         abort(400)
-    if ss_name and ss_name not in MADE_BY_OPTIONS:
+    if ss_name and not _made_by_valid(ss_name):
         ss_name = ""  # never store a value that isn't a valid picklist option
     now = datetime.now(timezone.utc).isoformat()
     _bq().query(

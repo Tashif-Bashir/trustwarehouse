@@ -16,6 +16,9 @@ export const AGENTS: AgentConfig[] = [
   // Alisha left the business 4 Aug 2026 — removed from the roster.
   // Peter moved telesales -> internal sales 1 Sep 2026 — off this board,
   // he lives on the sales & ops board (TEAM_AGENTS) now.
+  // New starters Mon 7 Sep 2026: Ascend ext 1103 / 1107.
+  { id: 'amanda', name: 'Amanda', color: '#eb6834' },
+  { id: 'jess', name: 'Jess', color: '#f5b700' },
 ]
 
 // Second wallboard: sales & ops (own screen). Calls only — no
@@ -124,6 +127,19 @@ export const SOURCE_NAMES: Record<
   // Peter removed 3 Sep 2026 (internal sales since 1 Sep): dropping him here
   // takes his calls AND his historical bookings out of the telesales
   // queries entirely (queryAppointments filters on these names).
+  // Amanda Romans (CRM user 377646080) + Jess Wadkin (377645056), start
+  // 7 Sep 2026. Ascend caller names PROVISIONAL (display names in the
+  // console) — confirm against bronze.ascend_calls after their first calls.
+  amanda: {
+    ascend: ['Amanda Romans', 'Amanda'],
+    appBookers: ['Amanda Romans', 'Amanda'],
+    crm: ['Amanda Romans', 'Amanda'],
+  },
+  jess: {
+    ascend: ['Jess Wadkin', 'Jess'],
+    appBookers: ['Jess Wadkin', 'Jess'],
+    crm: ['Jess Wadkin', 'Jess'],
+  },
 }
 
 // The trophy is a daily TARGET: every agent who books at least this many

@@ -96,6 +96,9 @@ VALID_BOOKER_OWNERS: dict[str, tuple[str, str]] = {
     "349724672": ("Sue England", "Susan England"),
     "351874048": ("Lily Harpham", "Lily Harpham"),
     "368143360": ("Alicja Aleksiuk", "Alicja Aleksiuk"),
+    # Telesales starters Mon 7 Sep 2026 (owner, 3 Sep).
+    "377646080": ("Amanda Romans", "Amanda Romans"),
+    "377645056": ("Jess Wadkin", "Jess Wadkin"),
 }
 # Reverse lookup for the self-heal pass: CRM made-by picklist value -> the
 # app.bookings booker identity it implies.

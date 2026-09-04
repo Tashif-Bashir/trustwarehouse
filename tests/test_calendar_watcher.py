@@ -62,7 +62,9 @@ def test_resolve_booker_strips_whitespace():
 
 def test_valid_booker_owners_exactly_three():
     """Owner ruling: exactly these three IDs, no more, no fewer."""
-    assert set(VALID_BOOKER_OWNERS.keys()) == {"349724672", "351874048", "368143360"}
+    assert set(VALID_BOOKER_OWNERS.keys()) == {
+        "349724672", "351874048", "368143360", "377646080", "377645056",
+    }
 
 
 # ---------------------------------------------------------------------------

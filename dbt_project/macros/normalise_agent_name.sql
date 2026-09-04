@@ -13,6 +13,8 @@
         when lower({{ column }}) in ('josh', 'josh baron')             then 'Josh Baron'
         when lower({{ column }}) in ('victoria', 'victoria ramsden')   then 'Victoria'
         when lower({{ column }}) in ('gemma', 'gemma taylor')          then 'Gemma Taylor'
+        when lower({{ column }}) in ('amanda', 'amanda romans')        then 'Amanda Romans'
+        when lower({{ column }}) in ('jess', 'jess wadkin')            then 'Jess Wadkin'
         when lower({{ column }}) = 'other'                             then null
         else {{ column }}
     end

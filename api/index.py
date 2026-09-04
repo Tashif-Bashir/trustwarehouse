@@ -285,7 +285,10 @@ def _speed_to_call(d0, d1):
 # fields inbound only (e.g., Helen, Lucy), or is in a different department
 # (e.g., Josh Baron, Alice Hardegon). The manager's Q2 Telesales Tracker
 # spreadsheet has monthly sheets only for these four.
-TELESALES_AGENTS = ('Lily', 'Sue', 'Alicja Aleksiuk', 'Alisha')
+# Alisha left 4 Aug 2026 (kept for history); Amanda Romans + Jess Wadkin
+# joined 7 Sep 2026; Peter Heaton (telesales 30 Jul-1 Sep 2026) was never
+# added here — he moved to internal sales before this list was touched.
+TELESALES_AGENTS = ('Lily', 'Sue', 'Alicja Aleksiuk', 'Alisha', 'Amanda Romans', 'Jess Wadkin')
 
 
 def _telesales(d0, d1):
@@ -349,6 +352,8 @@ def _telesales_pre_appt(d0, d1):
                 WHEN LOWER(appointment_made_by) IN ('sue','susan england') THEN 'Sue'
                 WHEN LOWER(appointment_made_by) IN ('alicja','alicja aleksiuk') THEN 'Alicja Aleksiuk'
                 WHEN LOWER(appointment_made_by) IN ('alisha','alisha moore') THEN 'Alisha'
+                WHEN LOWER(appointment_made_by) IN ('amanda','amanda romans') THEN 'Amanda Romans'
+                WHEN LOWER(appointment_made_by) IN ('jess','jess wadkin') THEN 'Jess Wadkin'
                 ELSE appointment_made_by
               END AS agent_name,
               COUNT(*) AS pre_appt
@@ -394,6 +399,8 @@ def _telesales_whiteboard():
                 WHEN LOWER(appointment_made_by) IN ('sue','susan england') THEN 'Sue'
                 WHEN LOWER(appointment_made_by) IN ('alicja','alicja aleksiuk') THEN 'Alicja Aleksiuk'
                 WHEN LOWER(appointment_made_by) IN ('alisha','alisha moore') THEN 'Alisha'
+                WHEN LOWER(appointment_made_by) IN ('amanda','amanda romans') THEN 'Amanda Romans'
+                WHEN LOWER(appointment_made_by) IN ('jess','jess wadkin') THEN 'Jess Wadkin'
                 ELSE appointment_made_by
               END"""
 
@@ -430,6 +437,8 @@ def _telesales_whiteboard():
                 WHEN LOWER(booker_name) LIKE 'sue%' OR LOWER(booker_name) LIKE 'susan%' THEN 'Sue'
                 WHEN LOWER(booker_name) LIKE 'alicja%'                                  THEN 'Alicja Aleksiuk'
                 WHEN LOWER(booker_name) LIKE 'alisha%'                                  THEN 'Alisha'
+                WHEN LOWER(booker_name) LIKE 'amanda%'                                  THEN 'Amanda Romans'
+                WHEN LOWER(booker_name) LIKE 'jess%'                                    THEN 'Jess Wadkin'
                 ELSE booker_name
               END AS agent_name,
               DATE(booked_at, 'Europe/London') AS booked_date

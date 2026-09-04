@@ -203,6 +203,7 @@ MADE_BY_OPTIONS = [
     "Reilly Andrew", "Josh Baron", "Kim Ellis", "Victoria Ramsden",
     "Alice Hardegon", "Declan Franks", "Other", "Amelia Konczewska",
     "Alisha Moore", "Ashleigh Nankervis",
+    "Amanda Romans", "Jess Wadkin",  # telesales starters 7 Sep 2026
     # "Peter Heaton" removed 3 Sep 2026 — internal sales since 1 Sep, no
     # longer books appointments (still a live option in the CRM picklist).
 ]
@@ -365,6 +366,8 @@ CLAIM_BOOKERS: dict[str, tuple[str, str, str]] = {
     "sue":    ("Sue England", "349724672", "Susan England"),
     "lily":   ("Lily Harpham", "351874048", "Lily Harpham"),
     "alicja": ("Alicja Aleksiuk", "368143360", "Alicja Aleksiuk"),
+    "amanda": ("Amanda Romans", "377646080", "Amanda Romans"),  # from 7 Sep 2026
+    "jess":   ("Jess Wadkin", "377645056", "Jess Wadkin"),
 }
 
 
@@ -612,7 +615,9 @@ APPT_TYPES     = ("heating", "water", "both")
 OTHER_OUTCOMES = ("", "Follow Up", "Not Interested")
 # Agents you can book on behalf of (the telesales team) — must have
 # sharpspring_name + owner id set in app.users.
-BOOK_FOR_USERNAMES = ("lily", "sue", "alicja", "alisha")  # peter moved to internal sales 1 Sep 2026
+# peter moved to internal sales 1 Sep 2026; alisha left 4 Aug 2026 (Ascend seat retired 3 Sep);
+# amanda + jess start 7 Sep 2026.
+BOOK_FOR_USERNAMES = ("lily", "sue", "alicja", "amanda", "jess")
 ENQUIRY_TYPES  = ("", "Heating", "Water", "Heating and Water")  # '' = don't write
 
 

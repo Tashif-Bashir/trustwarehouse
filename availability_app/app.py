@@ -199,7 +199,7 @@ def _row_to_rep(row) -> dict:
 # (field appointment_made_by_65e1a90253305). A booking user's sharpspring_name
 # must match one of these exactly, or be left blank.
 MADE_BY_OPTIONS = [
-    "Gemma Taylor", "Susan England", "Alicja Aleksiuk", "Lily Harpham",
+    "Gemma Taylor", "Susan England", "Alicja Aleksiuk",  # "Lily Harpham" removed 10 Sep 2026 (left)
     "Reilly Andrew", "Josh Baron", "Kim Ellis", "Victoria Ramsden",
     "Alice Hardegon", "Declan Franks", "Other", "Amelia Konczewska",
     "Alisha Moore", "Ashleigh Nankervis",
@@ -398,7 +398,6 @@ def _get_link_bookings() -> list[dict]:
 # Booked By" picklist value.)
 CLAIM_BOOKERS: dict[str, tuple[str, str, str]] = {
     "sue":    ("Sue England", "349724672", "Susan England"),
-    "lily":   ("Lily Harpham", "351874048", "Lily Harpham"),
     "alicja": ("Alicja Aleksiuk", "368143360", "Alicja Aleksiuk"),
     "amanda": ("Amanda Romans", "377646080", "Amanda Romans"),  # from 7 Sep 2026
     "jess":   ("Jess Wadkin", "377645056", "Jess Wadkin"),
@@ -651,7 +650,7 @@ OTHER_OUTCOMES = ("", "Follow Up", "Not Interested")
 # sharpspring_name + owner id set in app.users.
 # peter moved to internal sales 1 Sep 2026; alisha left 4 Aug 2026 (Ascend seat retired 3 Sep);
 # amanda + jess start 7 Sep 2026.
-BOOK_FOR_USERNAMES = ("lily", "sue", "alicja", "amanda", "jess")
+BOOK_FOR_USERNAMES = ("sue", "alicja", "amanda", "jess")  # lily left 10 Sep 2026
 ENQUIRY_TYPES  = ("", "Heating", "Water", "Heating and Water")  # '' = don't write
 
 

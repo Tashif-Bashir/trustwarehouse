@@ -10,7 +10,7 @@ export interface AgentConfig {
 }
 
 export const AGENTS: AgentConfig[] = [
-  { id: 'lily', name: 'Lily', color: '#2a78d6' },
+  // Lily left the business 10 Sep 2026 — removed from the roster.
   { id: 'sue', name: 'Sue', color: '#1baf7a' },
   { id: 'alicja', name: 'Alicja', color: '#e87ba4' },
   // Alisha left the business 4 Aug 2026 — removed from the roster.
@@ -109,11 +109,6 @@ export const SOURCE_NAMES: Record<
   string,
   { ascend: string[]; appBookers: string[]; crm: string[] }
 > = {
-  lily: {
-    ascend: ['Lily'],
-    appBookers: ['Lily Harpman', 'Lily Harpham'],
-    crm: ['Lily Harpham', 'Lily'],
-  },
   sue: {
     ascend: ['Sue'],
     appBookers: ['Sue England'],

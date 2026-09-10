@@ -29,8 +29,8 @@ def test_resolve_booker_sue():
     assert resolve_booker("349724672") == ("Sue England", "349724672", "Susan England")
 
 
-def test_resolve_booker_lily():
-    assert resolve_booker("351874048") == ("Lily Harpham", "351874048", "Lily Harpham")
+def test_resolve_booker_amanda():
+    assert resolve_booker("377646080") == ("Amanda Romans", "377646080", "Amanda Romans")
 
 
 def test_resolve_booker_alicja():
@@ -63,7 +63,7 @@ def test_resolve_booker_strips_whitespace():
 def test_valid_booker_owners_exactly_three():
     """Owner ruling: exactly these three IDs, no more, no fewer."""
     assert set(VALID_BOOKER_OWNERS.keys()) == {
-        "349724672", "351874048", "368143360", "377646080", "377645056",
+        "349724672", "368143360", "377646080", "377645056",
     }
 
 
@@ -76,8 +76,8 @@ def test_self_heal_maps_crm_stamp_to_booker():
 
 
 def test_self_heal_overrides_wrong_owner_guess():
-    """A human CRM correction (Lily) beats a stale owner-derived guess (Sue)."""
-    assert self_heal_decision("Sue England", "Lily Harpham") == ("Lily Harpham", "351874048")
+    """A human CRM correction (Alicja) beats a stale owner-derived guess (Sue)."""
+    assert self_heal_decision("Sue England", "Alicja Aleksiuk") == ("Alicja Aleksiuk", "368143360")
 
 
 def test_self_heal_noop_when_already_matching():

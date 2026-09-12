@@ -17,7 +17,11 @@ from scripts.calendar_watcher import (  # noqa: E402
     _norm_postcode,
     _pick_unique,
     _strip_parens,
+    event_stamp,
+    known_skip,
+    load_skip_cache,
     resolve_booker,
+    save_skip_cache,
     self_heal_decision,
 )
 
@@ -148,3 +152,38 @@ def test_pick_unique_ambiguous_candidates():
         "2": {"id": "2", "name": "John Smith"},
     }
     assert _pick_unique(cands) is None
+
+
+# ---------------------------------------------------------------------------
+# skip cache — the 12 Sep 2026 cost fix: a skipped event is not re-searched
+# every run; an edited event is.
+
+
+def _ev(eid: str, modified: str, created: str = "2026-09-01T08:00:00.0000000Z") -> dict:
+    return {"id": eid, "subject": "Internal sales meeting",
+            "createdDateTime": created, "lastModifiedDateTime": modified}
+
+
+def test_known_skip_matches_only_the_same_version():
+    cache = {"ev1": "2026-09-01T09:00:00"}
+    assert known_skip(_ev("ev1", "2026-09-01T09:00:00.0000000Z"), cache)
+    assert not known_skip(_ev("ev1", "2026-09-05T10:30:00.0000000Z"), cache)  # edited since
+    assert not known_skip(_ev("ev2", "2026-09-01T09:00:00.0000000Z"), cache)  # never seen
+
+
+def test_event_stamp_falls_back_to_created():
+    assert event_stamp({"createdDateTime": "2026-09-01T08:00:00.0000000Z"}) == "2026-09-01T08:00:00"
+    assert event_stamp({}) == ""
+
+
+def test_skip_cache_round_trip_prunes_ids_outside_the_window(tmp_path):
+    path = tmp_path / "skipped.json"
+    save_skip_cache({"keep": "a", "gone": "b"}, keep_ids={"keep"}, path=path)
+    assert load_skip_cache(path) == {"keep": "a"}
+
+
+def test_skip_cache_missing_or_corrupt_file_is_empty(tmp_path):
+    assert load_skip_cache(tmp_path / "nope.json") == {}
+    bad = tmp_path / "bad.json"
+    bad.write_text("not json", encoding="utf-8")
+    assert load_skip_cache(bad) == {}

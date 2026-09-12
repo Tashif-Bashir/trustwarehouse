@@ -48,6 +48,8 @@ Booker attribution + needs_owner + old-lead (name+postcode) linking added
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import re
 import sys
 from datetime import datetime, timedelta, timezone
@@ -71,6 +73,15 @@ from ingestion.sharpspring.client import SharpSpringClient  # noqa: E402
 
 UK = ZoneInfo("Europe/London")
 PROJECT = "trustwarehouse"
+
+# Events the watcher has already examined and skipped ("no customer anchor").
+# Cost fix, 12 Sep 2026: before this cache every run re-ran the BigQuery name
+# lookups for every non-customer event in the window (a recurring "Internal
+# sales meeting" series alone was ~11,500 scans/day, ~2.5 TiB in 12 days).
+# Keyed by event id -> the event's lastModifiedDateTime, so an edited event
+# is examined again; ids no longer in the window are pruned on every run.
+SKIP_CACHE = Path(os.environ.get("WATCHER_SKIP_CACHE")
+                  or Path.home() / ".cache" / "calendar_watcher_skipped.json")
 BOOKINGS = f"`{PROJECT}.app.bookings`"
 WINDOW_DAYS = 60
 
@@ -178,6 +189,35 @@ def _log(msg: str) -> None:
 # ---------------------------------------------------------------------------
 # Graph
 # ---------------------------------------------------------------------------
+
+def event_stamp(event: dict) -> str:
+    """The value the skip cache stores for an event: its last-modified time
+    (falls back to created time), so a later edit invalidates the skip."""
+    return (event.get("lastModifiedDateTime") or event.get("createdDateTime") or "")[:19]
+
+
+def known_skip(event: dict, cache: dict[str, str]) -> bool:
+    """True when this exact version of the event was already skipped."""
+    return cache.get(event.get("id") or "") == event_stamp(event)
+
+
+def load_skip_cache(path: Path = SKIP_CACHE) -> dict[str, str]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_skip_cache(cache: dict[str, str], keep_ids: set[str], path: Path = SKIP_CACHE) -> None:
+    """Persist the cache, pruned to ids still in the window (bounded size)."""
+    pruned = {k: v for k, v in cache.items() if k in keep_ids}
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(pruned, sort_keys=True), encoding="utf-8")
+    except OSError as e:  # never let the cache break the run
+        _log(f"skip-cache write failed: {e}")
+
 
 def fetch_window() -> list[dict]:
     """All events today .. +WINDOW_DAYS, UK wall-clock times, with id/body/created."""
@@ -610,7 +650,8 @@ def update_booking(event_id: str, sets: dict) -> None:
 # The three reconciliations
 # ---------------------------------------------------------------------------
 
-def handle_new(event: dict, rep: str, rep_owners: dict[str, str]) -> None:
+def handle_new(event: dict, rep: str, rep_owners: dict[str, str],
+               skip_cache: dict[str, str] | None = None) -> None:
     date_iso, start, end = event_times(event)
     raw_subject = event.get("subject") or ""
     subject = _strip_parens(raw_subject)  # keep parentheticals out of name/customer extraction
@@ -622,8 +663,12 @@ def handle_new(event: dict, rep: str, rep_owners: dict[str, str]) -> None:
     # internal events — Trust Quiz, "Ask The Inventor", half-day blocks. Only
     # treat the event as a customer appointment if something ties it to a
     # customer: a postcode, a phone number, or an actual CRM lead match.
+    # A skipped event is remembered (id -> stamp) so the lookups above are
+    # not repeated every five minutes for the life of the event.
     if not pc and not PHONE_RE.search(text) and not lead:
         _log(f"skip (no customer anchor): {raw_subject!r} · {rep} · {date_iso} {start}")
+        if skip_cache is not None:
+            skip_cache[event["id"]] = event_stamp(event)
         return
 
     link_status, crm_status = "needs_link", "skipped"
@@ -789,11 +834,14 @@ def main() -> None:
     # seconds before inserting its bookings row — without this, the watcher
     # could misread an in-flight app booking as manual and double-write.
     cutoff = (datetime.now(timezone.utc) - timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%S")
-    new = [(e, r) for e, r in appts
-           if e["id"] not in bookings
-           and (e.get("createdDateTime") or "")[:19] < cutoff]
+    skip_cache = load_skip_cache()
+    candidates = [(e, r) for e, r in appts
+                  if e["id"] not in bookings
+                  and (e.get("createdDateTime") or "")[:19] < cutoff]
+    new = [(e, r) for e, r in candidates if not known_skip(e, skip_cache)]
     _log(f"window: {len(events)} events, {len(appts)} appointments, "
-         f"{len(new)} new manual, {len(bookings)} booking rows")
+         f"{len(new)} new manual ({len(candidates) - len(new)} known skips), "
+         f"{len(bookings)} booking rows")
     if args.dry_run:
         for e, r in new:
             d, s, _ = event_times(e)
@@ -808,7 +856,8 @@ def main() -> None:
         return
 
     for e, r in new:
-        handle_new(e, r, rep_owners)
+        handle_new(e, r, rep_owners, skip_cache=skip_cache)
+    save_skip_cache(skip_cache, seen)
     for e, r in appts:
         if e["id"] in bookings and bookings[e["id"]]["status"] == "active":
             handle_drift(e, bookings[e["id"]])

@@ -1,9 +1,12 @@
 import { BigQuery } from '@google-cloud/bigquery'
 import {
-  AGENTS, BOARDS, MORNING_QUERY_WINDOW, PIPELINE_REFRESH_MS, SOURCE_NAMES, TEAM_AGENTS,
-  TEAM_ASCEND_NAMES,
+  AGENTS, BOARDS, MORNING_QUERY_WINDOW, PIPELINE_REFRESH_MS, REP_WEEK_EXCLUDE_FIRST_NAMES,
+  REP_WEEK_LOOKBACK_DAYS, REP_WEEK_REFRESH_MS, REP_WEEK_SLOTS_PER_DAY, REP_WEEK_TARGET,
+  SOURCE_NAMES, TEAM_AGENTS, TEAM_ASCEND_NAMES, WEEKEND_MIN_BOOKINGS,
 } from '../config'
-import type { DoorsMetrics, Metrics, PipelineMetrics, SalesMetrics } from '../types'
+import type {
+  DoorsMetrics, Metrics, PipelineMetrics, RepWeekMetrics, RepWeekRow, RepWeekWeek, SalesMetrics,
+} from '../types'
 
 // Real data provider.
 //
@@ -836,6 +839,185 @@ async function querySales(): Promise<SalesMetrics | null> {
   }
 }
 
+// ── Rep week (telesales board) ───────────────────────────────────────────
+// The field reps' Mon->Sun diary, this week and next: how many ACTIVE
+// bookings each rep has on each day, how far short of the weekly target
+// they are, and which day has the most holes. Owner rulings 14 Sep 2026.
+//
+// Everything here is app.bookings / app.reps, which live in the US region —
+// one UNIONed query rather than three (10MB-per-query floor, same reasoning
+// as queryPipeline above). Cached on its own slower cadence
+// (REP_WEEK_REFRESH_MS): next week's diary does not move minute to minute.
+//
+// appt_date is a STRING 'YYYY-MM-DD', so the window is a STRING comparison
+// (no parse, no scan penalty); SAFE.PARSE_DATE is only used where a real
+// DATE is genuinely needed — the Sat/Sun test on the lookback arm.
+let repWeekCache: { value: RepWeekMetrics; at: number } | null = null
+
+const REP_WEEK_DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+// Monday of the week containing `date` ('YYYY-MM-DD', Europe/London).
+function ukWeekStart(date: string): string {
+  const d = new Date(date + 'T12:00:00Z')
+  const weekday = (d.getUTCDay() + 6) % 7 // 0 = Monday
+  return addDays(date, -weekday)
+}
+
+// Rob / Josh / Scott are off the board (owner 14 Sep 2026) — matched on the
+// first name, lowercased, by prefix.
+function repWeekExcluded(name: string): boolean {
+  const first = name.trim().toLowerCase().split(/\s+/)[0] ?? ''
+  return REP_WEEK_EXCLUDE_FIRST_NAMES.some((x) => first.startsWith(x))
+}
+
+interface RepWeekRawRow {
+  kind: string
+  k: string // rep name
+  d: string | null // 'YYYY-MM-DD' on the 'day' arm
+  n: number
+  we: number
+}
+
+// Degrades to null on any BigQuery hiccup — the takeover simply never
+// renders rather than blanking the board (same contract as queryPipeline).
+async function queryRepWeek(): Promise<RepWeekMetrics | null> {
+  if (repWeekCache && Date.now() - repWeekCache.at < REP_WEEK_REFRESH_MS) {
+    return repWeekCache.value
+  }
+
+  const today = ukToday()
+  const thisMonday = ukWeekStart(today)
+  const nextMonday = addDays(thisMonday, 7)
+  const windowEnd = addDays(thisMonday, 13)
+  const lookback = Math.round(REP_WEEK_LOOKBACK_DAYS)
+
+  try {
+    const [usRows] = await client().query({
+      query: `
+        -- (a) per rep per day in the two-week window: ACTIVE bookings only,
+        --     so a cancellation reopens the gap (owner 14 Sep 2026).
+        SELECT 'day' AS kind, rep_name AS k, appt_date AS d,
+               COUNTIF(status = 'active') AS n, 0 AS we
+        FROM \`${PROJECT}.app.bookings\`
+        WHERE appt_date BETWEEN @d0 AND @d1
+          AND rep_name IS NOT NULL AND rep_name != ''
+          AND customer NOT LIKE 'Zzz Testlead%'
+        GROUP BY k, d
+        UNION ALL
+        -- (b) the last ${lookback} days: who is still active at all, and who
+        --     actually works weekends (>= WEEKEND_MIN_BOOKINGS Sat/Sun).
+        SELECT 'hist', rep_name, NULL, COUNT(*),
+               COUNTIF(EXTRACT(DAYOFWEEK FROM SAFE.PARSE_DATE('%Y-%m-%d', appt_date)) IN (1, 7))
+        FROM \`${PROJECT}.app.bookings\`
+        WHERE status = 'active'
+          AND SAFE.PARSE_DATE('%Y-%m-%d', appt_date)
+              BETWEEN DATE_SUB(CURRENT_DATE('Europe/London'), INTERVAL ${lookback} DAY)
+                  AND CURRENT_DATE('Europe/London')
+          AND rep_name IS NOT NULL AND rep_name != ''
+        GROUP BY rep_name
+        UNION ALL
+        -- (c) the roster, so a rep with an empty fortnight still shows a row.
+        SELECT 'roster', name, NULL, 0, 0
+        FROM \`${PROJECT}.app.reps\`
+      `,
+      params: { d0: thisMonday, d1: windowEnd },
+      location: 'US',
+    })
+    const rows = usRows as RepWeekRawRow[]
+
+    const countByRepDay = new Map<string, number>()
+    const inWindow = new Set<string>()
+    const activeRecently = new Set<string>()
+    const weekendWorkers = new Set<string>()
+    const roster = new Set<string>()
+
+    for (const row of rows) {
+      const name = String(row.k ?? '').trim()
+      if (!name) continue
+      if (row.kind === 'day') {
+        inWindow.add(name)
+        countByRepDay.set(`${name}|${row.d}`, Number(row.n ?? 0))
+      } else if (row.kind === 'hist') {
+        activeRecently.add(name)
+        if (Number(row.we ?? 0) >= WEEKEND_MIN_BOOKINGS) weekendWorkers.add(name)
+      } else if (row.kind === 'roster') {
+        roster.add(name)
+      }
+    }
+
+    // The board = roster ∪ anyone with bookings in the window, minus anyone
+    // who has neither booked in the last 56 days nor has anything in the
+    // window (leavers and never-used roster rows), minus the excluded names.
+    const names = [...new Set([...roster, ...inWindow])]
+      .filter((n) => activeRecently.has(n) || inWindow.has(n))
+      .filter((n) => !repWeekExcluded(n))
+      .sort((a, b) => a.localeCompare(b))
+
+    const buildWeek = (start: string, label: string): RepWeekWeek => {
+      const days = Array.from({ length: 7 }, (_, i) => addDays(start, i))
+      const rows: RepWeekRow[] = names.map((name) => {
+        const weekendWorker = weekendWorkers.has(name)
+        const cells = days.map((d) => countByRepDay.get(`${name}|${d}`) ?? 0)
+        const total = cells.reduce((a, b) => a + b, 0)
+        return { name, weekendWorker, days: cells, total, gaps: Math.max(0, REP_WEEK_TARGET - total) }
+      })
+      rows.sort((a, b) => b.gaps - a.gaps || a.name.localeCompare(b.name))
+
+      // A weekend column only counts (and only has capacity for) the reps
+      // who actually work weekends.
+      const worksThatDay = (row: RepWeekRow, i: number) => i < 5 || row.weekendWorker
+      const teamDays = days.map((_, i) =>
+        rows.reduce((n, r) => (worksThatDay(r, i) ? n + r.days[i] : n), 0)
+      )
+      const teamTotal = rows.reduce((n, r) => n + r.total, 0)
+      const teamGaps = rows.reduce((n, r) => n + r.gaps, 0)
+      const capacity = REP_WEEK_TARGET * rows.length
+      const fillPct = capacity > 0 ? Math.round((100 * teamTotal) / capacity) : 0
+
+      // Emptiest day: holes = the working reps' unfilled slots that day.
+      // Only days that have not already gone are in the running (there is no
+      // point shouting about last Monday); if the whole week is past, the
+      // whole week is back in the running.
+      const holes = days.map((_, i) => {
+        const working = rows.filter((r) => worksThatDay(r, i))
+        return working.reduce((n, r) => n + Math.max(0, REP_WEEK_SLOTS_PER_DAY - r.days[i]), 0)
+      })
+      const candidates = days
+        .map((d, i) => ({ d, label: REP_WEEK_DAY_LABELS[i], holes: holes[i] }))
+        .filter((c) => c.d >= today)
+      const pool = candidates.length > 0
+        ? candidates
+        : days.map((d, i) => ({ d, label: REP_WEEK_DAY_LABELS[i], holes: holes[i] }))
+      const worst = pool.reduce(
+        (best, c) => (c.holes > best.holes || (c.holes === best.holes && c.label > best.label) ? c : best),
+        pool[0]
+      )
+
+      return {
+        label,
+        days,
+        rows,
+        teamDays,
+        teamTotal,
+        teamGaps,
+        capacity,
+        fillPct,
+        emptiestDay: rows.length > 0 && worst ? { label: worst.label, holes: worst.holes } : null,
+      }
+    }
+
+    const value: RepWeekMetrics = {
+      target: REP_WEEK_TARGET,
+      today,
+      weeks: [buildWeek(thisMonday, 'This week'), buildWeek(nextMonday, 'Next week')],
+    }
+    repWeekCache = { value, at: Date.now() }
+    return value
+  } catch {
+    return null // the takeover stays hidden; the rest of the board is untouched
+  }
+}
+
 const caches: Record<string, { data: Metrics; at: number; ukDate: string }> = {}
 
 function ukToday(): string {
@@ -863,12 +1045,13 @@ export async function getBronzeMetrics(
   const wantsMorningData = board.features.appointments && !!opts.morning
 
   try {
-    const [calls, appointments, sales, freshLeadsOvernight, pipeline] = await Promise.all([
+    const [calls, appointments, sales, freshLeadsOvernight, pipeline, repWeek] = await Promise.all([
       queryCalls(ASCEND_MAP[board.id]),
       board.features.appointments ? queryAppointments() : Promise.resolve(EMPTY_APPOINTMENTS),
       board.features.sales ? querySales() : Promise.resolve(null),
       wantsMorningData ? queryFreshLeadsToChase() : Promise.resolve(null),
       board.features.pipeline ? queryPipeline() : Promise.resolve(null),
+      board.features.repWeek ? queryRepWeek() : Promise.resolve(null),
     ])
     const today = ukToday()
     const prevByAgent = new Map(
@@ -905,6 +1088,7 @@ export async function getBronzeMetrics(
           }
         : {}),
       ...(pipeline ? { pipeline } : {}),
+      ...(repWeek ? { repWeek } : {}),
     }
     caches[board.id] = { data, at: Date.now(), ukDate: today }
     return data

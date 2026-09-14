@@ -99,11 +99,43 @@ export interface PipelineMetrics {
   unattributed: { count: number; estTotal: number } // ladder couldn't place these
 }
 
+// Rep week (telesales board only): the field reps' Mon->Sun diary for this
+// week and next, and the holes still to be filled (owner rulings 14 Sep 2026).
+export interface RepWeekRow {
+  name: string
+  // Sat/Sun count towards this rep's week; everyone else shows them dimmed.
+  weekendWorker: boolean
+  days: number[] // 7 entries, Monday first — ACTIVE bookings that day
+  total: number
+  gaps: number // max(0, target - total)
+}
+
+export interface RepWeekWeek {
+  label: string // 'This week' | 'Next week'
+  days: string[] // 7 'YYYY-MM-DD', Monday first
+  rows: RepWeekRow[] // gaps desc, then name
+  teamDays: number[] // 7 column totals (weekend columns count weekend workers only)
+  teamTotal: number
+  teamGaps: number
+  capacity: number // rows.length * target
+  fillPct: number // round(100 * teamTotal / capacity)
+  // The day with the most empty slots, looking only at days not yet past.
+  // null when the board has no reps on it at all.
+  emptiestDay: { label: string; holes: number } | null
+}
+
+export interface RepWeekMetrics {
+  target: number
+  today: string // 'YYYY-MM-DD' Europe/London, for the past/today cell states
+  weeks: RepWeekWeek[] // [this week, next week]
+}
+
 export interface Metrics {
   asOf: string // ISO timestamp of when the source produced these numbers
   source: string // human label shown in the header subtitle
   agents: AgentMetrics[]
   sales?: SalesMetrics // team board only
   doors?: DoorsMetrics // telesales board only
-  pipeline?: PipelineMetrics // telesales board only
+  pipeline?: PipelineMetrics // sales & ops board only
+  repWeek?: RepWeekMetrics // telesales board only
 }

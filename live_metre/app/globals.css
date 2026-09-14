@@ -185,3 +185,218 @@
 .row-flash {
   animation: row-flash 2.4s ease;
 }
+
+/* ── Rep week takeover (telesales board) ─────────────────────────────────
+   The field reps' Mon->Sun diary, this week and next. Nothing scrolls and
+   nothing clips: RepWeekTakeover measures each table and shrinks --cell /
+   --gapv until the Team row is inside the panel, so every size below is
+   expressed as a multiple of --cell rather than a fixed px or vh value.
+   Same dark base as the other takeovers (owner-approved preview, 14 Sep
+   2026 — this is that preview's stylesheet, scoped to .repweek). */
+.repweek {
+  background: radial-gradient(1000px 600px at 50% -8%, #17181d 0%, #0b0b0d 55%, #070708 100%);
+  --rw-red: #ef4444;
+  --rw-amber: #fbbf24;
+  --rw-green: #22c55e;
+  --rw-blue: #60a5fa;
+  --rw-off: #3a3d45;
+}
+
+.repweek-week {
+  background: #131316;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  padding: 1.6vh 1.6vw 1.2vh;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+}
+
+.repweek-week.on {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.repweek-table {
+  border-collapse: separate;
+  border-spacing: 0 var(--gapv, 4px);
+  width: 100%;
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-size: calc(var(--cell, 36px) * 0.56);
+}
+
+.repweek-table thead th {
+  font-family: var(--font-display), sans-serif;
+  font-size: calc(var(--cell, 36px) * 0.4);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #a3a3a3;
+  font-weight: 500;
+  padding: 0 6px 4px;
+  text-align: center;
+}
+
+.repweek-table thead th small {
+  display: block;
+  font-family: var(--font-body), sans-serif;
+  font-size: calc(var(--cell, 36px) * 0.3);
+  letter-spacing: 0;
+  text-transform: none;
+  color: #737373;
+  font-weight: 400;
+}
+
+.repweek-table thead th.today {
+  color: #fff;
+}
+
+.repweek-table th.rep {
+  text-align: left;
+  font-family: var(--font-body), sans-serif;
+  font-weight: 500;
+  font-size: calc(var(--cell, 36px) * 0.5);
+  padding: 0 10px 0 4px;
+  white-space: nowrap;
+}
+
+.repweek-table th.rep em {
+  display: block;
+  font-style: normal;
+  font-family: var(--font-display), sans-serif;
+  font-size: calc(var(--cell, 36px) * 0.3);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rw-amber);
+}
+
+.repweek-table td {
+  text-align: center;
+  padding: 0;
+}
+
+.repweek-table td span {
+  display: inline-flex;
+  width: calc(var(--cell, 36px) * 1.18);
+  height: var(--cell, 36px);
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-weight: 600;
+  background: #0b0b0d;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+.repweek-table td.n0 span {
+  background: rgba(239, 68, 68, 0.16);
+  color: var(--rw-red);
+  box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.55);
+}
+
+.repweek-table td.n1 span {
+  background: rgba(251, 191, 36, 0.14);
+  color: var(--rw-amber);
+  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.35);
+}
+
+.repweek-table td.n2 span {
+  background: rgba(34, 197, 94, 0.16);
+  color: var(--rw-green);
+  box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.35);
+}
+
+.repweek-table td.n3 span {
+  background: rgba(96, 165, 250, 0.16);
+  color: var(--rw-blue);
+  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.35);
+}
+
+.repweek-table td.off span {
+  background: transparent;
+  box-shadow: none;
+  color: var(--rw-off);
+}
+
+.repweek-table td.past span {
+  opacity: 0.45;
+}
+
+.repweek-table td.today span {
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.repweek-table td.tot {
+  font-weight: 700;
+}
+
+.repweek-table td.gap {
+  font-weight: 600;
+  color: var(--rw-red);
+  font-size: calc(var(--cell, 36px) * 0.7);
+  text-shadow: 0 0 12px rgba(239, 68, 68, 0.35);
+}
+
+.repweek-table td.gap.zero {
+  color: var(--rw-green);
+}
+
+.repweek-table tfoot th,
+.repweek-table tfoot td {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding-top: var(--gapv, 4px);
+  color: #a3a3a3;
+  font-weight: 700;
+}
+
+/* Headline stats above each table */
+.repweek-stat-n {
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 4.2vh;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: #fff;
+}
+
+.repweek-stat-n.gaps {
+  color: var(--rw-red);
+  font-size: 5.4vh;
+  text-shadow: 0 0 18px rgba(239, 68, 68, 0.45);
+}
+
+.repweek-stat-n.hole {
+  color: var(--rw-amber);
+}
+
+.repweek-fill-bar {
+  position: relative;
+  height: 1.6vh;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.35);
+  overflow: hidden;
+}
+
+.repweek-fill-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #15803d, #22c55e);
+  box-shadow: 0 0 14px rgba(34, 197, 94, 0.45);
+  transition: width 0.7s ease-in-out;
+}
+
+.repweek-fill-ticks {
+  position: relative;
+  height: 0.6vh;
+  margin-top: 0.3vh;
+}
+
+.repweek-fill-ticks b {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.12);
+}

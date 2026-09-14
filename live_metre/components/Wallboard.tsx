@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Celebration from '@/components/Celebration'
 import ColumnChart from '@/components/ColumnChart'
 import DoorsCelebration from '@/components/DoorsCelebration'
@@ -8,11 +8,12 @@ import EodCelebration from '@/components/EodCelebration'
 import Header from '@/components/Header'
 import Leaderboard from '@/components/Leaderboard'
 import PipelineTakeover from '@/components/PipelineTakeover'
+import RepWeekTakeover from '@/components/RepWeekTakeover'
 import { BarRow, LastSaleBanner, StatBarList, StaticSalesKpis } from '@/components/SalesTiles'
 import SummaryCards from '@/components/SummaryCards'
 import {
   BOARDS, CELEBRATION, DOORS_CELEBRATION, EOD_CELEBRATION, PIPELINE_TAKEOVER, POLL_INTERVAL_MS,
-  SALES_SOUND, STALE_AFTER_MS,
+  REP_WEEK_TAKEOVER, SALES_SOUND, STALE_AFTER_MS,
 } from '@/lib/config'
 import {
   FileSoundHandle, playFileSound, playSaleSound, primeSaleFile, tryAutoUnlock, unlockSound,
@@ -347,6 +348,73 @@ export default function Wallboard({ boardId }: { boardId: string }) {
     }
   }, [board.features.pipeline])
 
+  // ── Rep week takeover (TELESALES board only, gated on features.repWeek):
+  //    the field reps' Mon->Sun diary, this week and next. Recurring like the
+  //    pipeline takeover above and unlike the once-a-day celebrations — owner
+  //    14 Sep 2026: every 15 minutes of normal board time it takes the screen
+  //    for 3 minutes, flipping between the two weeks every 20 seconds, then
+  //    the board returns. ?repweek=1 forces one immediate showing for testing;
+  //    ?repweekEvery / ?repweekFor / ?repweekSlide (milliseconds) shorten the
+  //    cadence for a test run WITHOUT changing the shipped defaults. Visibility
+  //    is gated again at render time against the celebrations and an empty
+  //    payload (no data -> nothing renders). ──
+  const repWeekTiming = useMemo(() => {
+    const fallback = {
+      everyMs: REP_WEEK_TAKEOVER.everyMs,
+      durationMs: REP_WEEK_TAKEOVER.durationMs,
+      slideMs: REP_WEEK_TAKEOVER.slideMs,
+    }
+    if (typeof window === 'undefined') return fallback
+    const params = new URLSearchParams(window.location.search)
+    const ms = (key: string, value: number) => {
+      const raw = Number(params.get(key))
+      return Number.isFinite(raw) && raw > 0 ? raw : value
+    }
+    return {
+      everyMs: ms('repweekEvery', fallback.everyMs),
+      durationMs: ms('repweekFor', fallback.durationMs),
+      slideMs: ms('repweekSlide', fallback.slideMs),
+    }
+  }, [])
+
+  const [repWeekShowing, setRepWeekShowing] = useState(false)
+  const repWeekShowTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const repWeekHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (!board.features.repWeek || !REP_WEEK_TAKEOVER.enabled) return
+
+    function armNextShowing(delay: number) {
+      repWeekShowTimer.current = setTimeout(() => {
+        const weekday = new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Europe/London',
+          weekday: 'short',
+        }).format(new Date())
+        if (REP_WEEK_TAKEOVER.weekdaysOnly && ['Sat', 'Sun'].includes(weekday)) {
+          armNextShowing(repWeekTiming.everyMs)
+          return
+        }
+        setRepWeekShowing(true)
+        repWeekHideTimer.current = setTimeout(() => {
+          setRepWeekShowing(false)
+          armNextShowing(repWeekTiming.everyMs)
+        }, repWeekTiming.durationMs)
+      }, delay)
+    }
+
+    // The cycle is armed per mount, so "one immediate showing" needs no
+    // has-it-fired ref: React's dev StrictMode remount (effect, cleanup,
+    // effect) would have burned such a ref before the first timer ever ran,
+    // and ?repweek=1 would then silently do nothing locally.
+    const forced = new URLSearchParams(window.location.search).has('repweek')
+    armNextShowing(forced ? 0 : repWeekTiming.everyMs)
+
+    return () => {
+      if (repWeekShowTimer.current) clearTimeout(repWeekShowTimer.current)
+      if (repWeekHideTimer.current) clearTimeout(repWeekHideTimer.current)
+    }
+  }, [board.features.repWeek, repWeekTiming])
+
   // ── Coins when a new sale lands. Keyed on the month's SALE COUNT so it
   //    fires once per sale, not once per revenue card, and never on the first
   //    paint (or the board would ring every time a screen reloads). ──
@@ -588,6 +656,20 @@ export default function Wallboard({ boardId }: { boardId: string }) {
         Date.now() >= pipelineSaleHoldUntil.current &&
         metrics?.pipeline &&
         metrics.pipeline.count > 0 && <PipelineTakeover pipeline={metrics.pipeline} />}
+      {/* Same rule for rep week: celebrations win, and an empty payload (no
+          reps on the board) simply never renders. */}
+      {repWeekShowing &&
+        !celebrating &&
+        !eodCelebrating &&
+        !doorsCelebrating &&
+        metrics?.repWeek &&
+        metrics.repWeek.weeks.some((w) => w.rows.length > 0) && (
+          <RepWeekTakeover
+            repWeek={metrics.repWeek}
+            durationMs={repWeekTiming.durationMs}
+            slideMs={repWeekTiming.slideMs}
+          />
+        )}
     </main>
   )
 }

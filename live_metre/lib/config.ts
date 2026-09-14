@@ -55,6 +55,10 @@ export interface BoardSpec {
     // unsold appointments, chased within 14 days of the visit. SALES & OPS
     // board (owner ruling 19 Aug: "the live sales metre, not telesales").
     pipeline: boolean
+    // "rep week" (owner-approved 14 Sep 2026): the field reps' Mon->Sun
+    // diary for this week and next, and how many slots are still empty.
+    // TELESALES board only — it is the telesales floor that fills them.
+    repWeek: boolean
   }
 }
 
@@ -65,6 +69,7 @@ export const BOARDS: Record<string, BoardSpec> = {
     agents: AGENTS,
     features: {
       appointments: true, leaderboard: true, celebration: true, sales: false, pipeline: false,
+      repWeek: true,
     },
   },
   team: {
@@ -73,6 +78,7 @@ export const BOARDS: Record<string, BoardSpec> = {
     agents: TEAM_AGENTS,
     features: {
       appointments: false, leaderboard: false, celebration: false, sales: true, pipeline: true,
+      repWeek: false,
     },
   },
 }
@@ -233,6 +239,50 @@ export const PIPELINE_TAKEOVER = {
   // — the takeover now LOOPS its full sequence (headline+buckets → rep pages)
   // for the whole duration.
   durationMs: 3 * 60_000,
+  weekdaysOnly: false,
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// REP WEEK (telesales board only, gated on features.repWeek). Owner rulings
+// 14 Sep 2026: one row per field rep, Mon->Sun with the count of ACTIVE
+// bookings that day, Total and Gaps against a flat target, sorted by gaps
+// desc, team totals row. Two slides — this week and next week.
+// ─────────────────────────────────────────────────────────────────────────
+
+// Slots a rep is expected to have booked in a week. Flat for everyone
+// (owner 14 Sep: "target 12 for everyone"); two a day over five days plus
+// a little headroom, which is also why an empty DAY counts as 2 holes.
+export const REP_WEEK_TARGET = 12
+export const REP_WEEK_SLOTS_PER_DAY = 2
+
+// Who works weekends. Inferred, not declared: a rep with at least this many
+// ACTIVE Sat/Sun bookings in the last REP_WEEK_LOOKBACK_DAYS is treated as a
+// weekend worker, so Sat/Sun count towards their week instead of showing
+// dimmed. Owner 14 Sep: replace this rule with an explicit list of names
+// here when the rota is formalised.
+export const WEEKEND_MIN_BOOKINGS = 2
+export const REP_WEEK_LOOKBACK_DAYS = 56
+
+// Off the board entirely (owner, 14 Sep 2026) — matched on the FIRST name,
+// lowercased, by prefix, so 'Josh Baron' and 'Joshua' both go.
+export const REP_WEEK_EXCLUDE_FIRST_NAMES = ['rob', 'josh', 'scott']
+
+// Server-side cache TTL for the rep-week read (lib/provider/bronze.ts).
+// Same reasoning as PIPELINE_REFRESH_MS: next week's diary does not move
+// minute to minute, so it must not ride the 20s board poll into BigQuery.
+export const REP_WEEK_REFRESH_MS = 5 * 60_000
+
+// Rep week TAKEOVER (TELESALES board only, gated on features.repWeek).
+// Recurring, like PIPELINE_TAKEOVER and unlike the once-a-day celebrations:
+// everyMs of normal board time, then durationMs full-screen, then back.
+// Owner 14 Sep 2026: "every 15 minutes, up for 3 minutes, flipping between
+// this week and next every 20 seconds". ?repweek=1 forces one immediate
+// showing for testing; the normal cadence carries on once it ends.
+export const REP_WEEK_TAKEOVER = {
+  enabled: true,
+  everyMs: 15 * 60_000,
+  durationMs: 3 * 60_000,
+  slideMs: 20_000,
   weekdaysOnly: false,
 }
 

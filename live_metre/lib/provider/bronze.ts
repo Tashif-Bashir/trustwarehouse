@@ -195,7 +195,30 @@ async function queryAppointments(): Promise<AppointmentsResult> {
     .then(([rows]) => rows as { lead_id: string; name: string; day: string }[])
     .catch(() => [])
 
-  const [crmRows, appRows] = await Promise.all([crmPromise, appPromise])
+  const [crmRows, appRowsRaw] = await Promise.all([crmPromise, appPromise])
+
+  // A booking made against a lead the CRM has since deleted (a duplicate
+  // merged away after the booking — 14 Sep 2026: Alicja showed 6 for 5) would
+  // count on top of the CRM's own row for the surviving lead. Drop those
+  // rows. The deleted list lives in europe-west2, app.bookings in US, so it
+  // is a second query rather than a join; any failure keeps all rows.
+  const appRows = await (async () => {
+    if (appRowsRaw.length === 0) return appRowsRaw
+    try {
+      const [gone] = await client().query({
+        query: `
+          SELECT id FROM \`${PROJECT}.bronze.sharpspring_leads_deleted\`
+          WHERE id IN UNNEST(@ids)
+        `,
+        params: { ids: appRowsRaw.map((r) => String(r.lead_id)) },
+        location: 'europe-west2',
+      })
+      const deleted = new Set((gone as { id: string }[]).map((r) => String(r.id)))
+      return deleted.size ? appRowsRaw.filter((r) => !deleted.has(String(r.lead_id))) : appRowsRaw
+    } catch {
+      return appRowsRaw
+    }
+  })()
 
   // dedupe on lead: CRM first so its attribution wins when both have the row
   const agentByLead = new Map<string, { id: string; day: string }>()

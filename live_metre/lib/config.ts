@@ -266,6 +266,11 @@ export const REP_WEEK_LOOKBACK_DAYS = 56
 // Off the board entirely (owner, 14 Sep 2026) — matched on the FIRST name,
 // lowercased, by prefix, so 'Josh Baron' and 'Joshua' both go.
 export const REP_WEEK_EXCLUDE_FIRST_NAMES = ['rob', 'josh', 'scott']
+// Reps temporarily off the road, hidden from the Rep week grid ONLY (owner,
+// 15 Sep 2026: "just the repweek we built, nowhere else"). Full names,
+// lowercased, because two other Chrises are still on the board. Remove a
+// name here when the rep is back.
+export const REP_WEEK_EXCLUDE_FULL_NAMES = ['chris cash', 'chris southworth']
 
 // Server-side cache TTL for the rep-week read (lib/provider/bronze.ts).
 // Same reasoning as PIPELINE_REFRESH_MS: next week's diary does not move

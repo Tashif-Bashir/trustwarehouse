@@ -1,6 +1,6 @@
 import { BigQuery } from '@google-cloud/bigquery'
 import {
-  AGENTS, BOARDS, MORNING_QUERY_WINDOW, PIPELINE_REFRESH_MS, REP_WEEK_EXCLUDE_FIRST_NAMES,
+  AGENTS, BOARDS, MORNING_QUERY_WINDOW, PIPELINE_REFRESH_MS, REP_WEEK_EXCLUDE_FIRST_NAMES, REP_WEEK_EXCLUDE_FULL_NAMES,
   REP_WEEK_LOOKBACK_DAYS, REP_WEEK_REFRESH_MS, REP_WEEK_SLOTS_PER_DAY, REP_WEEK_TARGET,
   SOURCE_NAMES, TEAM_AGENTS, TEAM_ASCEND_NAMES, WEEKEND_MIN_BOOKINGS,
 } from '../config'
@@ -866,8 +866,12 @@ function ukWeekStart(date: string): string {
 // Rob / Josh / Scott are off the board (owner 14 Sep 2026) — matched on the
 // first name, lowercased, by prefix.
 function repWeekExcluded(name: string): boolean {
-  const first = name.trim().toLowerCase().split(/\s+/)[0] ?? ''
-  return REP_WEEK_EXCLUDE_FIRST_NAMES.some((x) => first.startsWith(x))
+  const full = name.trim().toLowerCase().replace(/\s+/g, ' ')
+  const first = full.split(' ')[0] ?? ''
+  return (
+    REP_WEEK_EXCLUDE_FIRST_NAMES.some((x) => first.startsWith(x)) ||
+    REP_WEEK_EXCLUDE_FULL_NAMES.includes(full)
+  )
 }
 
 interface RepWeekRawRow {

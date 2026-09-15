@@ -186,26 +186,35 @@
   animation: row-flash 2.4s ease;
 }
 
-/* ── Rep week takeover (telesales board) ─────────────────────────────────
+/* ── Rep week takeover (telesales board) ────────────────────────────
    The field reps' Mon->Sun diary, this week and next. Nothing scrolls and
    nothing clips: RepWeekTakeover measures each table and shrinks --cell /
    --gapv until the Team row is inside the panel, so every size below is
    expressed as a multiple of --cell rather than a fixed px or vh value.
-   Same dark base as the other takeovers (owner-approved preview, 14 Sep
-   2026 — this is that preview's stylesheet, scoped to .repweek). */
+   BRIGHT skin (owner, 15 Sep 2026: "make the live metre one bright like
+   this", pointing at the dashboard's Rep week) — the one light screen on
+   the board, so it reads as a different thing when it takes over. Same
+   palette as the dashboard's Rep week mode so the two match. */
 .repweek {
-  background: radial-gradient(1000px 600px at 50% -8%, #17181d 0%, #0b0b0d 55%, #070708 100%);
-  --rw-red: #ef4444;
-  --rw-amber: #fbbf24;
-  --rw-green: #22c55e;
-  --rw-blue: #60a5fa;
-  --rw-off: #3a3d45;
+  background: radial-gradient(1000px 600px at 50% -8%, #ffffff 0%, #f2f3f7 55%, #e9ebf2 100%);
+  color: #171a2b;
+  --rw-ink: #171a2b;
+  --rw-ink2: #3b3f55;
+  --rw-muted: #9aa0b4;
+  --rw-muted2: #c7cada;
+  --rw-line: #e5e7ef;
+  --rw-red: #e5003b;
+  --rw-amber: #a87b0a;
+  --rw-green: #1fa77f;
+  --rw-blue: #1b8ad1;
+  --rw-today: #5b6cff;
 }
 
 .repweek-week {
-  background: #131316;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: #ffffff;
+  border: 1px solid var(--rw-line);
   border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(20, 23, 40, 0.08);
   padding: 1.6vh 1.6vw 1.2vh;
   opacity: 0;
   transition: opacity 0.5s ease;
@@ -225,6 +234,7 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   font-size: calc(var(--cell, 36px) * 0.56);
+  color: var(--rw-ink);
 }
 
 .repweek-table thead th {
@@ -232,7 +242,7 @@
   font-size: calc(var(--cell, 36px) * 0.4);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #a3a3a3;
+  color: var(--rw-muted);
   font-weight: 500;
   padding: 0 6px 4px;
   text-align: center;
@@ -244,21 +254,22 @@
   font-size: calc(var(--cell, 36px) * 0.3);
   letter-spacing: 0;
   text-transform: none;
-  color: #737373;
-  font-weight: 400;
+  color: var(--rw-muted2);
+  font-weight: 500;
 }
 
 .repweek-table thead th.today {
-  color: #fff;
+  color: var(--rw-ink);
 }
 
 .repweek-table th.rep {
   text-align: left;
   font-family: var(--font-body), sans-serif;
-  font-weight: 500;
+  font-weight: 600;
   font-size: calc(var(--cell, 36px) * 0.5);
   padding: 0 10px 0 4px;
   white-space: nowrap;
+  color: var(--rw-ink);
 }
 
 .repweek-table th.rep em {
@@ -284,57 +295,58 @@
   justify-content: center;
   border-radius: 8px;
   font-weight: 600;
-  background: #0b0b0d;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  background: #f2f3f7;
+  color: var(--rw-ink2);
+  box-shadow: inset 0 0 0 1px var(--rw-line);
 }
 
 .repweek-table td.n0 span {
-  background: rgba(239, 68, 68, 0.16);
+  background: #fff1f4;
   color: var(--rw-red);
-  box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.55);
+  box-shadow: inset 0 0 0 1px #ffb3bf;
 }
 
 .repweek-table td.n1 span {
-  background: rgba(251, 191, 36, 0.14);
+  background: #fff7e6;
   color: var(--rw-amber);
-  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.35);
+  box-shadow: inset 0 0 0 1px #f5d98a;
 }
 
 .repweek-table td.n2 span {
-  background: rgba(34, 197, 94, 0.16);
+  background: #e9f8f1;
   color: var(--rw-green);
-  box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.35);
+  box-shadow: inset 0 0 0 1px #a6e4cb;
 }
 
 .repweek-table td.n3 span {
-  background: rgba(96, 165, 250, 0.16);
+  background: #e6f6ff;
   color: var(--rw-blue);
-  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.35);
+  box-shadow: inset 0 0 0 1px #a9ddf7;
 }
 
 .repweek-table td.off span {
   background: transparent;
   box-shadow: none;
-  color: var(--rw-off);
+  color: var(--rw-muted2);
 }
 
 .repweek-table td.past span {
-  opacity: 0.45;
+  opacity: 0.5;
 }
 
 .repweek-table td.today span {
-  box-shadow: 0 0 0 2px #fff;
+  box-shadow: 0 0 0 2px var(--rw-today);
 }
 
 .repweek-table td.tot {
   font-weight: 700;
+  color: var(--rw-ink);
 }
 
 .repweek-table td.gap {
-  font-weight: 600;
+  font-weight: 700;
   color: var(--rw-red);
   font-size: calc(var(--cell, 36px) * 0.7);
-  text-shadow: 0 0 12px rgba(239, 68, 68, 0.35);
 }
 
 .repweek-table td.gap.zero {
@@ -343,9 +355,9 @@
 
 .repweek-table tfoot th,
 .repweek-table tfoot td {
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: 1px solid var(--rw-line);
   padding-top: var(--gapv, 4px);
-  color: #a3a3a3;
+  color: var(--rw-ink);
   font-weight: 700;
 }
 
@@ -356,13 +368,12 @@
   font-size: 4.2vh;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-  color: #fff;
+  color: var(--rw-ink);
 }
 
 .repweek-stat-n.gaps {
   color: var(--rw-red);
   font-size: 5.4vh;
-  text-shadow: 0 0 18px rgba(239, 68, 68, 0.45);
 }
 
 .repweek-stat-n.hole {
@@ -373,8 +384,7 @@
   position: relative;
   height: 1.6vh;
   border-radius: 999px;
-  background: rgba(239, 68, 68, 0.18);
-  box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.35);
+  background: #eceef4;
   overflow: hidden;
 }
 
@@ -382,9 +392,12 @@
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #15803d, #22c55e);
-  box-shadow: 0 0 14px rgba(34, 197, 94, 0.45);
+  background: linear-gradient(90deg, #1fa77f, #41c29f);
   transition: width 0.7s ease-in-out;
+}
+
+.repweek-fill-bar.low i {
+  background: linear-gradient(90deg, #e5003b, #ff4d6d);
 }
 
 .repweek-fill-ticks {
@@ -398,5 +411,5 @@
   top: 0;
   width: 1px;
   height: 100%;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(23, 26, 43, 0.14);
 }

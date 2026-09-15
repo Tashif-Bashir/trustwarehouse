@@ -56,38 +56,38 @@ function WeekPanel({
       className={`repweek-week absolute inset-0 flex flex-col ${active ? 'on' : ''}`}
     >
       <div className="mb-2.5 grid grid-cols-[1fr_auto_1fr] items-center">
-        <h2 className="m-0 font-display text-[2.6vh] font-semibold uppercase tracking-[0.06em] text-neutral-50">
+        <h2 className="m-0 font-display text-[2.6vh] font-semibold uppercase tracking-[0.06em] text-[#171a2b]">
           {week.label}
         </h2>
         <div className="flex items-end justify-self-center gap-[2.2vw]">
           <div className="flex flex-col items-end leading-none">
             <span className="repweek-stat-n gaps pulse-dot">{week.teamGaps}</span>
-            <span className="mt-[0.5vh] whitespace-nowrap text-[1.5vh] text-neutral-400">
+            <span className="mt-[0.5vh] whitespace-nowrap text-[1.5vh] text-[#9aa0b4]">
               gaps to fill
             </span>
           </div>
           <div className="flex flex-col items-end leading-none">
             <span className="repweek-stat-n">{week.teamTotal}</span>
-            <span className="mt-[0.5vh] whitespace-nowrap text-[1.5vh] text-neutral-400">
+            <span className="mt-[0.5vh] whitespace-nowrap text-[1.5vh] text-[#9aa0b4]">
               booked
             </span>
           </div>
           <div className="flex flex-col items-end leading-none">
             <span className="repweek-stat-n">{week.fillPct}%</span>
-            <span className="mt-[0.5vh] whitespace-nowrap text-[1.5vh] text-neutral-400">
+            <span className="mt-[0.5vh] whitespace-nowrap text-[1.5vh] text-[#9aa0b4]">
               of {week.capacity} slots
             </span>
           </div>
           {week.emptiestDay && (
             <div className="flex flex-col items-end leading-none">
               <span className="repweek-stat-n hole">{week.emptiestDay.label}</span>
-              <span className="mt-[0.5vh] whitespace-nowrap text-[1.5vh] text-neutral-400">
+              <span className="mt-[0.5vh] whitespace-nowrap text-[1.5vh] text-[#9aa0b4]">
                 emptiest day &middot; {week.emptiestDay.holes} holes
               </span>
             </div>
           )}
           <div className="w-[18vw] self-center">
-            <div className="repweek-fill-bar">
+            <div className={`repweek-fill-bar${week.fillPct < 50 ? ' low' : ''}`}>
               <i style={{ width: `${week.fillPct}%` }} />
             </div>
             <div className="repweek-fill-ticks">
@@ -275,30 +275,30 @@ export default function RepWeekTakeover({
         {weeks.map((week, i) => (
           <i
             key={week.label}
-            className={`h-2.5 w-2.5 rounded-full ${i === slide ? 'bg-neutral-50' : 'bg-[#3a3d45]'}`}
+            className={`h-2.5 w-2.5 rounded-full ${i === slide ? 'bg-[#171a2b]' : 'bg-[#c7cada]'}`}
           />
         ))}
       </div>
 
-      <div className="flex flex-wrap justify-center gap-x-[14px] gap-y-1 pt-[0.6vh] text-[1.6vh] text-neutral-400">
+      <div className="flex flex-wrap justify-center gap-x-[14px] gap-y-1 pt-[0.6vh] text-[1.6vh] text-[#9aa0b4]">
         <span>
-          <i className="mr-[5px] inline-block h-3 w-3 -translate-y-px rounded-[3px] bg-[rgba(239,68,68,.6)] align-middle" />
+          <i className="mr-[5px] inline-block h-3 w-3 -translate-y-px rounded-[3px] bg-[#ffb3bf] align-middle" />
           0 &middot; a hole
         </span>
         <span>
-          <i className="mr-[5px] inline-block h-3 w-3 -translate-y-px rounded-[3px] bg-[rgba(251,191,36,.6)] align-middle" />
+          <i className="mr-[5px] inline-block h-3 w-3 -translate-y-px rounded-[3px] bg-[#f5d98a] align-middle" />
           1 &middot; light
         </span>
         <span>
-          <i className="mr-[5px] inline-block h-3 w-3 -translate-y-px rounded-[3px] bg-[rgba(34,197,94,.6)] align-middle" />
+          <i className="mr-[5px] inline-block h-3 w-3 -translate-y-px rounded-[3px] bg-[#a6e4cb] align-middle" />
           2 &middot; full
         </span>
         <span>
-          <i className="mr-[5px] inline-block h-3 w-3 -translate-y-px rounded-[3px] bg-[rgba(96,165,250,.6)] align-middle" />
+          <i className="mr-[5px] inline-block h-3 w-3 -translate-y-px rounded-[3px] bg-[#a9ddf7] align-middle" />
           3 &middot; over
         </span>
         <span>
-          <i className="mr-[5px] inline-block h-3 w-3 -translate-y-px rounded-[3px] bg-[#3a3d45] align-middle" />
+          <i className="mr-[5px] inline-block h-3 w-3 -translate-y-px rounded-[3px] bg-[#e5e7ef] align-middle" />
           not a working day
         </span>
       </div>

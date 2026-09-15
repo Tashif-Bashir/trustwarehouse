@@ -323,6 +323,42 @@
   .metre-exit .ts-mode button{ color:#9aa1ab; }
   @keyframes metre-erupt{ from{ opacity:0; transform:scale(.965); } to{ opacity:1; transform:none; } }
 
+  /* Rep week (Telesales) — the field reps' Mon–Sun diary, this week + next.
+     Same numbers as the live metre's takeover, in the dashboard's own skin. */
+  .rw-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:6px; }
+  .rw-stats{ display:flex; gap:22px; flex-wrap:wrap; }
+  .rw-stat{ display:flex; flex-direction:column; min-width:64px; }
+  .rw-stat b{ font-size:26px; font-weight:700; letter-spacing:-.6px; line-height:1; color:var(--ink); font-variant-numeric:tabular-nums; }
+  .rw-stat b.gaps{ color:#E5003B; }
+  .rw-stat b.hole{ color:#A87B0A; }
+  .rw-stat span{ font-size:11px; color:var(--muted); margin-top:6px; white-space:nowrap; }
+  .rw-bar{ width:100%; height:8px; background:var(--bg); border-radius:99px; overflow:hidden; margin-top:10px; position:relative; }
+  .rw-bar i{ display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,#1FA77F,#41C29F); transition:width .4s cubic-bezier(.22,1,.36,1); }
+  .rw-bar.low i{ background:linear-gradient(90deg,#E5003B,#FF4D6D); }
+  .rw-wrap{ overflow-x:auto; }
+  .rw-table{ border-collapse:separate; border-spacing:0 4px; width:100%; font-variant-numeric:tabular-nums; }
+  .rw-table th{ font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:600; padding:0 6px 2px; text-align:center; white-space:nowrap; }
+  .rw-table th small{ display:block; font-size:10px; letter-spacing:0; text-transform:none; color:var(--muted2); font-weight:500; }
+  .rw-table th.today{ color:var(--ink); }
+  .rw-table th.rep{ text-align:left; font-size:13px; letter-spacing:0; text-transform:none; color:var(--ink); font-weight:600; padding-left:4px; }
+  .rw-table th.rep em{ display:block; font-style:normal; font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; color:#A87B0A; font-weight:700; }
+  .rw-table td{ text-align:center; padding:0 2px; }
+  .rw-table td span{ display:inline-flex; width:42px; height:34px; align-items:center; justify-content:center; border-radius:8px; font-size:14px; font-weight:600; background:var(--bg); box-shadow:inset 0 0 0 1px var(--line2); color:var(--ink2); }
+  .rw-table td.n0 span{ background:#FFF1F4; color:#E5003B; box-shadow:inset 0 0 0 1px #FFB3BF; }
+  .rw-table td.n1 span{ background:#FFF7E6; color:#A87B0A; box-shadow:inset 0 0 0 1px #F5D98A; }
+  .rw-table td.n2 span{ background:#E9F8F1; color:#1FA77F; box-shadow:inset 0 0 0 1px #A6E4CB; }
+  .rw-table td.n3 span{ background:#E6F6FF; color:#1B8AD1; box-shadow:inset 0 0 0 1px #A9DDF7; }
+  .rw-table td.off span{ background:transparent; box-shadow:none; color:var(--muted2); }
+  .rw-table td.past span{ opacity:.5; }
+  .rw-table td.today span{ box-shadow:0 0 0 2px var(--indigo); }
+  .rw-table td.tot{ font-weight:700; color:var(--ink); font-size:14px; }
+  .rw-table td.gap{ font-weight:700; color:#E5003B; font-size:14px; }
+  .rw-table td.gap.zero{ color:#1FA77F; }
+  .rw-table tfoot th, .rw-table tfoot td{ border-top:1px solid var(--line2); padding-top:8px; font-weight:700; color:var(--ink); font-size:13px; }
+  .rw-legend{ display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--muted); margin-top:10px; }
+  .rw-legend i{ display:inline-block; width:11px; height:11px; border-radius:3px; margin-right:5px; vertical-align:-1px; }
+  .rw-note{ font-size:11px; color:var(--muted); margin-top:4px; }
+
   /* Insights panel (Telesales) */
   .insights-card{ margin-bottom:14px; }
   .insights-count{ font-size:11px; color:var(--muted); font-weight:600; padding:3px 10px; background:var(--bg-2); border-radius:99px; }
@@ -2335,6 +2371,7 @@ function TsModeToggle({ mode, setMode }) {
       <button className={mode === 'dashboard' ? 'active' : ''} onClick={() => setMode('dashboard')}>Dashboard</button>
       <button className={mode === 'metre' ? 'active' : ''} onClick={() => setMode('metre')}>Live metre</button>
       <button className={mode === 'salesops' ? 'active' : ''} onClick={() => setMode('salesops')}>Sales &amp; ops</button>
+      <button className={mode === 'repweek' ? 'active' : ''} onClick={() => setMode('repweek')}>Rep week</button>
     </div>
   );
 }
@@ -2344,7 +2381,122 @@ const METRE_URLS = {
   salesops: 'https://trust-live-metre.vercel.app/sales-ops',
 };
 
+/* ── Rep week — the field reps' Mon→Sun diary for this week and next, and
+   the holes telesales still have to fill (12 per rep per week, a cancelled
+   booking reopens the gap). Same payload the live metre's takeover shows;
+   served here via /api/repweek behind the dashboard login so the telesales
+   manager can look whenever they like. Refreshes itself every 5 minutes. ── */
+const RW_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const RW_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const rwStamp = (iso) => { const [, m, d] = iso.split('-'); return `${d} ${RW_MONTHS[Number(m) - 1] || m}`; };
+const rwOff = (row, i) => i >= 5 && !row.weekendWorker;
+function rwCell(row, i, iso, today) {
+  if (rwOff(row, i)) return iso === today ? 'off today' : 'off';
+  const n = row.days[i];
+  const parts = [n === 0 ? 'n0' : n === 1 ? 'n1' : n === 2 ? 'n2' : 'n3'];
+  if (iso < today) parts.push('past');
+  if (iso === today) parts.push('today');
+  return parts.join(' ');
+}
+
+function RepWeekCard({ week, today, target }) {
+  const low = week.fillPct < 50;
+  return (
+    <div className="card" style={{ marginBottom: 14, padding: '16px 18px' }}>
+      <div className="rw-head">
+        <div>
+          <div className="sec-title">{week.label} · {rwStamp(week.days[0])} – {rwStamp(week.days[6])}</div>
+          <div className="rw-note">{week.rows.length} field reps · target {target} sits each</div>
+        </div>
+        <div className="rw-stats">
+          <div className="rw-stat"><b className="gaps">{week.teamGaps}</b><span>gaps to fill</span></div>
+          <div className="rw-stat"><b>{week.teamTotal}</b><span>booked</span></div>
+          <div className="rw-stat"><b>{week.fillPct}%</b><span>of {week.capacity} slots</span></div>
+          {week.emptiestDay && (
+            <div className="rw-stat"><b className="hole">{week.emptiestDay.label}</b><span>emptiest day · {week.emptiestDay.holes} holes</span></div>
+          )}
+        </div>
+      </div>
+      <div className={`rw-bar${low ? ' low' : ''}`}><i style={{ width: `${week.fillPct}%` }}/></div>
+      <div className="rw-wrap" style={{ marginTop: 12 }}>
+        <table className="rw-table">
+          <thead>
+            <tr>
+              <th className="rep">Rep</th>
+              {week.days.map((iso, i) => (
+                <th key={iso} className={iso === today ? 'today' : undefined}>{RW_DAYS[i]}<small>{rwStamp(iso)}</small></th>
+              ))}
+              <th>Total</th>
+              <th>Gaps</th>
+            </tr>
+          </thead>
+          <tbody>
+            {week.rows.map(row => (
+              <tr key={row.name}>
+                <th className="rep">{row.name}{row.weekendWorker && <em>weekends</em>}</th>
+                {week.days.map((iso, i) => (
+                  <td key={iso} className={rwCell(row, i, iso, today)}><span>{rwOff(row, i) ? '' : row.days[i]}</span></td>
+                ))}
+                <td className="tot">{row.total}</td>
+                <td className={row.gaps ? 'gap' : 'gap zero'}>{row.gaps}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th className="rep">Team</th>
+              {week.teamDays.map((n, i) => <td key={week.days[i]}>{n}</td>)}
+              <td className="tot">{week.teamTotal}</td>
+              <td className="gap">{week.teamGaps}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function RepWeekView() {
+  const [rw, setRw] = React.useState(null);
+  const [err, setErr] = React.useState(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    const load = () => fetch('/api/repweek')
+      .then(r => r.json())
+      .then(d => { if (cancelled) return; if (d.error && !d.weeks) throw new Error(d.error); setRw(d); setErr(null); })
+      .catch(e => { if (!cancelled) setErr(e.message); });
+    load();
+    const id = setInterval(() => { if (!document.hidden) load(); }, 5 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+  if (err && !rw) return <div className="err-box">Rep week unavailable: {err}</div>;
+  if (!rw) return <div className="loader"><div className="spinner"/><span>Loading the reps' diaries…</span></div>;
+  const fetched = rw.fetched_at ? new Date(rw.fetched_at) : null;
+  return (
+    <>
+      {rw.weeks.map(w => <RepWeekCard key={w.label} week={w} today={rw.today} target={rw.target}/>)}
+      <div className="rw-legend">
+        <span><i style={{ background: '#FFB3BF' }}/>0 · a hole</span>
+        <span><i style={{ background: '#F5D98A' }}/>1 · light</span>
+        <span><i style={{ background: '#A6E4CB' }}/>2 · full</span>
+        <span><i style={{ background: '#A9DDF7' }}/>3+ · over</span>
+        <span><i style={{ background: 'var(--line2)' }}/>not a working day</span>
+        <span>Active bookings only — a cancellation reopens the gap. Rob, Josh and Scott are not on the board.</span>
+        {fetched && <span>Updated {fetched.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}{rw.stale ? ' (live metre not reachable — showing the last good copy)' : ''}</span>}
+      </div>
+    </>
+  );
+}
+
 function TelesalesView({ data, tsMode, setTsMode }) {
+  if (tsMode === 'repweek') {
+    return (
+      <>
+        <TsModeToggle mode={tsMode} setMode={setTsMode}/>
+        <RepWeekView/>
+      </>
+    );
+  }
   const agents = data.agents || [];
   const T = data.totals || {};
   const tgtPerAgent = data.team_target_per_agent || 85;

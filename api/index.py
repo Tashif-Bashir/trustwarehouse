@@ -1212,6 +1212,45 @@ def get_data():
     except Exception as ex:
         return jsonify({'error': str(ex)}), 500
 
+# Rep week — the field reps' Mon->Sun diary (this week + next, gaps vs 12).
+# The definition lives in ONE place: the live metre's provider (its exclusions,
+# target, weekend inference and refresh cache). The dashboard just proxies that
+# payload behind its own login, so the telesales manager can read it here
+# without waiting for the wallboard's 15-minute takeover, and a change to the
+# metre's config flows through without touching this app.
+_REPWEEK_URL = os.environ.get("REPWEEK_SOURCE_URL") or     "https://trust-live-metre.vercel.app/api/metrics?board=telesales"
+_repweek_cache = {"at": 0.0, "value": None}
+_REPWEEK_TTL = 60  # s — the metre itself recomputes every 5 min
+
+
+def _fetch_repweek():
+    now = time.time()
+    if _repweek_cache["value"] is not None and now - _repweek_cache["at"] < _REPWEEK_TTL:
+        return _repweek_cache["value"]
+    import urllib.request
+    req = urllib.request.Request(_REPWEEK_URL, headers={"User-Agent": "trust-dashboard/1.0"})
+    with urllib.request.urlopen(req, timeout=25) as resp:
+        payload = _json.loads(resp.read().decode("utf-8"))
+    value = payload.get("repWeek")
+    if not value:
+        raise RuntimeError("the live metre returned no repWeek block")
+    value = dict(value, fetched_at=datetime.now(timezone.utc).isoformat())
+    _repweek_cache.update(at=now, value=value)
+    return value
+
+
+@app.route('/api/repweek')
+@login_required
+def get_repweek():
+    try:
+        return jsonify(_fetch_repweek())
+    except Exception as ex:
+        stale = _repweek_cache["value"]
+        if stale is not None:
+            return jsonify(dict(stale, stale=True, error=str(ex)))
+        return jsonify({'error': str(ex)}), 502
+
+
 @app.route('/api/refresh', methods=['GET', 'POST'])
 @login_required
 def refresh():

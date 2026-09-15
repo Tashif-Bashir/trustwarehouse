@@ -378,9 +378,11 @@ export default function Wallboard({ boardId }: { boardId: string }) {
     }
   }, [])
 
-  // Preview switch for the three.js end-of-day celebration (?celebrate3d=1).
+  // The three.js end-of-day celebration is the default (owner signed it off
+  // 15 Sep 2026: "ship it"). ?celebrate2d=1 brings the old confetti back on a
+  // screen that needs it; a browser without WebGL falls back on its own.
   const celebrate3d = useMemo(
-    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('celebrate3d'),
+    () => typeof window === 'undefined' || !new URLSearchParams(window.location.search).has('celebrate2d'),
     []
   )
 
@@ -643,8 +645,7 @@ export default function Wallboard({ boardId }: { boardId: string }) {
         callsSection
       )}
 
-      {/* ?celebrate3d=1 previews the three.js version (owner, 15 Sep 2026);
-          the shipped default stays the 2D confetti until it is signed off. */}
+      {/* 3D by default; ?celebrate2d=1 is the escape hatch to the old confetti. */}
       {celebrating &&
         (celebrate3d ? (
           <Celebration3D winners={celebrating} />

@@ -270,7 +270,14 @@ export const REP_WEEK_EXCLUDE_FIRST_NAMES = ['rob', 'josh', 'scott']
 // 15 Sep 2026: "just the repweek we built, nowhere else"). Full names,
 // lowercased, because two other Chrises are still on the board. Remove a
 // name here when the rep is back.
-export const REP_WEEK_EXCLUDE_FULL_NAMES = ['chris cash', 'chris southworth']
+export const REP_WEEK_EXCLUDE_FULL_NAMES = [
+  'chris cash',
+  'chris southworth',
+  // Office sellers covering sits while the field team is short (15 Sep 2026):
+  // bookable in the app and the CRM, but not field reps, so not on this grid.
+  'declan franks',
+  'peter heaton',
+]
 
 // Server-side cache TTL for the rep-week read (lib/provider/bronze.ts).
 // Same reasoning as PIPELINE_REFRESH_MS: next week's diary does not move

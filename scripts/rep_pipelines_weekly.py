@@ -1,4 +1,9 @@
-"""Weekly field-rep pipeline chase lists -> the owner's OneDrive `rep_pipelines` folder.
+"""NOT SCHEDULED. Built 15 Sep 2026 on a misreading of "the pipeline on OneDrive" (the
+owner meant the single Pipeline_quotes workbook - see pipeline_quotes_weekly.py). Its one
+real run was rolled back the same hour. Kept for the Unleashed quote helpers it exports;
+do not enable a timer for it without the owner asking for the rep_pipelines folder by name.
+
+Weekly field-rep pipeline chase lists -> the owner's OneDrive `rep_pipelines` folder.
 
 Rebuilds, IN PLACE, the workbooks first produced by hand on 20 Aug 2026:
   * PIPELINE_MASTER.xlsx            Summary sheet + one sheet per rep
@@ -177,6 +182,7 @@ def unleashed_quotes(lookback_days: int = 130) -> list[dict]:
         cust = q.get("Customer") or {}
         m = re.search(r"/Date\((\d+)", q.get("QuoteDate") or "")
         out.append({
+            "number": q.get("QuoteNumber"),
             "name": _norm_name(cust.get("CustomerName") or q.get("DeliveryName") or ""),
             "pc": _norm_pc(q.get("DeliveryPostCode")),
             "status": q.get("QuoteStatus"), "rank": rank.get(q.get("QuoteStatus"), 9),

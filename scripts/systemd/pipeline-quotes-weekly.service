@@ -1,5 +1,5 @@
 [Unit]
-Description=Field-rep pipeline chase lists -> owner's OneDrive rep_pipelines folder (weekly)
+Description=Pipeline quotes workbook (30/60/90 unsold pipeline + Unleashed quotes) -> owner's OneDrive, in place
 After=network-online.target
 Wants=network-online.target
 
@@ -8,8 +8,8 @@ Type=oneshot
 User=ubuntu
 WorkingDirectory=/home/ubuntu/trustwarehouse
 EnvironmentFile=/home/ubuntu/trustwarehouse/.env
-ExecStart=/home/ubuntu/.local/bin/uv run python -m scripts.rep_pipelines_weekly
-TimeoutStartSec=1200
+ExecStart=/home/ubuntu/.local/bin/uv run python -m scripts.pipeline_quotes_weekly
+TimeoutStartSec=3600
 StandardOutput=journal
 StandardError=journal
 

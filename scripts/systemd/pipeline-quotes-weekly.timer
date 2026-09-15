@@ -1,0 +1,10 @@
+[Unit]
+Description=Rebuild the Pipeline quotes workbook in the owner's OneDrive every Monday 07:00 London (before the office opens the file)
+
+[Timer]
+OnCalendar=Mon *-*-* 07:00:00 Europe/London
+Persistent=true
+Unit=pipeline-quotes-weekly.service
+
+[Install]
+WantedBy=timers.target

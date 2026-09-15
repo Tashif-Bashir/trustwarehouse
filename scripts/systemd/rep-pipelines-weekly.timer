@@ -1,0 +1,10 @@
+[Unit]
+Description=Rebuild the field-rep pipeline chase lists in OneDrive every Monday 07:30 London
+
+[Timer]
+OnCalendar=Mon *-*-* 07:30:00 Europe/London
+Persistent=true
+Unit=rep-pipelines-weekly.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=Field-rep pipeline chase lists -> owner's OneDrive rep_pipelines folder (weekly)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/trustwarehouse
+EnvironmentFile=/home/ubuntu/trustwarehouse/.env
+ExecStart=/home/ubuntu/.local/bin/uv run python -m scripts.rep_pipelines_weekly
+TimeoutStartSec=1200
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

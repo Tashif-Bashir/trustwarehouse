@@ -23,7 +23,9 @@ load_dotenv()
 # Delegated: everything the signed-in owner can open, and nothing more. The
 # four ops workbooks live in colleagues' OneDrives and the Finance library,
 # which plain Files.Read cannot reach (403, 15 Sep 2026).
-SCOPES = ["Files.Read.All", "Sites.Read.All"]  # offline_access is added by MSAL automatically
+# Files.ReadWrite (own drive only) lets the weekly rep-pipeline job overwrite
+# the workbooks in the owner's rep_pipelines folder in place (15 Sep 2026).
+SCOPES = ["Files.Read.All", "Sites.Read.All", "Files.ReadWrite"]  # offline_access added by MSAL
 AUTHORITY = "https://login.microsoftonline.com/{tenant}"
 CACHE_PATH = Path(
     os.environ.get("MS_GRAPH_TOKEN_CACHE") or Path.home() / ".cache" / "ms_graph_token.json"

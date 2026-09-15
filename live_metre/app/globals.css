@@ -57,6 +57,25 @@
   background: radial-gradient(1000px 600px at 50% 18%, #17181d 0%, #0a0a0b 70%, #070708 100%);
 }
 
+/* 3D celebration: the appointment count "lands" once it has rolled up. */
+@keyframes celebration3d-land {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.14);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.celebration3d-land {
+  animation:
+    fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards,
+    celebration3d-land 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.05s;
+}
+
 /* Doors-open morning takeover — softer than the EOD confetti: a warm
    sunrise glow low in the frame, fading into the same dark broadcast base
    the rest of the board sits on, rather than a full attention-grabbing burst. */

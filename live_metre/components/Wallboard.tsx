@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Celebration from '@/components/Celebration'
+import Celebration3D from '@/components/Celebration3D'
 import ColumnChart from '@/components/ColumnChart'
 import DoorsCelebration from '@/components/DoorsCelebration'
 import EodCelebration from '@/components/EodCelebration'
@@ -377,6 +378,12 @@ export default function Wallboard({ boardId }: { boardId: string }) {
     }
   }, [])
 
+  // Preview switch for the three.js end-of-day celebration (?celebrate3d=1).
+  const celebrate3d = useMemo(
+    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('celebrate3d'),
+    []
+  )
+
   const [repWeekShowing, setRepWeekShowing] = useState(false)
   const repWeekShowTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const repWeekHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -636,7 +643,14 @@ export default function Wallboard({ boardId }: { boardId: string }) {
         callsSection
       )}
 
-      {celebrating && <Celebration winners={celebrating} />}
+      {/* ?celebrate3d=1 previews the three.js version (owner, 15 Sep 2026);
+          the shipped default stays the 2D confetti until it is signed off. */}
+      {celebrating &&
+        (celebrate3d ? (
+          <Celebration3D winners={celebrating} />
+        ) : (
+          <Celebration winners={celebrating} />
+        ))}
       {eodCelebrating && sales && <EodCelebration sales={sales} />}
       {/* EOD wins if both are somehow active (see the gating effect above —
           this is a belt-and-braces second check). */}
